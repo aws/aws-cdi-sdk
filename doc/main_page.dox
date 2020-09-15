@@ -1,0 +1,217 @@
+// Main Doxygen page.
+/*! @mainpage AWS Cloud Digital Interface (CDI)
+ * @tableofcontents
+ * @section intro_sec Introduction
+ *
+ * The AWS Cloud Digital Interface (CDI) SDK is the library which implements the low-latency reliable transport
+ * of data between EC2 instances within the Amazon network. The SDK takes care of the complex task of ensuring that
+ * large amounts of data is seamlessly transferred across the AWS network using complex, multi-path technology to
+ * ensure lossless quality without the need for extensive network buffering and delay.
+ *
+ * The SDK consists of two main API layers, depending on the desired level of functionality, and a common core layer.
+ * The CDI Audio, Video and Metadata (CDI-AVM) layer takes care of transferring multi-stream, modern video signals
+ * that contain video, audio and metadata. The CDI Raw Payload (CDI-RAW) layer takes care of transferring raw
+ * generic payloads. The CDI Core (CDI-CORE) layer takes care of common core functionality. The API layers are
+ * described in the sections below:
+ *
+ * @section avm_sec CDI Audio, Video and Metadata (CDI-AVM) API
+ * For transporting audio, video and metadata between multiple applications where definition of the payload data needs
+ * to be clearly defined, the CDI-AVM API can be used.
+ *
+ * @ref AVM_home_page
+ *
+ * @section raw_sec CDI Raw Payload (CDI-RAW) API
+ * For transporting raw data that is defined outside the scope of this API, the CDI-RAW API can be used.
+ *
+ * @ref raw_home_page
+ *
+ * @section core_sec CDI Core (CDI-CORE) API
+ * For managing connections, the CDI Core API can be used.
+ *
+ * @ref Core_home_page
+ *
+ * @section utils_sec CDI Utilities
+ * As a convenience for developers, APIs for additional utility functions are provided.
+ *
+ * @subsection cdi_os_api_sec CDI OS API
+ * The @ref cdi_os_api_home_page provides functions for common OS operations, abstracting OS-specific function names for
+ * Windows and Linux.
+ *
+ * @subsection cdi_pool_api_sec CDI Pool API
+ * The @ref cdi_pool_api_home_page provides functions for managing memory for collections of items, such as transmit
+ * buffers, or data structures that are repeatedly created and destroyed throughout program operation.
+ *
+ * @cond ALL_DOCS
+ * @section other_docs_sec Other Design Details
+ * @subsection core_rx_reorder CDI Core Rx Reorder
+ * The CDI Core utilizes the Rx Reorder function to reassemble the transmitted payload.
+ *
+ * @ref rx_reorder_home_page
+ * @endcond
+ *
+ * @section abbreviations Abbreviations
+ * The table shown below contains abbreviations that are used in function, types and variable names within the API.
+ * <table>
+ * <caption id="ab_table"></caption>
+ * <tr><th>Abbreviation  <th>Definition
+ * <tr><td>Cdi          <td>Cloud Digital Interface
+ * <tr><td>CdiAvm       <td>Cloud Digital Interface Audio, Video and Transport API
+ * <tr><td>CdiCore      <td>Cloud Digital Interface Core API
+ * <tr><td>CdiRaw       <td>Cloud Digital Interface Core Raw Payload API
+ * <tr><td>Cb            <td>Callback
+ * <tr><td>con           <td>Connection
+ * <tr><td>mem           <td>Memory
+ * <tr><td>ptr           <td>Pointer
+ * <tr><td>Rx            <td>Receiver
+ * <tr><td>Sgl           <td>Scatter-Gather List
+ * <tr><td>str           <td>Pointer to string
+ * <tr><td>Tx            <td>Transmitter
+ * </table>
+ *
+ * @section rx_payload_formats RX Payload Formats
+ * Contains details that describe the payload formats that are available to the receiver.
+ *
+ * @ref rx_payload_page
+ *
+ * @section cb_flows User-Registered Callback Functions
+ * Contains details that describe the user-registered callback functions that must be implemented in receiver and
+ * transmitter applications.
+ *
+ * @ref cb_flows_page
+ *
+ * @section timestamp_management Timestamp Management
+ * Contains details about how timestamps can be sent and managed within CDI SDK.
+ *
+ * @ref ptp_timestamp_page
+ *
+ * @section arch_overview Overview of the CDI Architecture
+ *
+ * The diagram shown below provides a overview of the CDI architecture.
+ * @image html "api_overview.jpg"
+ *
+ * @cond ALL_DOCS
+ * @section int_arch Internal Architecture
+ * Contains details that describe the internal architecture of the CDI SDK.
+ *
+ * @ref internal_arch_page
+ *
+ * @section endpoint_manager Endpoint Manager Architecture
+ * Contains details that describe the Endpoint Manager internal architecture.
+ *
+ * @ref endpoint_manager_main_page
+ *
+ * @section probe_arch Connection Probe Architecture
+ * Contains details that describe the Connection Probe internal architecture.
+ *
+ * @ref probe_main_page
+ *
+ * @section test_app CDI Test Application
+ * Contains details that describe the CDI test application.
+ *
+ * @ref cdi_test
+ * @endcond
+*/
+
+// Doxygen Page for RX Payload Formats
+/*! @page rx_payload_page RX Payload Formats
+ * @tableofcontents
+ *
+ * @section rx_payload RX Payload Formats
+ * To allow optimal performance and application flexibility, there are two methods that define how payload data is
+ * formatted in the receiver and presented to the application via the CdiRawRxCallback() and CdiAvmRxCallback()
+ * user defined callback functions. They are described below.
+ *
+ * The first method is the Scatter-Gather List (SGL) Format. In this mode, as network packets arrive in NIC RX
+ * buffers, the SDK generates a SGL of payload data addresses and sizes. Once the entire payload has been received, the
+ * SGL is presented to the application. This allows the application to receive the payload with zero memory copying.
+ *
+ * The other method is the Linear Storage (LS) Format. In this mode, as network packets arrive, payload data is copied
+ * from NIC RX buffers to a linear buffer. Depending on system capabilities, this operation may use DMA hardware
+ * assistance. Once the entire payload has been received, the payload is presented to the application in the form of a
+ * Scatter-Gather List (SGL) with a single entry pointing to the linear buffer. As part of creating an RX connection
+ * the application defines which method to use.
+ *
+ * The diagram shown below describes the available payload formats presented to the receiver when a payload is received.
+ *
+ * @image html "rx_formats.jpg"
+*/
+
+// Doxygen Page for User-Registered Callback Functions
+/*! @page cb_flows_page User-Registered Callback Functions
+ * @tableofcontents
+ *
+ * @section cb_flows_func User-Registered Callback Functions
+ * There are some user-registered callback functions that must be implemented by the application. Each allows a
+ * user-defined parameter called "user_cb_param" to be passed to each of the callback functions. This can be used by
+ * the application to relate a TX payload or RX connection with the callback.
+ *
+ * When using the CDI-RAW API, the transmitter must implement the CdiRawTxCallback() function. This callback function
+ * is invoked when a complete payload has been transmitted and acknowledged as being received by the receiver. The
+ * receiver must implement the CdiRawRxCallback() function. This callback function is invoked when a complete payload
+ * has been received. The receiving application must use the CdiCoreRxFreeBuffer() API to free the buffer. This can
+ * either be done within the user callback function or at a later time whenever the application is done with the
+ * buffer.
+ *
+ * When using the CDI-AVM API, the transmitter must implement the CdiAvmTxCallback() function and the receiver the
+ * CdiAvmRxCallback() function.
+ *
+ * The diagram shown below describes the user-defined parameter's data flow for both callback functions using the
+ * CDI-RAW API. The flow is the same for the CDI-AVM API.
+ *
+ * @image html "raw_callback_workflow.jpg"
+*/
+
+// Doxygen Page for PTP Timestamp Usage
+/*! @page ptp_timestamp_page Managing Timestamp Data
+ * @tableofcontents
+ *
+ * @section SDK Timestamp Management
+ * PTP timestamps are sent along with all payloads as part of the payload config. These PTP timestamps are SMPTE ST
+ * 2059-2 compliant with the exception that the seconds field is limited to 32-bits instead of the specified 48-bits.
+ * The timestamps are expected to be created at origination of the media stream with the use of a PTP time source.
+ *
+ * The SDK provides for converting PTP timestamps into RTP timestamps by using the CdiUtilityPtpToRtp() function. This
+ * function converts a PtpTimestamp into a 32-bit RTP timestamp in units of the specified sample rate. For ST 2110
+ * video or ancillary data the sample rate should be 90kHz, audio streams should use the audio sample rate for RTP
+ * timestamp creation.
+ *
+ * PTP timestamps are sent as part of all SDK payload headers for RAW and AVM payloads. The PTP timestamps are sent
+ * with the functions CdiAvmTxVideoPayload(), CdiAvmTxAudioPayload(), CdiAvmTxAncillaryPayload(), CdiAvmTxRawPayload(),
+ * and CdiRawTxPayload().
+ *
+ * The origination_ptp_timestamp exists as part of CdiCoreExtraData which is used by CdiCoreTxPayloadConfig
+ * and CdiAvmTxPayloadConfig on the sender side and as part of callback data structure CdiCoreCbData and
+ * CdiAvmRxCbData.
+ *
+ * When tracking time within the AWS network use CdiCoreGetUtcTime() to get the highest precision network synced time
+ * available in AWS. Using Amazon Time Sync Service described below will help in getting the best
+ * precision network time.
+ *
+ * If there is a need to compare time codes with network time it is STRONGLY recommended that any instances being used
+ * for getting time are configured to use Amazon Time Sync Service. Configuration instructions below:
+ *
+ * <a href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/set-time.html"> Linux Setup Instructions</a><br>
+ *
+ * <a href="https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/windows-set-time.html">
+ * Windows Setup Instructions</a>
+ *
+ * The diagram below shows how timestamps sit within the larger SDK data structures.
+ * @image html "sdk_timestamp_flow.jpg"
+ *
+ * The diagram below shows the flow from PTP timestamp creation through a video processing pipeline in AWS.
+ * @image html "network_timestamp_flow.jpg"
+ */
+
+// Doxygen Page for Internal Architecture. Only generated when creating all docs (not just API docs).
+/*! @cond ALL_DOCS
+ * @page internal_arch_page Internal Architecture
+ * @tableofcontents
+ *
+ * @section int_arch_overview Internal Architecture Overview
+ *
+ * The diagram shown below provides a overview of the internal architecture.
+ * @image html "internal_architecture.jpg"
+ *
+ * @endcond
+*/
+

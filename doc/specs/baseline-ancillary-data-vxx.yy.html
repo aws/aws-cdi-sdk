@@ -1,0 +1,187 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+	<title>CDI (Cloud Digital Interface) Baseline Profile Ancillary Data Format Specification</title>
+	<meta name="generator" content="LibreOffice 6.4.4.2 (Linux)"/>
+	<meta name="created" content="2020-07-08T07:26:54.501013620"/>
+	<meta name="changed" content="2020-07-08T09:39:32.474010133"/>
+	<style type="text/css">
+		@page { size: 8.5in 11in; margin: 0.79in }
+		p { margin-bottom: 0.1in; background: transparent; line-height: 115%; background: transparent }
+		p.western { font-family: "DejaVu Sans Mono", monospace }
+		pre { background: transparent; background: transparent }
+		pre.western { font-family: "Liberation Mono", monospace; font-size: 10pt }
+		pre.cjk { font-family: "Noto Sans Mono CJK SC", monospace; font-size: 10pt }
+		pre.ctl { font-family: "Liberation Mono", monospace; font-size: 10pt }
+		h2 { margin-top: 0.14in; margin-bottom: 0.08in; background: transparent; background: transparent; page-break-after: avoid }
+		h2.western { font-family: "Liberation Sans", sans-serif; font-size: 16pt; font-weight: bold }
+		h2.cjk { font-family: "Noto Sans CJK SC"; font-size: 16pt; font-weight: bold }
+		h2.ctl { font-family: "Lohit Devanagari"; font-size: 16pt; font-weight: bold }
+		a:link { color: #000080; so-language: zxx; text-decoration: underline }
+		a:visited { color: #800000; so-language: zxx; text-decoration: underline }
+	</style>
+</head>
+<body lang="en-US" link="#000080" vlink="#800000" dir="ltr">
+<h1>CDI (Cloud Digital Interface) Baseline Profile Ancillary Data Format
+Specification</h1>
+<table width="100%" cellpadding="2" cellspacing="0">
+	<tr valign="top">
+		<td style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0.02in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Document version</p>
+		</td>
+		<td style="border: 1px solid #000000; padding: 0.02in"><p class="western">
+			01.00</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Document owner</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			Amazon Web Services</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Summary</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			This document specifies the format of ST 291-1 ancillary data
+			payloads sent to and received from the CDI SDK.</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Scope</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			The specifications in this document apply to ancillary data
+			streams carried through the AWS CDI SDK's (Software
+			Development Kit) AVM (Audio, Video, Metadata) API (Application
+			Program Interface).</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Status</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			current</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Compatibility</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			CDI SDK version 1.0 and later support this version of the CDI
+			baseline profile. Minor release number changes will only contain
+			clarifications and corrections and therefore will maintain
+			backwards compatibility with the SDK. The major number will be
+			incremented when new features are added or any other incompatibility
+			is introduced. A corresponding update to the CDI SDK will be
+			required to support the changes documented in these future
+			baseline profile documents.</p>
+		</td>
+	</tr>
+</table>
+<h2 class="western">Configuration Structure</h2>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The CdiAvmConfig structure is used to pass media format information
+through the CDI SDK for each stream. It contains three parts: a URI,
+a data array, and a data array size. The URI for this specification
+is defined to be
+<font color="#000080"><span lang="zxx"><u>https://cdi.elemental.com/specs/baseline-ancillary-data</u></span></font>
+.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The bytes of the array are the ASCII characters forming
+&lt;name&gt;=&lt;value&gt; pairs, terminated by a semicolon. Each
+entry is separated from the next by a space character. data_size is
+the total number of characters comprising the string of names,
+values, and separators. No terminating carriage return or NUL
+character shall be included.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Supported parameter names and allowed values are:</p>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	<b><span style="font-variant: normal"><font color="#000000"><span style="text-decoration: none"><span style="font-style: normal"><span style="background: #ffffff">cdi_profile_version</span></span></span></font></span></b><span style="font-variant: normal"><font color="#000000"><span style="text-decoration: none"><span style="font-style: normal"><span style="font-weight: normal"><span style="background: #ffffff">
+	- [required] version number string in the form of xx.yy where xx is
+	the two digit major number</span></span></span></span></font></span><span style="font-variant: normal"><font color="#000000"><span style="text-decoration: none"><span style="background: #ffffff">
+	</span></span></font></span><span style="font-variant: normal"><font color="#000000"><span style="text-decoration: none"><span style="font-style: normal"><span style="font-weight: normal"><span style="background: #ffffff">and
+	yy is the two digit minor number</span></span></span></span></font></span></p>
+</ul>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Note: The CDI SDK provides CdiAvmMakeBaselineConfiguration() for
+generating an appropriate CdiAvmConfig structure to pass to
+CdiAvmTxPayload() and CdiAvmParseBaselineConfiguration() for parsing
+CdiAvmConfig structures from the receive payload callback function.
+These functions alleviate the need for application programs to deal
+directly with the CdiAvmConfig structure for CDI baseline media
+types, including ancillary data.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The configuration structure is fixed for all ancillary data streams:</p>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	uri = &quot;https://dez7slaihsw2s.cloudfront.net/baseline-ancillary-data&quot;
+	[NUL terminated]</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	data_bytes = &quot;cdi_profile_version=01.00;&quot;</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	data_size = 26</p>
+</ul>
+<h2 class="western">Payload Format</h2>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The format of ancillary data payloads is based loosely on SMPTE
+2110-40 which references IETF RFC 8331. Notable changes include:</p>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	The first 16 bytes, up to and including the Length field, are not
+	included in the CDI header. CDI is not based on RTP so the RTP
+	header is unnecessary.</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	The width of the ANC_Count field is increased by 8 bits which were
+	taken from the &quot;reserved&quot; field.</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	The F bit's position has changed.</p>
+</ul>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The meanings of all the remaining fields are the same as in RFC 8331.
+Each payload must contain exactly one interlaced field or one
+progressive frame of ancillary data packets.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Each ancillary data payload starts with a header as shown in the
+section below:</p>
+<pre class="western">    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |           ANC_Count           | F |         reserved          |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+</pre><p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The section below is repeated once for each ancillary data packet, as
+specified by ANC_Count.</p>
+<pre class="western">   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |C|   Line_Number       |   Horizontal_Offset   |S|  StreamNum  |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |         DID       |        SDID       |   Data_Count      |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                            User_Data_Words...
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                                   |   Checksum_Word   |word_align |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+</pre><p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Note that on the receive side of a CDI connection, the scatter-gather
+entries that describe the ancillary data packets in memory may start
+and end at arbitrary four byte word boundaries. Unlike audio and
+video, the irregular structure of ancillary data makes predicting
+packet boundaries impractical on the transmit side.</p>
+<h2 class="western">References</h2>
+<ol>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	IETF RFC 8331: https://tools.ietf.org/html/rfc8331</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	ST 2110-40:2018 - SMPTE Standard - Professional Media Over Managed
+	IP Networks: SMPTE ST 291-1 Ancillary Data,&quot; in ST
+	2110-40:2018, 25 April 2018, doi: 10.5594/SMPTE.ST2110-40.2018:
+	https://ieeexplore.ieee.org/document/8353279</p>
+</ol>
+</body>
+</html>

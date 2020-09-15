@@ -1,0 +1,272 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+	<title>CDI (Cloud Digital Interface) Baseline Profile Video Format Specification</title>
+	<meta name="generator" content="LibreOffice 6.4.4.2 (Linux)"/>
+	<meta name="created" content="2020-07-08T07:26:54.501013620"/>
+	<meta name="changed" content="2020-07-08T09:39:10.880975495"/>
+	<style type="text/css">
+		@page { size: 8.5in 11in; margin: 0.79in }
+		p { margin-bottom: 0.0in; background: transparent; line-height: 115%; background: transparent }
+		p.western { font-family: "DejaVu Sans Mono", monospace }
+		pre { background: transparent; background: transparent }
+		pre.western { font-family: "Liberation Mono", monospace; font-size: 10pt }
+		pre.cjk { font-family: "Noto Sans Mono CJK SC", monospace; font-size: 10pt }
+		pre.ctl { font-family: "Liberation Mono", monospace; font-size: 10pt }
+		h2 { margin-top: 0.14in; margin-bottom: 0.08in; background: transparent; page-break-after: avoid }
+		h2.western { font-family: "Liberation Sans", sans-serif; font-size: 16pt; font-weight: bold }
+		h2.cjk { font-family: "Noto Sans CJK SC"; font-size: 16pt; font-weight: bold }
+		h2.ctl { font-family: "Lohit Devanagari"; font-size: 16pt; font-weight: bold }
+		h3 { margin-top: 0.1in; margin-bottom: 0.08in; background: transparent; page-break-after: avoid }
+		h3.western { font-family: "Liberation Sans", sans-serif; font-size: 14pt; font-weight: bold }
+		h3.cjk { font-family: "Noto Sans CJK SC"; font-size: 14pt; font-weight: bold }
+		h3.ctl { font-family: "Lohit Devanagari"; font-size: 14pt; font-weight: bold }
+		a:link { color: #000080; so-language: zxx; text-decoration: underline }
+		a:visited { color: #800000; so-language: zxx; text-decoration: underline }
+		strong { font-weight: bold }
+	</style>
+</head>
+<body lang="en-US" link="#000080" vlink="#800000" dir="ltr">
+<h1>CDI (Cloud Digital Interface) Baseline Profile Video Format Specification</h1>
+
+<table width="100%" cellpadding="2" cellspacing="0">
+	<tr valign="top">
+		<td style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0.02in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Document version</p>
+		</td>
+		<td style="border: 1px solid #000000; padding: 0.02in"><p class="western">
+			01.00</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Document owner</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			Amazon Web Services</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Summary</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			This document specifies the format of video payloads sent to and
+			received from the CDI SDK.</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Scope</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			The specifications in this document apply to video streams carried
+			through the AWS CDI SDK's (Software Development Kit) AVM
+			(Audio, Video, Metadata) API (Application Program Interface).</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Status</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			current</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Compatibility</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			CDI SDK version 1.0 and later support this version of the CDI
+			baseline profile. Minor release number changes will only contain
+			clarifications and corrections and therefore will maintain
+			backwards compatibility with the SDK. The major number will be
+			incremented when new features are added or any other incompatibility
+			is introduced. A corresponding update to the CDI SDK will be
+			required to support the changes documented in these future
+			baseline profile documents.</p>
+		</td>
+	</tr>
+</table>
+<pre class="western"></pre><h2 class="western">
+Configuration Structure</h2>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+The CdiAvmConfig structure is used to pass media format information
+through the CDI SDK for each stream. It contains three parts: a URI,
+a data array, and a data array size. The URI for this specification
+is defined to be <font color="#000080"><span lang="zxx"><u>https://cdi.elemental.com/specs/baseline-video</u></span></font>.</p>
+
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+The bytes of the array are the ASCII characters forming
+&lt;name&gt;=&lt;value&gt; pairs or standalone &lt;name&gt; entries,
+terminated by a semicolon and each entry is separated from the next
+by a space character as specified in section 7.1 of ST 2110-20-2017.
+All of the other pieces that form the SDP are not included. data_size
+is the total number of characters comprising the string of names,
+values, and separators. No terminating carriage return or NUL
+character shall be included.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+Note: the CDI SDK provides CdiAvmMakeBaselineConfiguration() for
+generating an appropriate CdiAvmConfig structure to pass to
+CdiAvmTxPayload() and CdiAvmParseBaselineConfiguration() for parsing
+CdiAvmConfig structures from the receive payload callback function.
+These functions alleviate the need for application programs to deal
+directly with the CdiAvmConfig structure for CDI baseline media
+types, including video.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+Section 7 of ST 2110-20-2017, Session Description Protocol (SDP)
+Considerations is leveraged for specifying the parameters applicable
+to video payloads. For compatibility sake, some parameters have fixed
+values in CDI, others have a subset of allowed values, and new
+parameters are specified in this document that go beyond the
+parameters available in ST 2110.</p>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+	Parameters borrowed directly from ST 2110:</p>
+	<ul>
+		<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+		Required:</p>
+	</ul>
+</ul>
+<ul>
+	<ul>
+		<ul>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>sampling</strong> - YCbCr-4:2:2, YCbCr-4:4:4, and RGB (linear)</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>depth</strong> - 8, 10, and 12 bit integers only</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>width</strong> - no restrictions</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>height</strong> - no restrictions</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>exactframerate</strong> - no restrictions</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>colorimetry</strong> - all choices available except
+			UNSPECIFIED</p>
+		</ul>
+		<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+		Optional:</p>
+	</ul>
+</ul>
+<ul>
+	<ul>
+		<ul>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>interlace</strong> (default = no)</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>segmented</strong> (default = no)</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>TCS</strong> - no restrictions</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>RANGE</strong> - no restrictions</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>PAR</strong> - no restrictions</p>
+		</ul>
+	</ul>
+</ul>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+	Parameters from 2110 with fixed values for CDI:</p>
+	<ul>
+		<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+		<strong>PM</strong> (packing mode) = general only</p>
+	</ul>
+	<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+	Parameters not in 2110, new to CDI:</p>
+	<ul>
+		<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+		Required:</p>
+		<ul>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>cdi_profile_version</strong> - version number string in
+			the form of xx.yy where xx is the two digit major number and yy is
+			the two digit minor number</p>
+		</ul>
+		<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+		Optional:</p>
+		<ul>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>alpha_included</strong> - &quot;enabled&quot; or
+			&quot;disabled&quot; (default if not specified)</p>
+			<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+			<strong>partial_frame</strong> - &lt;width&gt;x&lt;height&gt;+&lt;horizontal
+			offset&gt;+&lt;vertical offset&gt; (full frame by default)</p>
+		</ul>
+	</ul>
+</ul>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+The rectangle described by the partial_frame parameter must fall
+completely within the bounds of the frame whose dimensions are
+specified by the width and height parameters. Additional restrictions
+on the values are described below.</p>
+<h2 class="western">Payload Format</h2>
+<h3 class="western">Example 1</h3>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+	uri = &quot;https://dez7slaihsw2s.cloudfront.net/baseline-video&quot;
+	[NUL terminated string]</p>
+	<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+	data_bytes = &quot;cdi_profile_version=01.00; sampling=YCbCr-4:2:2;
+	width=1280; height=720; exactframerate=60000/1001; depth=8;
+	colorimetry=BT709;&quot;</p>
+	<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+	data_size = 127</p>
+</ul>
+<h3 class="western">Example 2</h3>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+	uri = &quot;https://dez7slaihsw2s.cloudfront.net/baseline-video&quot;
+	[NUL terminated string]</p>
+	<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+	data_bytes = &quot;cdi_profile_version=01.00; sampling=YCbCr-4:4:4;
+	width=1920; height=1080; exactframerate=30000/1001; depth=10;
+	interlace; alpha_included=enabled; colorimetry=BT709;
+	partial_frame=1920x76+0+1004&quot;</p>
+	<li><p class="western" style="margin-bottom: 0in; background: transparent; line-height: 100%">
+	data_size = 193</p>
+</ul>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+Data must be placed into memory buffers with the proper format before
+transmission in order for the receiving end to be able to consume it.
+ The application is solely responsible for this formatting.  Video
+payloads transported by the CDI SDK shall only contain sample data.
+Sample Row Data Headers shall not be present in the buffer.  Sample
+order and layout in memory is as shown in Table 2 for YCbCr-4:2:2 and
+in Table 1 for YCbCr-4:4:4 of ST 2110-20-2017.  Unlike in ST 2110-20,
+both fields of interlaced video are sent in the same payload; the
+second field's first sample follows immediately after the last byte
+of the last sample of the first field.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+Interlaced video affects how the partial_frame configuration
+parameter is interpreted. The vertical offset and height specified
+must fall within the range of lines for the first field. The
+corresponding lines of the second field are implicitly included in
+the resulting rectangle.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+Pgroups are honored by the transmit side packetizer which guarantees
+that scatter gather list entries on the receive side have boundaries
+between samples. Because of pgroups, the horizontal values of the
+partial_frame parameter must be integer multiples of the pgroup
+coverage values for the configured video format as shown in Tables 1
+and 2 of ST 2110-20-2017.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+An additional consideration for using the CDI SDK is whether an alpha
+channel is enabled. If so, the primary samples are placed first in
+the memory buffer followed by the alpha channel, according to the
+usual layout rules, followed immediately by the alpha samples (luma
+only) with the same bit depth as the primary samples.</p>
+<h2 class="western">References</h2>
+<ol>
+	<li><p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+	IETF RFC 4566: https://tools.ietf.org/html/rfc4566</p>
+	<li><p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+	ST 2110-20:2017 - SMPTE Standard - Professional Media Over Managed
+	IP Networks: Uncompressed Active Video,&quot; in ST 2110-20:2017, 27
+	Nov. 2017, doi: 10.5594/SMPTE.ST2110-20.2017:
+	https://ieeexplore.ieee.org/document/8167389</p>
+</ol>
+</body>
+</html>

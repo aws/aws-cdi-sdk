@@ -1,0 +1,245 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8"/>
+	<title>CDI (Cloud Digital Interface) Baseline Profile Audio Format Specification</title>
+	<meta name="generator" content="LibreOffice 6.4.4.2 (Linux)"/>
+	<meta name="created" content="2020-07-08T07:26:54.501013620"/>
+	<meta name="changed" content="2020-07-08T09:39:14.751823130"/>
+	<style type="text/css">
+		@page { size: 8.5in 11in; margin: 0.79in }
+		p { margin-bottom: 0.0in; background: transparent; line-height: 115%; background: transparent }
+		p.western { font-family: "DejaVu Sans Mono", monospace }
+		pre { background: transparent; background: transparent }
+		pre.western { font-family: "Liberation Mono", monospace; font-size: 10pt }
+		pre.cjk { font-family: "Noto Sans Mono CJK SC", monospace; font-size: 10pt }
+		pre.ctl { font-family: "Liberation Mono", monospace; font-size: 10pt }
+		h2 { margin-top: 0.14in; margin-bottom: 0.08in; background: transparent; background: transparent; page-break-after: avoid }
+		h2.western { font-family: "Liberation Sans", sans-serif; font-size: 16pt; font-weight: bold }
+		h2.cjk { font-family: "Noto Sans CJK SC"; font-size: 16pt; font-weight: bold }
+		h2.ctl { font-family: "Lohit Devanagari"; font-size: 16pt; font-weight: bold }
+		h3 { margin-top: 0.1in; margin-bottom: 0.08in; background: transparent; background: transparent; page-break-after: avoid }
+		h3.western { font-family: "Liberation Sans", sans-serif; font-size: 14pt; font-weight: bold }
+		h3.cjk { font-family: "Noto Sans CJK SC"; font-size: 14pt; font-weight: bold }
+		h3.ctl { font-family: "Lohit Devanagari"; font-size: 14pt; font-weight: bold }
+		a:link { color: #000080; so-language: zxx; text-decoration: underline }
+		a:visited { color: #800000; so-language: zxx; text-decoration: underline }
+		strong { font-weight: bold }
+	</style>
+</head>
+<body lang="en-US" link="#000080" vlink="#800000" dir="ltr">
+<h1>CDI (Cloud Digital Interface) Baseline Profile Audio Format Specification</h1>
+
+<table width="100%" cellpadding="2" cellspacing="0">
+	<tr valign="top">
+		<td style="border-top: 1px solid #000000; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0.02in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Document version</p>
+		</td>
+		<td style="border: 1px solid #000000; padding: 0.02in"><p class="western">
+			01.00</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Document owner</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			Amazon Web Services</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Summary</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			This document specifies the format of audio payloads sent to and
+			received from the CDI SDK.</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Scope</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			The specifications in this document apply to audio streams carried
+			through the AWS CDI SDK's (Software Development Kit) AVM
+			(Audio, Video, Metadata) API (Application Program Interface).</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Status</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			current</p>
+		</td>
+	</tr>
+	<tr valign="top">
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: none; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0in"><p class="western">
+			Compatibility</p>
+		</td>
+		<td style="border-top: none; border-bottom: 1px solid #000000; border-left: 1px solid #000000; border-right: 1px solid #000000; padding-top: 0in; padding-bottom: 0.02in; padding-left: 0.02in; padding-right: 0.02in"><p class="western">
+			CDI SDK version 1.0 and later support this version of the CDI
+			baseline profile. Minor release number changes will only contain
+			clarifications and corrections and therefore will maintain
+			backwards compatibility with the SDK. The major number will be
+			incremented when new features are added or any other incompatibility
+			is introduced. A corresponding update to the CDI SDK will be
+			required to support the changes documented in these future
+			baseline profile documents.</p>
+		</td>
+	</tr>
+</table>
+<h2 class="western">Configuration Structure</h2>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The CdiAvmConfig structure is used to pass media format information
+through the CDI SDK for each stream. It contains three parts: a URI,
+a data array, and a data array size. The URI for this specification
+is defined to be <font color="#000080"><span lang="zxx"><u>https://cdi.elemental.com/specs/baseline-audio</u></span></font>
+.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The bytes of the array are the ASCII characters forming
+&lt;name&gt;=&lt;value&gt; pairs, terminated by a semicolon and each
+entry is separated from the next by a space character. data_size is
+the total number of characters comprising the string of names,
+values, and separators. No terminating carriage return or NUL
+character shall be included.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Supported parameter names and allowed values are:</p>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	<strong>cdi_profile_version</strong> - [required] version number
+	string in the form of xx.yy where xx is the two digit major number
+	and yy is the two digit minor number</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	<strong>order</strong> - [required] the order of the channels in the
+	group: those listed in Table 1 of ST 2110-30-2017 with the exception
+	that undefined types are not supported</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	<strong>rate</strong> - [required] the number of samples per second:
+	48000 or 96000</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	<strong>language</strong> - [optional] two or three letter language
+	code</p>
+</ul>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The number of channels in the group is inferred by the order value as
+specified in the &quot;Quantity of Audio Channels in group&quot;
+column of ST 2110-30-2017, Table 1.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Note: The CDI SDK provides CdiAvmMakeBaselineConfiguration() for
+generating an appropriate CdiAvmConfig structure to pass to
+CdiAvmTxPayload() and CdiAvmParseBaselineConfiguration() for parsing
+CdiAvmConfig structures from the receive payload callback function.
+These functions alleviate the need for application programs to deal
+directly with the CdiAvmConfig structure for CDI baseline media
+types, including audio.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The remaining audio transport parameters of ST 2110-30 are fixed. CDI
+is standardized on 24 bit linear audio encapsulation as documented in
+IETF RFC 3190, named &quot;L24&quot; in that specification. Refer to
+the spec for all of the details. The salient details are enumerated
+here:</p>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	sample size = 24 bits</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	sample representation = signed, two's complement linear PCM</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	byte order = most significant byte first (also known as &quot;network&quot;
+	or &quot;big endian&quot;)</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	sample ordering = interleaved</p>
+</ul>
+<h2 class="western">Stream Contents</h2>
+<p class="western">Each audio channel group must reside in its own
+stream within a connection. Individual streams have their own order,
+rate, and language but all of the channels in the stream’s group
+share all of these characteristics.</p>
+<h2 class="western">Payload Format</h2>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Data must be placed into memory buffers with the proper format before
+transmission in order for the receiving end to be able to consume it.
+The application is solely responsible for this formatting. The time
+frame of each payload is not required to be the same as the
+associated video frames. In order to limit the required buffering on
+the receive end which may be required to align the audio with its
+video, the maximum time difference, according to the audio and video
+PTP time stamps, must not exceed 200 ms audio leading video or 50 ms
+video leading audio. Payloads may contain as little as 1 ms and as
+much as 50 ms. Likewise, the same format is to be expected on the
+receiving end in this same format for the application to process. In
+the sample diagrams below, memory addresses increase going left to
+right, top to bottom.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Since all samples are 24 bits deep, each sample comprises three
+bytes.</p>
+<pre class="western">            +------------------------+------------------------+------------------------+
+1 sample:   | most significant byte  |      middle byte       | least significant byte |
+            +------------------------+------------------------+------------------------+</pre><p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Samples from the group's channels are interleaved. Channel order
+within the group is as specified in Table 1 of ST 2110-30-2017.</p>
+<h3 class="western">Example 1</h3>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The simplest example is one group consisting of a monaural channel.
+The configuration structure for this example is:</p>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%">
+	uri = &quot;https://dez7slaihsw2s.cloudfront.net/baseline-audio&quot;
+	[NUL terminated string]</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%">
+	data_bytes = &quot;cdi_profile_version=01.00; rate=96000; order=M;&quot;</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%">
+	data_size = 47</p>
+</ul>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Data for a 1 ms payload contains 288 bytes (96 samples * 3 bytes per
+sample) and would be formatted as shown:</p>
+<pre class="western">            +-----------+-----------+-----------+--        -+-----------+
+1 payload:  | sample 0  | sample 1  | sample 2  |    ...    | sample 95 |
+            +-----------+-----------+-----------+-        --+-----------+</pre><h3 class="western">
+Example 2</h3>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+Multiple channels require interleaving of the samples. This example
+has six channels as a 5.1 surround group type. The configuration
+structure is:</p>
+<ul>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	uri = &quot;https://dez7slaihsw2s.cloudfront.net/baseline-audio&quot;
+	[NUL terminated]</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	data_bytes = &quot;cdi_profile_version=01.00; rate=48000; order=51;&quot;</p>
+	<li><p class="western" style="margin-bottom: 0in; line-height: 100%; background: transparent">
+	data_size = 48</p>
+</ul>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+For 1 ms, the payload size is 864 bytes (48 samples * 3 bytes per
+channel * 6 channels) formatted in memory like:</p>
+<pre class="western">            +--------------+--------------+--------------+--------------+--------------+--------------+
+            | sample L0    | sample R0    | sample C0    | sample LFE0  | sample Ls0   | sample Rs0   |
+            +--------------+--------------+--------------+--------------+--------------+--------------+
+            | sample L1    | sample R1    | sample C1    | sample LFE1  | sample Ls1   | sample Rs1   |
+1 payload:  +--------------+--------------+--------------+--------------+--------------+--------------+
+                                                        ...
+            +--------------+--------------+--------------+--------------+--------------+--------------+
+            | sample L47   | sample R47   | sample C47   | sample LFE47 | sample Ls47  | sample Rs47  |
+            +--------------+--------------+--------------+--------------+--------------+--------------+</pre><p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+The packetizer on the transmit side breaks payloads up if necessary
+to fit into network packets which has a direct effect on the scatter
+gather list entries on the receive side. It ensures that each entry
+contains only whole samples from all of the channels in the group. In
+other words, the scatter gather entry boundaries will always coincide
+with the sample word boundaries between the byte of the last channel
+of the group and the first byte of the first channel of the group.</p>
+<h2 class="western">References</h2>
+<ol>
+	<li><p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+	IETF RFC 3190: <a href="https://tools.ietf.org/html/rfc3190">https://tools.ietf.org/html/rfc3190</a></p>
+	<li><p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; line-height: 100%; background: transparent">
+	ST 2110-30:2017 - SMPTE Standard - Professional Media Over Managed
+	IP Networks: PCM Digital Audio,&quot; in ST 2110-30:2017, 27 Nov.
+	2017, doi: 10.5594/SMPTE.ST2110-30.2017:
+	https://ieeexplore.ieee.org/document/8167392</p>
+</ol>
+</body>
+</html>

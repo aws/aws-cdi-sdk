@@ -1,0 +1,22 @@
+/cmake_build/
+/bin/
+/build/
+*.vpwhistu
+*.vtg
+*.swp
+*.pyc
+.idea/
+
+#Visual Studio Ignores
+/proj/.vs
+/.vs
+*.tlog
+*.obj
+*.log
+*.pdb
+*.ilk
+*.exp
+*FileListAbsolute*
+*.idb
+*.user
+*.pyc

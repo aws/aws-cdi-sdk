@@ -1,0 +1,5 @@
+# Enforce Unix line endings for C/C++ code
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
