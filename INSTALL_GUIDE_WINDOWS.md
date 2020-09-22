@@ -214,7 +214,7 @@ The extracted AWS CDI SDK solution, cdi_proj.sln, contains three test applicatio
     - Select the **Windows Start button**.
     - Type **Environment**, and it will match with **Edit the system environment variables**. Select this suggested option.
     - In the resulting pop-up window, select **Environment Variables**.
-    - In the **System Variables** section, select the **Path** variable and click **New**.
+    - In the **System Variables** section, select the **Path** variable and click **Edit**, then click **New**.
     - Add the following path into the new text area: ```C:\Program Files\CMake\bin``` and select **OK**.
 
 ## Download and build the AWS SDK for C++
@@ -224,6 +224,7 @@ The extracted AWS CDI SDK solution, cdi_proj.sln, contains three test applicatio
 1. Follow the instructions from the [AWS SDK Developer guide](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html) taking note of the following.
     - Additional files for AWS performance metrics gathering need to be copied from the AWS CDI SDK directory to the AWS SDK directory before running any of the ```cmake``` commands. Windows Explorer or a Powershell command like ```copy -recurse .\aws-cpp-sdk-cdi\ <path to AWS SDK>``` from the top level AWS CDI SDK can be used to perform this step.
     - Only the ```monitoring``` and ```cdi``` modules need to be built. Specify ```-D BUILD_ONLY="monitoring;cdi"``` with the first ```cmake``` command.
+    - You may need to add the msbuild command to your system path environment variable as described above for the cmake command.  If so, the msbuild path will be similar to ```C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin```.
     - **Important:** You must run the install commands in a shell that was started in **Administrator mode**. For example:
         - Open Microsoft Visual Studio 2019 in Administrator mode.
         - Open **Tools > Command Line > Developer Powershell**.
