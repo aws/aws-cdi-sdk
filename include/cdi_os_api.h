@@ -135,7 +135,7 @@
     struct siginfo_t {
         long si_pid;
         long si_uid;
-    } siginfo;
+    };
 
 #elif defined _LINUX
     #define CDI_STDIN  stdin   ///< Definition of OS agnostic standard input stream.
