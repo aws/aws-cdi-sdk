@@ -277,57 +277,57 @@ namespace Model
 
 
     /**
-     * An ID that is unique for each new instance of the Krill SDK, such as a random
-     * value created on each call to RmtCoreInitialize. At this time we don't prescribe
+     * An ID that is unique for each new instance of the AWS CDI SDK, such as a random
+     * value created on each call to CdiCoreInitialize. At this time we don't prescribe
      * the exact format required.
      */
     inline const Aws::String& GetSdkInstanceID() const{ return m_sdkInstanceID; }
 
     /**
-     * An ID that is unique for each new instance of the Krill SDK, such as a random
-     * value created on each call to RmtCoreInitialize. At this time we don't prescribe
+     * An ID that is unique for each new instance of the AWS CDI SDK, such as a random
+     * value created on each call to CdiCoreInitialize. At this time we don't prescribe
      * the exact format required.
      */
     inline bool SdkInstanceIDHasBeenSet() const { return m_sdkInstanceIDHasBeenSet; }
 
     /**
-     * An ID that is unique for each new instance of the Krill SDK, such as a random
-     * value created on each call to RmtCoreInitialize. At this time we don't prescribe
+     * An ID that is unique for each new instance of the AWS CDI SDK, such as a random
+     * value created on each call to CdiCoreInitialize. At this time we don't prescribe
      * the exact format required.
      */
     inline void SetSdkInstanceID(const Aws::String& value) { m_sdkInstanceIDHasBeenSet = true; m_sdkInstanceID = value; }
 
     /**
-     * An ID that is unique for each new instance of the Krill SDK, such as a random
-     * value created on each call to RmtCoreInitialize. At this time we don't prescribe
+     * An ID that is unique for each new instance of the AWS CDI SDK, such as a random
+     * value created on each call to CdiCoreInitialize. At this time we don't prescribe
      * the exact format required.
      */
     inline void SetSdkInstanceID(Aws::String&& value) { m_sdkInstanceIDHasBeenSet = true; m_sdkInstanceID = std::move(value); }
 
     /**
-     * An ID that is unique for each new instance of the Krill SDK, such as a random
-     * value created on each call to RmtCoreInitialize. At this time we don't prescribe
+     * An ID that is unique for each new instance of the AWS CDI SDK, such as a random
+     * value created on each call to CdiCoreInitialize. At this time we don't prescribe
      * the exact format required.
      */
     inline void SetSdkInstanceID(const char* value) { m_sdkInstanceIDHasBeenSet = true; m_sdkInstanceID.assign(value); }
 
     /**
-     * An ID that is unique for each new instance of the Krill SDK, such as a random
-     * value created on each call to RmtCoreInitialize. At this time we don't prescribe
+     * An ID that is unique for each new instance of the AWS CDI SDK, such as a random
+     * value created on each call to CdiCoreInitialize. At this time we don't prescribe
      * the exact format required.
      */
     inline PutMetricGroupsRequest& WithSdkInstanceID(const Aws::String& value) { SetSdkInstanceID(value); return *this;}
 
     /**
-     * An ID that is unique for each new instance of the Krill SDK, such as a random
-     * value created on each call to RmtCoreInitialize. At this time we don't prescribe
+     * An ID that is unique for each new instance of the AWS CDI SDK, such as a random
+     * value created on each call to CdiCoreInitialize. At this time we don't prescribe
      * the exact format required.
      */
     inline PutMetricGroupsRequest& WithSdkInstanceID(Aws::String&& value) { SetSdkInstanceID(std::move(value)); return *this;}
 
     /**
-     * An ID that is unique for each new instance of the Krill SDK, such as a random
-     * value created on each call to RmtCoreInitialize. At this time we don't prescribe
+     * An ID that is unique for each new instance of the AWS CDI SDK, such as a random
+     * value created on each call to CdiCoreInitialize. At this time we don't prescribe
      * the exact format required.
      */
     inline PutMetricGroupsRequest& WithSdkInstanceID(const char* value) { SetSdkInstanceID(value); return *this;}
