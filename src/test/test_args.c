@@ -21,13 +21,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
-#include "logger_api.h"
-#include "optarg.h"
 #include "cdi_log_enums.h"
+#include "cdi_logger_api.h"
 #include "cdi_os_api.h"
 #include "cdi_test.h"
 #include "cdi_utility_api.h"
+#include "optarg.h"
 #include "test_common.h"
 #include "test_console.h"
 #include "utilities_api.h"
@@ -134,31 +135,46 @@ static TestConnectionProtocolType TestProtocolStringToEnum(const char* name_str)
  * @brief Prints the main usage message.
  *
  * @param opt_array_ptr Pointer to the options array, where all usage information is stored.
+ * @param opt_ptr Pointer to optional argument.
  */
-static void PrintUsageVideo(const OptDef* opt_array_ptr)
+static void PrintUsageVideo(const OptDef* opt_array_ptr, const OptArg* opt_ptr)
 {
+    CdiAvmBaselineProfileVersion version = {
+        .major = 1,
+        .minor = 0
+    };
+    if (opt_ptr->num_args) {
+        if (!CdiAvmParseBaselineVersionString(opt_ptr->args_array[0], &version)) {
+            TestConsoleLog(kLogError, "Invalid --help_video xx.xx version.", opt_ptr->args_array[0]);
+            return;
+        }
+    }
+
     TestConsoleLog(kLogInfo, "Usage for --avm_video option:");
     PrintOption(&opt_array_ptr[kTestOptionAVMVideo]);
     TestConsoleLog(kLogInfo, "");
     TestConsoleLog(kLogInfo, "Choices for each argument:");
+    TestConsoleLog(kLogInfo, "  [version]              - xx.xx (Optional AVM profile version)");
+    TestConsoleLog(kLogInfo, "");
+    TestConsoleLog(kLogInfo, "  Data shown for AVM version %02d.%02d:", version.major, version.minor);
     TestConsoleLog(kLogInfo, "  <width>                - any integer");
     TestConsoleLog(kLogInfo, "  <height>               - any integer");
     TestConsoleLog(kLogInfo, "  <sampling type>        - any of the following strings:");
-    PrintKeyArrayNames(CdiUtilityKeyGetArray(kKeyAvmVideoSamplingType), OPTARG_AVM_USAGE_LIST_INDENT);
+    PrintKeyArrayNames(CdiAvmKeyGetArray(kKeyAvmVideoSamplingType, &version), OPTARG_AVM_USAGE_LIST_INDENT);
     TestConsoleLog(kLogInfo, "  <alpha channel>        - any of the following strings:");
-    PrintKeyArrayNames(CdiUtilityKeyGetArray(kKeyAvmVideoAlphaChannelType), OPTARG_AVM_USAGE_LIST_INDENT);
+    PrintKeyArrayNames(CdiAvmKeyGetArray(kKeyAvmVideoAlphaChannelType, &version), OPTARG_AVM_USAGE_LIST_INDENT);
     TestConsoleLog(kLogInfo, "  <bit depth>            - any of the following strings:");
-    PrintKeyArrayNames(CdiUtilityKeyGetArray(kKeyAvmVideoBitDepthType), OPTARG_AVM_USAGE_LIST_INDENT);
+    PrintKeyArrayNames(CdiAvmKeyGetArray(kKeyAvmVideoBitDepthType, &version), OPTARG_AVM_USAGE_LIST_INDENT);
     TestConsoleLog(kLogInfo, "  <rate numerator>       - any integer");
     TestConsoleLog(kLogInfo, "  <rate denominator>     - any integer");
     TestConsoleLog(kLogInfo, "  <colorimetry>          - any of the following strings:");
-    PrintKeyArrayNames(CdiUtilityKeyGetArray(kKeyAvmVideoColorimetryType), OPTARG_AVM_USAGE_LIST_INDENT);
+    PrintKeyArrayNames(CdiAvmKeyGetArray(kKeyAvmVideoColorimetryType, &version), OPTARG_AVM_USAGE_LIST_INDENT);
     TestConsoleLog(kLogInfo, "  <interlace>            - true or false");
     TestConsoleLog(kLogInfo, "  <segmented>            - true or false");
     TestConsoleLog(kLogInfo, "  <TCS>                  - any of the following strings:");
-    PrintKeyArrayNames(CdiUtilityKeyGetArray(kKeyAvmVideoTcsType), OPTARG_AVM_USAGE_LIST_INDENT);
+    PrintKeyArrayNames(CdiAvmKeyGetArray(kKeyAvmVideoTcsType, &version), OPTARG_AVM_USAGE_LIST_INDENT);
     TestConsoleLog(kLogInfo, "  <encoding range>       - any of the following strings:");
-    PrintKeyArrayNames(CdiUtilityKeyGetArray(kKeyAvmVideoRangeType), OPTARG_AVM_USAGE_LIST_INDENT);
+    PrintKeyArrayNames(CdiAvmKeyGetArray(kKeyAvmVideoRangeType, &version), OPTARG_AVM_USAGE_LIST_INDENT);
     TestConsoleLog(kLogInfo, "  <PAR width>            - any integer");
     TestConsoleLog(kLogInfo, "  <PAR height>           - any integer");
     TestConsoleLog(kLogInfo, "  <start vertical pos>   - any integer");
@@ -176,18 +192,33 @@ static void PrintUsageVideo(const OptDef* opt_array_ptr)
  * @brief Prints the audio usage message.
  *
  * @param opt_array_ptr Pointer to the options array, where all usage information is stored.
+ * @param opt_ptr Pointer to option argument.
  */
-static void PrintUsageAudio(const OptDef* opt_array_ptr)
+static void PrintUsageAudio(const OptDef* opt_array_ptr, const OptArg* opt_ptr)
 {
+    CdiAvmBaselineProfileVersion version = {
+        .major = 1,
+        .minor = 0
+    };
+    if (opt_ptr->num_args) {
+        if (!CdiAvmParseBaselineVersionString(opt_ptr->args_array[0], &version)) {
+            TestConsoleLog(kLogError, "Invalid --help_audio xx.xx version.", opt_ptr->args_array[0]);
+            return;
+        }
+    }
+
     TestConsoleLog(kLogInfo, "");
     TestConsoleLog(kLogInfo, "Usage for --avm_audio option:");
     PrintOption(&opt_array_ptr[kTestOptionAVMAudio]);
     TestConsoleLog(kLogInfo, "");
     TestConsoleLog(kLogInfo, "Choices for each argument:");
+    TestConsoleLog(kLogInfo, "  [version]              - xx.xx (Optional AVM profile version)");
+    TestConsoleLog(kLogInfo, "");
+    TestConsoleLog(kLogInfo, "  Data shown for AVM version %02d.%02d:", version.major, version.minor);
     TestConsoleLog(kLogInfo, "  <channel grouping>     - Any of the following strings:");
-    PrintKeyArrayNames(CdiUtilityKeyGetArray(kKeyAvmAudioChannelGroupingType), OPTARG_AVM_USAGE_LIST_INDENT);
+    PrintKeyArrayNames(CdiAvmKeyGetArray(kKeyAvmAudioChannelGroupingType, &version), OPTARG_AVM_USAGE_LIST_INDENT);
     TestConsoleLog(kLogInfo, "  <sample rate kHz>      - Any of the following strings:");
-    PrintKeyArrayNames(CdiUtilityKeyGetArray(kKeyAvmAudioSampleRateType), OPTARG_AVM_USAGE_LIST_INDENT);
+    PrintKeyArrayNames(CdiAvmKeyGetArray(kKeyAvmAudioSampleRateType, &version), OPTARG_AVM_USAGE_LIST_INDENT);
     TestConsoleLog(kLogInfo, "  <language code>        - Any two or three character string or \"none\".");
     TestConsoleLog(kLogInfo, "");
     TestConsoleLog(kLogInfo, "Examples:");
@@ -288,22 +319,22 @@ static OptDef my_options[] =
     { "rx",   "rx",           1, "<protocol>",       NULL,
         "Choose receiver mode (default RAW) for this connection. AVM mode requires one of\n"
         "avm_video, --avm_audio, or --avm_anc options also be used."},
-    { "vid",  "avm_video",    18, "<video args>",    NULL,
-        "Set video parameters for AVM stream. The <protocol> argument of --tx or --rx\n"
-        "must be AVM. All parameters are required and must be specified in this order:\n"
-        "<width> <height> <sampling type> <alpha channel> <bit depth>\n"
+    { "vid",  "avm_video",   18, "<video args>",    NULL, /* Can use 18 or 19 arguments */
+        "Set video parameters for AVM stream. The <protocol> argument of --tx or --rx must be\n"
+        "AVM. Except for version, all parameters are required and must be specified in this order:\n"
+        "[version] <width> <height> <sampling type> <alpha channel> <bit depth>\n"
         "<rate numerator> <rate denominator> <colorimetry> <interlace> <segmented>\n"
         "<TCS> <encoding range> <PAR width> <PAR height> <start vertical position>\n"
         "<vertical size> <start horizontal position> <horizontal size>\n"
         "Use --help_video option for more detailed help for this option."},
-    { "aud",  "avm_audio",    3, "<audio args>",     NULL,
-        "Set audio parameters for AVM stream. The <protocol> argument of --tx or --rx\n"
-        "must be AVM. All parameters are required and must be specified in this order:\n"
-        "<channel grouping> <sample rate kHz> <language code>\n"
+    { "aud",  "avm_audio",     3, "<audio args>",     NULL, /* Can use 3 or 4 arguments */
+        "Set audio parameters for AVM stream. The <protocol> argument of --tx or --rx must be\n"
+        "AVM. Except for version, all parameters are required and must be specified in this order:\n"
+        "[version] <channel grouping> <sample rate kHz> <language code>\n"
         "Use --help_audio for more detailed help for this option."},
-    { "anc",  "avm_anc",      0, NULL,               NULL,
+    { "anc",  "avm_anc",       0, NULL,               NULL, /* Can use 0 or 1 argument */
         "Indicates AVM data type is ancillary for this stream. The <protocol> argument of\n"
-        "--tx, or --rx must be AVM. There are no configuration options for avm_anc."},
+        "--tx, or --rx must be AVM. Optionally, may specify baseline profile version [xx.xx]."},
     { "id",   "id",           1, "<stream id>",      NULL,
         "Assign a unique ID to a stream. Applies only to AVM connections and is required\n"
         " for them. The value must be between 0 and 65535, inclusive."},
@@ -586,7 +617,7 @@ static void SetConnectionRatePeriods(TestSettings* test_settings_ptr)
 
     // Frame rate period in nanoseconds used for fallback audio rtp time period if actual sample time cannot be
     // calculated.
-    test_settings_ptr->rate_period_nanoseconds = (((uint64_t)NANOSECONDS_TO_SECONDS * test_settings_ptr->rate_denominator) /
+    test_settings_ptr->rate_period_nanoseconds = (((uint64_t)NANOSECONDS_PER_SECOND * test_settings_ptr->rate_denominator) /
                                                  test_settings_ptr->rate_numerator);
 
     // How many 90kHz video samples can fit into the frame time.
@@ -765,7 +796,7 @@ static bool AvmTypeSetAndIncrement(StreamSettings* const stream_settings_ptr,
     bool ret = true;
 
     if (*avm_types_ptr > 0) {
-        TestConsoleLog(kLogError, "Only one of --avm_video (-vid), --avm_audio (-aud), or avm_anc(-anc) options can be "
+        TestConsoleLog(kLogError, "Only one of --avm_video (-vid), --avm_audio (-aud), or avm_anc (-anc) options can be "
                                   "used in a single AVM stream.");
         ret = false;
     }
@@ -977,11 +1008,11 @@ static ProgramExecutionStatus ParseHelpOptions(int argc, const char** argv_ptr, 
                 rv = kProgramExecutionStatusExitOk;
                 break;
             case kTestOptionHelpVideo:
-                PrintUsageVideo(my_options);
+                PrintUsageVideo(my_options, opt_ptr);
                 rv = kProgramExecutionStatusExitOk;
                 break;
             case kTestOptionHelpAudio:
-                PrintUsageAudio(my_options);
+                PrintUsageAudio(my_options, opt_ptr);
                 rv = kProgramExecutionStatusExitOk;
                 break;
             case kTestOptionHelpRiff:
@@ -1333,32 +1364,35 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
         for (int j=0; j<test_settings_ptr[i].number_of_streams; j++) {
             const StreamSettings* stream_settings_ptr = &test_settings_ptr[i].stream_settings[j];
             if (test_settings_ptr[i].connection_protocol == kTestProtocolAvm) {
+                // NOTE: Payload type is generic for all profile versions, so using NULL here for version.
                 TestConsoleLog(kLogInfo, "    Stream[%d]    : AVM %s", j,
-                              CdiUtilityKeyEnumToString(kKeyAvmPayloadType, stream_settings_ptr->avm_data_type));
+                              CdiAvmKeyEnumToString(kKeyAvmPayloadType, stream_settings_ptr->avm_data_type, NULL));
                 TestConsoleLog(kLogInfo, "        Stream ID    : %d", stream_settings_ptr->stream_id);
                 TestConsoleLog(kLogInfo, "        Payload Size : %d", stream_settings_ptr->payload_size);
                 if (kCdiAvmVideo == stream_settings_ptr->avm_data_type) {
-                    TestConsoleLog(kLogInfo, "        Config       : %dx%d, %s, Alpha %s, %s, Rate %d/%d, %s, %s, %s,",
+                    TestConsoleLog(kLogInfo, "        Config       : v%02d:%02d %dx%d, %s, Alpha %s, %s, Rate %d/%d, %s, %s, %s,",
+                                   stream_settings_ptr->video_params.version.major,
+                                   stream_settings_ptr->video_params.version.minor,
                                    stream_settings_ptr->video_params.width,
                                    stream_settings_ptr->video_params.height,
-                                   CdiUtilityKeyEnumToString(kKeyAvmVideoSamplingType,
-                                                        stream_settings_ptr->video_params.sampling),
-                                   CdiUtilityKeyEnumToString(kKeyAvmVideoAlphaChannelType,
-                                                        stream_settings_ptr->video_params.alpha_channel),
-                                   CdiUtilityKeyEnumToString(kKeyAvmVideoBitDepthType,
-                                                        stream_settings_ptr->video_params.depth),
+                                   CdiAvmKeyEnumToString(kKeyAvmVideoSamplingType,
+                                                        stream_settings_ptr->video_params.sampling, NULL),
+                                   CdiAvmKeyEnumToString(kKeyAvmVideoAlphaChannelType,
+                                                        stream_settings_ptr->video_params.alpha_channel, NULL),
+                                   CdiAvmKeyEnumToString(kKeyAvmVideoBitDepthType,
+                                                        stream_settings_ptr->video_params.depth, NULL),
                                    stream_settings_ptr->video_params.frame_rate_num,
                                    stream_settings_ptr->video_params.frame_rate_den,
-                                   CdiUtilityKeyEnumToString(kKeyAvmVideoColorimetryType,
-                                                        stream_settings_ptr->video_params.colorimetry),
+                                   CdiAvmKeyEnumToString(kKeyAvmVideoColorimetryType,
+                                                        stream_settings_ptr->video_params.colorimetry, NULL),
                                    stream_settings_ptr->video_params.interlace ? "Interlaced" : "Progressive",
                                    stream_settings_ptr->video_params.segmented ? "Segmented" : "Non-segmented");
                     TestConsoleLog(kLogInfo, "                       %s %s, PAR %dx%d, V Start/Length %d/%d, "
                                    "H Start/Length %d/%d",
-                                   CdiUtilityKeyEnumToString(kKeyAvmVideoTcsType,
-                                                             stream_settings_ptr->video_params.tcs),
-                                   CdiUtilityKeyEnumToString(kKeyAvmVideoRangeType,
-                                                             stream_settings_ptr->video_params.range),
+                                   CdiAvmKeyEnumToString(kKeyAvmVideoTcsType,
+                                                             stream_settings_ptr->video_params.tcs, NULL),
+                                   CdiAvmKeyEnumToString(kKeyAvmVideoRangeType,
+                                                             stream_settings_ptr->video_params.range, NULL),
                                    stream_settings_ptr->video_params.par_width,
                                    stream_settings_ptr->video_params.par_height,
                                    stream_settings_ptr->video_params.start_vertical_pos,
@@ -1370,11 +1404,13 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
                     // Make a NUL terminated string that can be easily
                     char language_str[4] = { '\0', '\0', '\0', '\0' };
                     strncpy(language_str, stream_settings_ptr->audio_params.language, 3);
-                    TestConsoleLog(kLogInfo, "        Config       : Grouping: %s, Rate %s, Language %s",
-                                   CdiUtilityKeyEnumToString(kKeyAvmAudioChannelGroupingType,
-                                                             stream_settings_ptr->audio_params.grouping),
-                                   CdiUtilityKeyEnumToString(kKeyAvmAudioSampleRateType,
-                                                             stream_settings_ptr->audio_params.sample_rate_khz),
+                    TestConsoleLog(kLogInfo, "        Config       : v%02d:%02d Grouping: %s, Rate %s, Language %s",
+                                   stream_settings_ptr->video_params.version.major,
+                                   stream_settings_ptr->video_params.version.minor,
+                                   CdiAvmKeyEnumToString(kKeyAvmAudioChannelGroupingType,
+                                                         stream_settings_ptr->audio_params.grouping, NULL),
+                                   CdiAvmKeyEnumToString(kKeyAvmAudioSampleRateType,
+                                                         stream_settings_ptr->audio_params.sample_rate_khz, NULL),
                                    language_str);
                 }
                 TestConsoleLog(kLogInfo, "        Config Skip  : %d", stream_settings_ptr->config_skip);
@@ -1560,18 +1596,35 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 }
                 break;
             case kTestOptionAVMVideo:
+            {
                 // Collect video parameters into video_params data structure.
-                if (!IsIntStringValid(opt.args_array[0], &check_val)) {
+                int i = 0;
+                // If an optional argument was provided, try to parse it first. NOTE: opt.num_args is the number of
+                // options provided on command line, while my_options[opt.option_index].num_args is the number of
+                // required options.
+                stream_settings_ptr->video_params.version.major = 1;
+                stream_settings_ptr->video_params.version.minor = 0;
+                if (opt.num_args > my_options[opt.option_index].num_args) {
+                    if (!CdiAvmParseBaselineVersionString(opt.args_array[0],
+                                                          &stream_settings_ptr->video_params.version)) {
+                        TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'version'.",
+                                    opt.args_array[0]);
+                        arg_error = true;
+                    }
+                    i++;
+                }
+
+                if (!IsIntStringValid(opt.args_array[i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'width'.",
-                                   opt.args_array[0]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.width = (uint16_t)check_val;
                 }
 
-                if (!arg_error && !IsIntStringValid(opt.args_array[1], &check_val)) {
+                if (!arg_error && !IsIntStringValid(opt.args_array[++i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'height'.",
-                                   opt.args_array[1]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.height = (uint16_t)check_val;
@@ -1579,45 +1632,48 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
 
                 if (!arg_error) {
                     stream_settings_ptr->video_params.sampling =
-                        CdiUtilityKeyStringToEnum(kKeyAvmVideoSamplingType, opt.args_array[2]);
+                        CdiAvmKeyStringToEnum(kKeyAvmVideoSamplingType, opt.args_array[++i],
+                                              &stream_settings_ptr->video_params.version);
                     if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->video_params.sampling) {
                         TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'sampling type'.",
-                                       opt.args_array[2]);
+                                       opt.args_array[i]);
                         arg_error = true;
                     }
                 }
 
                 if (!arg_error) {
                     stream_settings_ptr->video_params.alpha_channel =
-                        CdiUtilityKeyStringToEnum(kKeyAvmVideoAlphaChannelType, opt.args_array[3]);
+                        CdiAvmKeyStringToEnum(kKeyAvmVideoAlphaChannelType, opt.args_array[++i],
+                                              &stream_settings_ptr->video_params.version);
                     if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->video_params.alpha_channel) {
                         TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'alpha channel type'.",
-                                       opt.args_array[3]);
+                                       opt.args_array[i]);
                         arg_error = true;
                     }
                 }
 
                 if (!arg_error) {
                     stream_settings_ptr->video_params.depth =
-                        CdiUtilityKeyStringToEnum(kKeyAvmVideoBitDepthType, opt.args_array[4]);
+                        CdiAvmKeyStringToEnum(kKeyAvmVideoBitDepthType, opt.args_array[++i],
+                                              &stream_settings_ptr->video_params.version);
                     if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->video_params.depth) {
                         TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'bit depth'.",
-                                       opt.args_array[4]);
+                                       opt.args_array[i]);
                         arg_error = true;
                     }
                 }
 
-                if (!arg_error && !IsIntStringValid(opt.args_array[5], &check_val)) {
+                if (!arg_error && !IsIntStringValid(opt.args_array[++i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'rate numerator'.",
-                                   opt.args_array[5]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.frame_rate_num = (uint32_t)check_val;
                 }
 
-                if (!arg_error && !IsIntStringValid(opt.args_array[6], &check_val)) {
+                if (!arg_error && !IsIntStringValid(opt.args_array[++i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'rate denominator'.",
-                                   opt.args_array[6]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.frame_rate_den = (uint32_t)check_val;
@@ -1625,25 +1681,26 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
 
                 if (!arg_error) {
                     stream_settings_ptr->video_params.colorimetry =
-                        CdiUtilityKeyStringToEnum(kKeyAvmVideoColorimetryType, opt.args_array[7]);
+                        CdiAvmKeyStringToEnum(kKeyAvmVideoColorimetryType, opt.args_array[++i],
+                                              &stream_settings_ptr->video_params.version);
                     if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->video_params.colorimetry) {
                         TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'colorimetry'.",
-                                       opt.args_array[7]);
+                                       opt.args_array[i]);
                         arg_error = true;
                     }
                 }
 
-                if (!arg_error && !IsBoolStringValid(opt.args_array[8], &check_val_bool)) {
+                if (!arg_error && !IsBoolStringValid(opt.args_array[++i], &check_val_bool)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'interlace'.",
-                                   opt.args_array[8]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.interlace = (bool)check_val_bool;
                 }
 
-                if (!arg_error && !IsBoolStringValid(opt.args_array[9], &check_val_bool)) {
+                if (!arg_error && !IsBoolStringValid(opt.args_array[++i], &check_val_bool)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'segmented'.",
-                                   opt.args_array[9]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.segmented = (bool)check_val_bool;
@@ -1651,97 +1708,116 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
 
                 if (!arg_error) {
                     stream_settings_ptr->video_params.tcs =
-                        CdiUtilityKeyStringToEnum(kKeyAvmVideoTcsType, opt.args_array[10]);
+                        CdiAvmKeyStringToEnum(kKeyAvmVideoTcsType, opt.args_array[++i],
+                                              &stream_settings_ptr->video_params.version);
                     if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->video_params.tcs) {
                         TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'TCS'.",
-                                       opt.args_array[10]);
+                                       opt.args_array[i]);
                         arg_error = true;
                     }
                 }
 
                 if (!arg_error) {
                     stream_settings_ptr->video_params.range =
-                        CdiUtilityKeyStringToEnum(kKeyAvmVideoRangeType, opt.args_array[11]);
+                        CdiAvmKeyStringToEnum(kKeyAvmVideoRangeType, opt.args_array[++i],
+                                              &stream_settings_ptr->video_params.version);
                     if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->video_params.range) {
                         TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'encoding range'.",
-                                       opt.args_array[11]);
+                                       opt.args_array[i]);
                         arg_error = true;
                     }
                 }
 
-                if (!arg_error && !IsIntStringValid(opt.args_array[12], &check_val)) {
+                if (!arg_error && !IsIntStringValid(opt.args_array[++i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'PAR width'.",
-                                   opt.args_array[12]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.par_width = (uint32_t)check_val;
                 }
 
-                if (!arg_error && !IsIntStringValid(opt.args_array[13], &check_val)) {
+                if (!arg_error && !IsIntStringValid(opt.args_array[++i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'PAR height'.",
-                                   opt.args_array[13]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.par_height = (uint32_t)check_val;
                 }
 
-                if (!arg_error && !IsIntStringValid(opt.args_array[14], &check_val)) {
+                if (!arg_error && !IsIntStringValid(opt.args_array[++i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'start vertical pos'.",
-                                   opt.args_array[14]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.start_vertical_pos = (uint16_t)check_val;
                 }
 
-                if (!arg_error && !IsIntStringValid(opt.args_array[15], &check_val)) {
+                if (!arg_error && !IsIntStringValid(opt.args_array[++i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'vertical size'.",
-                                   opt.args_array[15]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.vertical_size = (uint16_t)check_val;
                 }
 
-                if (!arg_error && !IsIntStringValid(opt.args_array[16], &check_val)) {
+                if (!arg_error && !IsIntStringValid(opt.args_array[++i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'start horizontal pos'.",
-                                   opt.args_array[16]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.start_horizontal_pos = (uint16_t)check_val;
                 }
 
-                if (!arg_error && !IsIntStringValid(opt.args_array[17], &check_val)) {
+                if (!arg_error && !IsIntStringValid(opt.args_array[++i], &check_val)) {
                     TestConsoleLog(kLogError, "Invalid --avm_video (-vid) argument [%s] for 'horizontal size'.",
-                                   opt.args_array[17]);
+                                   opt.args_array[i]);
                     arg_error = true;
                 } else {
                     stream_settings_ptr->video_params.horizontal_size = (uint16_t)check_val;
                 }
 
                 arg_error |= !AvmTypeSetAndIncrement(stream_settings_ptr, kCdiAvmVideo, &avm_types);
+            }
                 break;
             case kTestOptionAVMAudio:
+            {
                 // Collect audio parameters into audio_params data structure.
-
-                {
-                    // Convert channel group to enum.
-                    CdiAvmAudioChannelGrouping group_val = CdiUtilityKeyStringToEnum(kKeyAvmAudioChannelGroupingType,
-                                                                                     opt.args_array[0]);
-                    if (CDI_INVALID_ENUM_VALUE == (int)group_val) {
-                        TestConsoleLog(kLogError, "Invalid --avm_audio (-aud) argument [%s] for 'groupings'.  Run "
-                                       "--help_audio for --avm_audio usage.", opt.args_array[0]);
+                int i = 0;
+                // If an optional argument was provided, try to parse it first. NOTE: opt.num_args is the number of
+                // options provided on command line, while my_options[opt.option_index].num_args is the number of
+                // required options.
+                stream_settings_ptr->audio_params.version.major = 1;
+                stream_settings_ptr->audio_params.version.minor = 0;
+                if (opt.num_args > my_options[opt.option_index].num_args) {
+                    if (!CdiAvmParseBaselineVersionString(opt.args_array[0],
+                                                          &stream_settings_ptr->audio_params.version)) {
+                        TestConsoleLog(kLogError, "Invalid --avm_audio (-aud) argument [%s] for 'version'.",
+                                    opt.args_array[0]);
                         arg_error = true;
-                    } else {
-                        stream_settings_ptr->audio_params.grouping = group_val;
                     }
+                    i++;
+                }
+
+                // Convert channel group to enum.
+                CdiAvmAudioChannelGrouping group_val = CdiAvmKeyStringToEnum(kKeyAvmAudioChannelGroupingType,
+                        opt.args_array[i],
+                        &stream_settings_ptr->audio_params.version);
+                if (CDI_INVALID_ENUM_VALUE == (int)group_val) {
+                    TestConsoleLog(kLogError, "Invalid --avm_audio (-aud) argument [%s] for 'groupings'.  Run "
+                                   "--help_audio for --avm_audio usage.", opt.args_array[i]);
+                    arg_error = true;
+                } else {
+                    stream_settings_ptr->audio_params.grouping = group_val;
                 }
 
                 // Convert the sample rate string to an enum.
                 if (!arg_error) {
                     stream_settings_ptr->audio_params.sample_rate_khz =
-                        CdiUtilityKeyStringToEnum(kKeyAvmAudioSampleRateType, opt.args_array[1]);
+                        CdiAvmKeyStringToEnum(kKeyAvmAudioSampleRateType, opt.args_array[++i],
+                                              &stream_settings_ptr->audio_params.version);
                     if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->audio_params.sample_rate_khz) {
                         TestConsoleLog(kLogError, "Invalid --avm_audio (-aud) argument [%s] for 'sample rate kHz'.",
-                                       opt.args_array[1]);
+                                       opt.args_array[i]);
                         arg_error = true;
                     } else {
                         // Translate the audio sample rate into numerical values to allow for calculating PTP timestamps
@@ -1761,13 +1837,13 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                     // Zero pad the entire array of language code.
                     memset(stream_settings_ptr->audio_params.language, 0,
                            sizeof(stream_settings_ptr->audio_params.language));
-                    if (0 != CdiOsStrCaseCmp(opt.args_array[2], "none")) {
-                        if (3 < strlen(opt.args_array[2])) {
+                    if (0 != CdiOsStrCaseCmp(opt.args_array[++i], "none")) {
+                        if (3 < strlen(opt.args_array[i])) {
                             TestConsoleLog(kLogError, "Invalid --avm_audio (-aud) argument [%s] for 'language code'.",
-                                           opt.args_array[2]);
+                                           opt.args_array[i]);
                             arg_error = true;
                         } else {
-                            strncpy(stream_settings_ptr->audio_params.language, opt.args_array[2],
+                            strncpy(stream_settings_ptr->audio_params.language, opt.args_array[i],
                                     sizeof(stream_settings_ptr->audio_params.language));
                         }
                     }  // else memset() did the work already
@@ -1775,8 +1851,23 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
 
                 // Set the AVM type and increment a counter so we know how many AVM types the user entered.
                 arg_error |= !AvmTypeSetAndIncrement(stream_settings_ptr, kCdiAvmAudio, &avm_types);
+            }
                 break;
             case kTestOptionAVMAncillary:
+                // If an optional argument was provided, try to parse it first. NOTE: opt.num_args is the number of
+                // options provided on command line, while my_options[opt.option_index].num_args is the number of
+                // required options.
+                stream_settings_ptr->ancillary_data_params.version.major = 1;
+                stream_settings_ptr->ancillary_data_params.version.minor = 0;
+                if (opt.num_args > my_options[opt.option_index].num_args) {
+                    if (!CdiAvmParseBaselineVersionString(opt.args_array[0],
+                                                          &stream_settings_ptr->ancillary_data_params.version)) {
+                        TestConsoleLog(kLogError, "Invalid --avm_anc (-anc) argument [%s] for 'version'.",
+                                    opt.args_array[0]);
+                        arg_error = true;
+                    }
+                }
+
                 // Set the AVM type and increment a counter so we know how many AVM types the user entered.
                 arg_error |= !AvmTypeSetAndIncrement(stream_settings_ptr, kCdiAvmAncillary, &avm_types);
                 break;

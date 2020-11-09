@@ -36,7 +36,7 @@
 #include <windows.h>
 #include <ws2def.h>
 
-#include "logger_api.h"
+#include "cdi_logger_api.h"
 #include "utilities_api.h"
 
 // Need to link with Ws2_32.lib

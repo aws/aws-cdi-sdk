@@ -47,12 +47,12 @@
 #include "endpoint_manager.h"
 
 #include "adapter_api.h"
+#include "cdi_logger_api.h"
+#include "cdi_os_api.h"
 #include "internal.h"
 #include "internal_rx.h"
 #include "internal_tx.h"
 #include "internal_utility.h"
-#include "logger_api.h"
-#include "cdi_os_api.h"
 #include "statistics.h"
 #include "utilities_api.h"
 

@@ -13,12 +13,12 @@
 
 #include <stdbool.h>
 
-#include "fifo_api.h"
-#include "list_api.h"
-#include "logger_api.h"
 #include "cdi_core_api.h"
+#include "cdi_logger_api.h"
 #include "cdi_os_api.h"
 #include "cdi_pool_api.h"
+#include "fifo_api.h"
+#include "list_api.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************

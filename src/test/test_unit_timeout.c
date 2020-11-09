@@ -9,7 +9,7 @@
  * timeout.c API functions.
  */
 
-#include "logger_api.h"
+#include "cdi_logger_api.h"
 #include "cdi_os_api.h"
 #include "cdi_test.h"
 #include "timeout.h"

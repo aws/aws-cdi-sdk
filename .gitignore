@@ -1,6 +1,7 @@
 /cmake_build/
 /bin/
 /build/
+/.history/
 *.vpwhistu
 *.vtg
 *.swp

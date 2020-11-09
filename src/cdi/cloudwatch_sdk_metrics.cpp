@@ -27,7 +27,7 @@
 #include <aws/cdi/model/PutMetricGroupsRequest.h>
 #endif  // METRICS_GATHERING_SERVICE_ENABLED
 
-#include "logger_api.h"
+#include "cdi_logger_api.h"
 #undef GetMessage                   // workaround for AWSError method GetMessage()
 
 //*********************************************************************************************************************
@@ -454,6 +454,7 @@ bool UserMetrics::AddDatum(Aws::CloudWatch::Model::PutMetricDataRequest& request
 
     Aws::CloudWatch::Model::MetricDatum datum;
     SetDatumBoilerplate(datum, connection_name_str, direction_str, high_resolution, timestamp, metric_name_str);
+    datum.SetUnit(Aws::CloudWatch::Model::StandardUnit::Microseconds);
     datum.SetStatisticValues(stat_set);
     request.AddMetricData(datum);
 

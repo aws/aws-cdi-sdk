@@ -11,7 +11,7 @@
 // Include headers in the following order: Related header, C system headers, other libraries' headers, your project's
 // headers.
 
-#include "logger_api.h"
+#include "cdi_logger_api.h"
 
 #include <assert.h>
 #include <stdio.h>

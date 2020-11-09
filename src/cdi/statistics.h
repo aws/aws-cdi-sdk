@@ -11,9 +11,11 @@
 #ifndef CDI_STATISTICS_H__
 #define CDI_STATISTICS_H__
 
+// The configuration.h file must be included first since it can have defines that affect subsequent files.
 #include "configuration.h"
-#include "private.h"
+
 #include "cdi_core_api.h"
+#include "private.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************

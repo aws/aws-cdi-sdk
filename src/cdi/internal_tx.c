@@ -15,11 +15,11 @@
 
 #include <string.h>
 
+#include "cdi_queue_api.h"
 #include "endpoint_manager.h"
 #include "internal.h"
 #include "payload.h"
 #include "private.h"
-#include "queue_api.h"
 #include "statistics.h"
 
 //*********************************************************************************************************************

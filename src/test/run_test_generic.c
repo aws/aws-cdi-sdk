@@ -24,12 +24,14 @@
 #include <stdint.h>
 #include <string.h>
 
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
+
 #include "cdi_core_api.h"
+#include "cdi_logger_api.h"
+#include "cdi_os_api.h"
 #include "cdi_raw_api.h"
 #include "cdi_test.h"
-#include "logger_api.h"
-#include "cdi_os_api.h"
 #include "test_args.h"
 #include "test_console.h"
 #include "test_dynamic.h"

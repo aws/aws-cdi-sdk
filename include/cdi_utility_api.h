@@ -33,7 +33,9 @@
 /// Used to define the maximum length of an audio group enum string.
 #define MAX_AUDIO_GROUP_STR_SIZE (10)
 /// Number of nanoseconds in a second.
-#define NANOSECONDS_TO_SECONDS   (1000000000UL)
+#define NANOSECONDS_PER_SECOND   (1000000000UL)
+/// Deprecated use NANOSECONDS_PER_SECONDS instead.
+#define NANOSECONDS_TO_SECONDS   NANOSECONDS_PER_SECOND
 
 /// @brief Forward structure declaration to create pointer to PTP timestamp.
 typedef struct CdiPtpTimestamp CdiPtpTimestamp;
@@ -58,15 +60,6 @@ typedef enum {
     kKeyLogMethod,                      ///< Key for CdiLogMethod
     kKeyLogComponent,                   ///< Key for CdiLogComponent
     kKeyLogLevel,                       ///< Key for CdiLogLevel
-    kKeyAvmPayloadType,                 ///< Key for CdiAvmPayloadType
-    kKeyAvmVideoSamplingType,           ///< Key for CdiAvmVideoSampling
-    kKeyAvmVideoAlphaChannelType,       ///< Key for CdiAvmVideoAlphaChannel
-    kKeyAvmVideoBitDepthType,           ///< Key for CdiAvmVideoBitDepth
-    kKeyAvmVideoColorimetryType,        ///< Key for CdiAvmColorimetry
-    kKeyAvmVideoTcsType,                ///< Key for CdiAvmVideoTcs
-    kKeyAvmVideoRangeType,              ///< Key for CdiAvmVideoRange
-    kKeyAvmAudioChannelGroupingType,    ///< Key for CdiAvmAudioChannelGrouping
-    kKeyAvmAudioSampleRateType,         ///< Key for CdiAvmAudioSampleRate
     kKeyConnectionStatus,               ///< Key for CdiConnectionStatus
 } EnumStringKeyTypes;
 
@@ -82,6 +75,11 @@ typedef enum {
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 /**
  * Function used to get a pointer to a key-value array of a type specified by key_type.
@@ -162,5 +160,9 @@ static inline const char* CdiUtilityBoolToString(bool b)
 {
     return b ? "true" : "false";
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // CDI_UTILITY_API_H__

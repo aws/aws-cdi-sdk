@@ -18,13 +18,14 @@
 
 #include "adapter_api.h"
 #include "adapter_control_interface.h"
+#include "cdi_baseline_profile_01_00_api.h"
+#include "cdi_baseline_profile_02_00_api.h"
+#include "cdi_logger_api.h"
+#include "cdi_utility_api.h"
 #include "endpoint_manager.h"
 #include "fifo_api.h"
 #include "internal_tx.h"
 #include "internal_rx.h"
-#include "logger_api.h"
-#include "cdi_baseline_profile_api.h"
-#include "cdi_utility_api.h"
 #include "statistics.h"
 
 //*********************************************************************************************************************
@@ -444,7 +445,11 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
 
     if (kCdiStatusOk == rs) {
         // Create a pool used to hold error message strings.
-        int size = CDI_MAX(MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION, MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION);
+        int max_rx_payloads = handle->rx_state.config_data.max_simultaneous_rx_payloads_per_connection;
+        if (max_rx_payloads == 0) {
+            max_rx_payloads = MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
+        }
+        int size = CDI_MAX(MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION, max_rx_payloads);
         if (!CdiPoolCreate("Error Messages Pool", size, NO_GROW_SIZE, NO_GROW_COUNT, MAX_ERROR_STRING_LENGTH,
                            true, // true= Make thread-safe
                            &handle->error_message_pool)) {
@@ -653,13 +658,13 @@ void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int e
     CDI_LOG_MULTILINE(&m_state, "payload_user_data         [%llu]", core_extra_data_ptr->payload_user_data);
     CDI_LOG_MULTILINE(&m_state, "extra_data_size           [%d]", extra_data_size);
 
-
     if (kProtocolTypeAvm == protocol_type && sizeof(avm_union_ptr->with_config) == extra_data_size) {
         CdiAvmBaselineConfig baseline_config;
         CdiAvmConfig* avm_config_ptr = &avm_union_ptr->with_config.config;
         CdiAvmParseBaselineConfiguration(avm_config_ptr, &baseline_config);
+        // NOTE: Payload type is not specific to a profile version, so using NULL here for version.
         CDI_LOG_MULTILINE(&m_state, "payload_type              [%s]",
-                          CdiUtilityKeyEnumToString(kKeyAvmPayloadType, baseline_config.payload_type));
+                          CdiAvmKeyEnumToString(kKeyAvmPayloadType, baseline_config.payload_type, NULL));
         switch (baseline_config.payload_type) {
             case kCdiAvmNotBaseline:
                 break;
@@ -672,20 +677,23 @@ void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int e
                                       video_config_ptr->height);
 
                     CDI_LOG_MULTILINE(&m_state, "sampling                  [%s]",
-                                      CdiUtilityKeyEnumToString(kKeyAvmVideoSamplingType,
-                                                                video_config_ptr->sampling));
+                                      CdiAvmKeyEnumToString(kKeyAvmVideoSamplingType,
+                                                            video_config_ptr->sampling,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "bit depth                 [%s]",
-                                      CdiUtilityKeyEnumToString(kKeyAvmVideoBitDepthType,
-                                                                video_config_ptr->depth));
+                                      CdiAvmKeyEnumToString(kKeyAvmVideoBitDepthType,
+                                                            video_config_ptr->depth,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "frame rate (num/den)      [%d/%d]",
                                       video_config_ptr->frame_rate_num,
                                       video_config_ptr->frame_rate_den);
 
                     CDI_LOG_MULTILINE(&m_state, "colorimetry               [%s]",
-                                      CdiUtilityKeyEnumToString(kKeyAvmVideoColorimetryType,
-                                                                video_config_ptr->colorimetry));
+                                      CdiAvmKeyEnumToString(kKeyAvmVideoColorimetryType,
+                                                            video_config_ptr->colorimetry,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "interlace                 [%s]",
                                       CdiUtilityBoolToString(video_config_ptr->interlace));
@@ -694,12 +702,14 @@ void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int e
                                      CdiUtilityBoolToString(video_config_ptr->segmented));
 
                     CDI_LOG_MULTILINE(&m_state, "TCS                       [%s]",
-                                     CdiUtilityKeyEnumToString(kKeyAvmVideoTcsType,
-                                                               video_config_ptr->tcs));
+                                     CdiAvmKeyEnumToString(kKeyAvmVideoTcsType,
+                                                           video_config_ptr->tcs,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "range                     [%s]",
-                                     CdiUtilityKeyEnumToString(kKeyAvmVideoRangeType,
-                                                               video_config_ptr->range));
+                                     CdiAvmKeyEnumToString(kKeyAvmVideoRangeType,
+                                                           video_config_ptr->range,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "PAR (width:height)        [%d:%d]",
                                       video_config_ptr->par_width,
@@ -711,8 +721,9 @@ void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int e
                     CdiAvmAudioConfig* audio_config_ptr = &baseline_config.audio_config;
 
                     CDI_LOG_MULTILINE(&m_state, "grouping                  [%s]",
-                                      CdiUtilityKeyEnumToString(kKeyAvmAudioChannelGroupingType,
-                                                                    audio_config_ptr->grouping));
+                                      CdiAvmKeyEnumToString(kKeyAvmAudioChannelGroupingType,
+                                                            audio_config_ptr->grouping,
+                                                            &baseline_config.audio_config.version));
                 }
                 break;
             case kCdiAvmAncillary:

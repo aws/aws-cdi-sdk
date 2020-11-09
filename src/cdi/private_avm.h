@@ -14,7 +14,9 @@
 
 #include <stdbool.h>
 
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
+
 #include "cdi_avm_api.h"
 
 //*********************************************************************************************************************

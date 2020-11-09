@@ -14,12 +14,12 @@
 // Include headers in the following order: Related header, C system headers, other libraries' headers, your project's
 // headers.
 
-#include "queue_api.h"
+#include "cdi_queue_api.h"
 
 #include <stddef.h>
 #include <assert.h>
 
-#include "logger_api.h"
+#include "cdi_logger_api.h"
 #include "singly_linked_list_api.h"
 #include "utilities_api.h"
 
@@ -261,6 +261,16 @@ bool CdiQueueCreate(const char* name_str, uint32_t item_count, uint32_t grow_cou
                     uint32_t item_byte_size, CdiQueueSignalMode signal_mode, CdiQueueHandle* ret_handle)
 {
     bool ret = true;
+
+    if (1 > item_count) {
+        CDI_LOG_THREAD(kLogError, "Queue[%s] cannot be created with fewer than 1 item, count[%d]", name_str,
+                       item_count);
+        return false;
+    }
+
+    // The implementation does not allow item_count items to occupy the queue. It is deemed to be "full" when it has
+    // item_count - 1 items in it. Adjust item_count so that the true size requested is available.
+    item_count += 1;
 
     uint32_t size_needed = sizeof(CdiSinglyLinkedListEntry) + (item_count * (sizeof(QueueItem) + item_byte_size));
     void* queue_item_array = CdiOsMemAllocZero(size_needed);

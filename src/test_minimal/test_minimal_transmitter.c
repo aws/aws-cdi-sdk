@@ -10,8 +10,8 @@
 
 #include <assert.h>
 
-#include "logger_api.h"
-#include "cdi_baseline_profile_api.h"
+#include "cdi_baseline_profile_01_00_api.h"
+#include "cdi_baseline_profile_02_00_api.h"
 #include "cdi_core_api.h"
 #include "cdi_raw_api.h"
 #include "test_common.h"
@@ -236,6 +236,8 @@ static CdiReturnStatus MakeAvmConfig(const TestConnectionInfo* connection_info_p
     CdiAvmBaselineConfig baseline_config = {
         .payload_type = kCdiAvmVideo,
         .video_config = {
+            .version.major = 01, // Test using baseline profile V01.00.
+            .version.minor = 00,
             .width = 1920,
             .height = 1080,
             .sampling = kCdiAvmVidYCbCr422,
@@ -350,6 +352,9 @@ static CdiReturnStatus SendRawPayload(TestConnectionInfo* connection_info_ptr, C
 int main(int argc, const char** argv)
 {
     CdiLoggerInitialize(); // Intialize logger so we can use the CDI_LOG_THREAD() macro to generate console messages.
+
+    // Initialize the AVM CDI SDK baseline profile components.
+    CdiAvmInitializeBaselineProfiles();
 
     // Setup default test settings.
     TestConnectionInfo con_info = {

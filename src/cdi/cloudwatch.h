@@ -11,9 +11,11 @@
  #ifndef CDI_CLOUDWATCH_H__
  #define CDI_CLOUDWATCH_H__
 
+ // The configuration.h file must be included first since it can have defines which affect subsequent files.
  #include "configuration.h"
- #include "private.h"
+
  #include "cdi_core_api.h"
+ #include "private.h"
 
  //*********************************************************************************************************************
  //***************************************** START OF DEFINITIONS AND TYPES ********************************************

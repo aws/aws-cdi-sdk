@@ -16,12 +16,12 @@
 #include <string.h>
 
 #include "adapter_api.h"
+#include "cdi_logger_api.h"
+#include "cdi_pool_api.h"
 #include "endpoint_manager.h"
 #include "internal.h"
-#include "logger_api.h"
 #include "private.h"
 #include "private_avm.h"
-#include "cdi_pool_api.h"
 #include "rx_reorder.h"
 #include "statistics.h"
 
@@ -287,7 +287,7 @@ static bool InitializePayloadState(CdiEndpointState* endpoint_ptr, const Packet*
                                                payload_state_ptr, &packet_ptr->sg_list,
                                                *cdi_header_size_ptr, common_hdr_ptr->packet_sequence_num);
         }
-
+        memory_state_ptr->payload_state_ptr = payload_state_ptr;
     }
 
     return ret;
@@ -548,15 +548,15 @@ static bool FinalizePayload(CdiConnectionState* con_state_ptr, RxPayloadState* p
 static void RxSendAllCompletePayloads(CdiEndpointState* endpoint_ptr, bool force_send, int new_index)
 {
     RxPayloadState* send_payload_state_ptr =
-            &endpoint_ptr->rx_state.payload_state[endpoint_ptr->rx_state.payload_index];
+            endpoint_ptr->rx_state.payload_state_array_ptr[endpoint_ptr->rx_state.payload_index];
     bool force_done = false;
     CdiConnectionState* con_state_ptr = endpoint_ptr->connection_state_ptr;
 
     // Figure out, based on the current index, where the last array element will be as we walk through the array.
-    int final_index = (endpoint_ptr->rx_state.payload_index + MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION - 1)
-                      % MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
-    while ((send_payload_state_ptr->payload_state == kPayloadError) ||
-           (send_payload_state_ptr->payload_state == kPayloadComplete) || (force_send && !force_done)) {
+    int final_index = endpoint_ptr->rx_state.payload_index + MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER;
+    while ((NULL != send_payload_state_ptr) && (
+           (send_payload_state_ptr->payload_state == kPayloadError) ||
+           (send_payload_state_ptr->payload_state == kPayloadComplete) || (force_send && !force_done))) {
 
         // If this payload is in progress, clean-up resources and notify the application that there was a Rx payload
         // error. Set the payload state to kPayloadError so any more packets that arrive as part of this payload will
@@ -617,7 +617,7 @@ static void RxSendAllCompletePayloads(CdiEndpointState* endpoint_ptr, bool force
         // because we want RxPacketReceive() to continue to ignore packets for this payload even after we have sent a
         // callback to the application for it.
         if (send_payload_state_ptr->payload_state == kPayloadComplete) {
-            ResetPayloadState(send_payload_state_ptr);
+            endpoint_ptr->rx_state.payload_state_array_ptr[endpoint_ptr->rx_state.payload_index] = NULL;
         } else if (send_payload_state_ptr->payload_state != kPayloadIdle) {
             send_payload_state_ptr->payload_state = kPayloadIgnore;
         }
@@ -628,10 +628,9 @@ static void RxSendAllCompletePayloads(CdiEndpointState* endpoint_ptr, bool force
         // Increment the expected payload number and update the index into the reorder state array.  Then, point to the
         // new current reorder array payload state.
         endpoint_ptr->rx_state.payload_num_window_min++;
-        endpoint_ptr->rx_state.payload_index =
-            (endpoint_ptr->rx_state.payload_index == (MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION-1)) ?
-                            0 : endpoint_ptr->rx_state.payload_index + 1;
-        send_payload_state_ptr = &endpoint_ptr->rx_state.payload_state[endpoint_ptr->rx_state.payload_index];
+        endpoint_ptr->rx_state.payload_index++;
+        // Get the next payload.
+        send_payload_state_ptr = endpoint_ptr->rx_state.payload_state_array_ptr[endpoint_ptr->rx_state.payload_index];
     }
 
     // If force_send was used, make sure to set the index to the new one that was requested.
@@ -672,6 +671,10 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
     CdiConnectionState* con_state_ptr = (CdiConnectionState*)CdiOsMemAllocZero(sizeof *con_state_ptr);
     if (con_state_ptr == NULL) {
         return kCdiStatusNotEnoughMemory;
+    }
+    int max_rx_payloads = config_data_ptr->max_simultaneous_rx_payloads_per_connection;
+    if (max_rx_payloads == 0) {
+        max_rx_payloads = MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
     }
 
     con_state_ptr->adapter_state_ptr = config_data_ptr->adapter_handle;
@@ -746,7 +749,7 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
     }
 
     if (kCdiStatusOk == rs) {
-        if (!CdiPoolCreate("Connection Rx CdiMemoryState Pool", MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION,
+        if (!CdiPoolCreate("Connection Rx CdiMemoryState Pool", max_rx_payloads,
                            MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION_GROW, MAX_POOL_GROW_COUNT,
                            sizeof(CdiMemoryState), true, // true= Make thread-safe
                            &con_state_ptr->rx_state.payload_memory_state_pool_handle)) {
@@ -761,7 +764,7 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
                                   RX_BUFFER_DELAY_BUFFER_MS_DIVISOR;
         CdiListInit(&con_state_ptr->rx_state.ptp_ordered_payload_list);
         if (kCdiStatusOk == rs) {
-            int pool_items = (MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION *
+            int pool_items = (max_rx_payloads *
                              con_state_ptr->rx_state.config_data.buffer_delay_ms) / RX_BUFFER_DELAY_BUFFER_MS_DIVISOR;
             if (!CdiPoolCreate("Connection RxOrdered AppPayloadCallbackData Pool", pool_items, NO_GROW_SIZE,
                                NO_GROW_COUNT, sizeof(AppPayloadCallbackData), false, // false= Not thread-safe.
@@ -793,6 +796,15 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
         // Allocate an extra couple of buffers for payloads being reassembled.
         if (!CdiPoolCreate("Rx Linear Buffer Pool", RX_LINEAR_BUFFER_COUNT + 2, NO_GROW_SIZE, NO_GROW_COUNT,
                            config_data_ptr->linear_buffer_size, true, &con_state_ptr->linear_buffer_pool)) {
+            rs = kCdiStatusNotEnoughMemory;
+        }
+    }
+
+    if (kCdiStatusOk == rs) {
+        // Payload state pool.
+        if (!CdiPoolCreate("Rx Payload State Pool", max_rx_payloads, NO_GROW_SIZE, NO_GROW_COUNT,
+                           sizeof(RxEndpointState), true,
+                           &con_state_ptr->rx_state.rx_payload_state_pool_handle)) {
             rs = kCdiStatusNotEnoughMemory;
         }
     }
@@ -853,16 +865,17 @@ void RxEndpointFlushResources(CdiEndpointState* endpoint_ptr)
     if (endpoint_ptr) {
         // Walk through the list of payload state data and see if any payloads were in the process of being received. If
         // so, set an error.
-        for (int i = 0; i < (int)CDI_ARRAY_ELEMENT_COUNT(endpoint_ptr->rx_state.payload_state); i++) {
-            RxPayloadState* payload_state_ptr = &endpoint_ptr->rx_state.payload_state[i];
-
-            if (kPayloadIdle != payload_state_ptr->payload_state &&
-                kPayloadIgnore != payload_state_ptr->payload_state) {
-                // Free payload resources. Also frees entry for linear_buffer_pool (if used).
-                FreePayloadResources(endpoint_ptr, payload_state_ptr);
+        for (int i = 0; i < (int)CDI_ARRAY_ELEMENT_COUNT(endpoint_ptr->rx_state.payload_state_array_ptr); i++) {
+            RxPayloadState* payload_state_ptr = endpoint_ptr->rx_state.payload_state_array_ptr[i];
+            if (NULL != payload_state_ptr ) {
+                if (kPayloadIdle != payload_state_ptr->payload_state &&
+                    kPayloadIgnore != payload_state_ptr->payload_state) {
+                    // Free payload resources. Also frees entry for linear_buffer_pool (if used).
+                    FreePayloadResources(endpoint_ptr, payload_state_ptr);
+                }
+                CdiPoolPut(endpoint_ptr->connection_state_ptr->rx_state.rx_payload_state_pool_handle, payload_state_ptr);
+                endpoint_ptr->rx_state.payload_state_array_ptr[i] = NULL;
             }
-
-            ResetPayloadState(payload_state_ptr); // Reset the payload state data.
         }
 
         // Clear payload reordering tracking.
@@ -895,6 +908,9 @@ void RxConnectionDestroyInternal(CdiConnectionHandle con_handle)
     if (con_state_ptr) {
         // Now that the connection and adapter threads have stopped, it is safe to clean up the remaining resources in
         // the opposite order of their creation.
+        CdiPoolDestroy(con_state_ptr->rx_state.rx_payload_state_pool_handle);
+        con_state_ptr->rx_state.rx_payload_state_pool_handle = NULL;
+
         CdiPoolDestroy(con_state_ptr->linear_buffer_pool);
         con_state_ptr->linear_buffer_pool = NULL;
 
@@ -927,81 +943,96 @@ void RxPacketReceive(void* param_ptr, Packet* packet_ptr)
 {
     CdiEndpointState* endpoint_ptr = (CdiEndpointState*)param_ptr;
     CdiConnectionState* con_state_ptr = endpoint_ptr->connection_state_ptr;
-
     CdiCDIPacketCommonHeader* common_hdr_ptr = CdiPayloadParseCDIPacket(&packet_ptr->sg_list);
     assert(NULL != common_hdr_ptr);
+    bool still_ok = true;
 
 #ifdef DEBUG_PACKET_SEQUENCES
     CDI_LOG_THREAD(kLogInfo, "T[%d] P[%d] S[%d] A[%p]", common_hdr_ptr->payload_type, common_hdr_ptr->payload_num,
                    common_hdr_ptr->packet_sequence_num, packet_ptr->sg_list.sgl_head_ptr->address_ptr);
 #endif
 
-    // Mask off current_payload_index by performing bit-wise AND of max rx payloads per connection.
-    int current_payload_index = common_hdr_ptr->payload_num & (MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION-1);
-    RxPayloadState* payload_state_ptr = &endpoint_ptr->rx_state.payload_state[current_payload_index];
+    int current_payload_index = common_hdr_ptr->payload_num;
 
-    // If we received a packet for a new payload that is outside the range of what our payload state array can handle
-    // to keep payloads in order, then we will flush the array of all currently outstanding payloads and reset the
-    // pointer to the new payload that we are receiving.  This is a heavy hammer, but since this condition should never
-    // happen, and if it does we don't know what to expect, we need to release resources for old payloads and pick
-    // a new window.
-    // In order to figure out what range to expect, we need to compare the incoming payload against our oldest pending
-    // payload.  Since payload numbers can wrap, we need to look for a condition where we are comparing near a wrap
-    // point and deal with that condition if we find it.
-    int comparison_offset = GET_RANGE(common_hdr_ptr->payload_num);
-    int payload_min = endpoint_ptr->rx_state.payload_num_window_min;
-    int payload_max = payload_min + MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION - 1;
-    int test_payload_num = common_hdr_ptr->payload_num;
-    // If our window's maximum is past the limit of what payload_num can hold, and if our incoming payload number has
-    // wrapped but is within our buffer window, add an offset to it so we can compare it correctly below.  The offset
-    // is the maximum value of payload_num (plus 1).
-    if ((payload_max >= comparison_offset) &&
-        (common_hdr_ptr->payload_num + comparison_offset <= payload_max)) {
-        test_payload_num += comparison_offset;
-    }
-    // Test that we are within the buffer window.  If not, issue an error message, flush the state array, and reset
-    // the expected payload number to the current payload's number.
-    if (test_payload_num > payload_max || test_payload_num < payload_min) {
-        CDI_LOG_THREAD(kLogError,
-                       "Connection[%s] Received payload[%d] which is outside of the valid buffer range[%d] to [%d]. "
-                       "Realigning buffer.", con_state_ptr->saved_connection_name_str, common_hdr_ptr->payload_num,
-                       payload_min, payload_max % comparison_offset);
-        RxSendAllCompletePayloads(endpoint_ptr, true, current_payload_index);
-        // Reset the expected payload number at this index to be the new payload number.
-        endpoint_ptr->rx_state.payload_num_window_min = common_hdr_ptr->payload_num;
-    }
-
-    // If we get a packet for a completed payload, issue a warning, and then set the suspend_warnings flag so that we
-    // don't keep issuing warnings if we get more packets for this same payload before it is sent to the application.
-    if (!payload_state_ptr->suspend_warnings && (kPayloadComplete == payload_state_ptr->payload_state)) {
-        CDI_LOG_THREAD(kLogWarning, "Connection[%s] Received packet for completed payload[%d].  Additional packets for "
-                                    "this payload will be dropped.",
-                                    con_state_ptr->saved_connection_name_str, common_hdr_ptr->payload_num);
-        payload_state_ptr->suspend_warnings = true;
-    }
-
-    // If we have received a packet for a new payload that wants to use a payload state array location that is marked
-    // Ignore, we can just take over this slot and set the state to Idle.  We were either in the Ignore state because
-    // we just got set to Ignore in the block above, or we got set to ignore previously to allow us to pass over packets
-    // from a payload that was previously terminated because of error.
-    if ((kPayloadIgnore == payload_state_ptr->payload_state) &&
-        (payload_state_ptr->payload_num != common_hdr_ptr->payload_num)) {
+    RxPayloadState* payload_state_ptr = endpoint_ptr->rx_state.payload_state_array_ptr[current_payload_index];
+    if (NULL == payload_state_ptr) {
+        if (!CdiPoolGet(con_state_ptr->rx_state.rx_payload_state_pool_handle, (void**)&payload_state_ptr)) {
+            CDI_LOG_THREAD(kLogError, "Failed to get Rx Payload State entry from pool.");
+            still_ok = false;
+        } else {
+            endpoint_ptr->rx_state.payload_state_array_ptr[current_payload_index] = payload_state_ptr;
             ResetPayloadState(payload_state_ptr);
+        }
     }
-
-    // Get size of cdi header. If packet #0, then logic below will calculate the header size.
     int cdi_header_size = sizeof(CdiCDIPacketCommonHeader);
-    if (kPayloadTypeDataOffset == common_hdr_ptr->payload_type) {
-        cdi_header_size = sizeof(CdiCDIPacketDataOffsetHeader);
+    if (still_ok) {
+        // If we received a packet for a new payload that is outside the range of what our payload state array can
+        // handle to keep payloads in order, then we will flush the array of all currently outstanding payloads and'
+        // reset the pointer to the new payload that we are receiving. This is a heavy hammer, but since this condition
+        // should never happen, and if it does we don't know what to expect, we need to release resources for old
+        // payloads and pick a new window.
+        // In order to figure out what range to expect, we need to compare the incoming payload against our oldest
+        // pending payload. Since payload numbers can wrap, we need to look for a condition where we are comparing near
+        // a wrap point and deal with that condition if we find it.
+        uint8_t payload_min = endpoint_ptr->rx_state.payload_num_window_min;
+        uint8_t payload_max = payload_min + MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER;
+
+        // Test that we are within the buffer window. If not, issue an error message, flush the state array, and reset
+        // the expected payload number to the current payload's number.
+        bool in_range = true;
+        if (payload_max < payload_min) { // wrap
+            if (common_hdr_ptr->payload_num > payload_max && common_hdr_ptr->payload_num < payload_min) {
+                in_range = false;
+            }
+        } else {
+            if (common_hdr_ptr->payload_num < payload_min || common_hdr_ptr->payload_num > payload_max) {
+                in_range = false;
+            }
+        }
+
+        if (!in_range) {
+            CDI_LOG_THREAD(kLogError,
+                           "Connection[%s] Received payload[%d] which is outside of the valid buffer range[%d] to [%d]."
+                           " Realigning buffer.", con_state_ptr->saved_connection_name_str, common_hdr_ptr->payload_num,
+                           payload_min, payload_max);
+            RxSendAllCompletePayloads(endpoint_ptr, true, current_payload_index);
+            // Reset the expected payload number at this index to be the new payload number.
+            endpoint_ptr->rx_state.payload_num_window_min = common_hdr_ptr->payload_num;
+        }
+
+        // If we get a packet for a completed payload, issue a warning, and then set the suspend_warnings flag so that we
+        // don't keep issuing warnings if we get more packets for this same payload before it is sent to the application.
+        if (!payload_state_ptr->suspend_warnings && (kPayloadComplete == payload_state_ptr->payload_state)) {
+            CDI_LOG_THREAD(kLogWarning, "Connection[%s] Received packet for completed payload[%d].  Additional packets "
+                                        "for this payload will be dropped.",
+                                        con_state_ptr->saved_connection_name_str, common_hdr_ptr->payload_num);
+            payload_state_ptr->suspend_warnings = true;
+        }
+
+        // If we have received a packet for a new payload that wants to use a payload state array location that is
+        // marked Ignore, we can just take over this slot and set the state to Idle. We were either in the Ignore
+        // state because we just got set to Ignore in the block above, or we got set to ignore previously to allow
+        //  us to pass over packets from a payload that was previously terminated because of error.
+        if (kPayloadIgnore == payload_state_ptr->payload_state) {
+            if (payload_state_ptr->payload_num != common_hdr_ptr->payload_num) {
+                ResetPayloadState(payload_state_ptr);
+            }
+        }
+
+
+        // Get size of cdi header. If packet #0, then logic below will calculate the header size.
+        if (kPayloadTypeDataOffset == common_hdr_ptr->payload_type) {
+            cdi_header_size = sizeof(CdiCDIPacketDataOffsetHeader);
+        }
+
+        // This will be true while processing of the packet proceeds normally. The packet ignore and error states are
+        // considered abnormal in the respect that the packet does not undergo the normal processing. Any allocated
+        // resources coming into the function and allocated along the way must be passed on or freed at the end.
+        still_ok = (kPayloadIdle == payload_state_ptr->payload_state ||
+                    kPayloadInProgress == payload_state_ptr->payload_state ||
+                    kPayloadPacketZeroPending == payload_state_ptr->payload_state);
+
     }
-
-    // This will be true while processing of the packet proceeds normally. The packet ignore and error states are
-    // considered abnormal in the respect that the packet does not undergo the normal processing. Any allocated
-    // resources coming into the function and allocated along the way must be passed on or freed at the end.
-    bool still_ok = (kPayloadIdle == payload_state_ptr->payload_state ||
-                     kPayloadInProgress == payload_state_ptr->payload_state ||
-                     kPayloadPacketZeroPending == payload_state_ptr->payload_state);
-
     // Check if we are receiving a new payload.
     CdiMemoryState* payload_memory_state_ptr = NULL;
     if (still_ok) {
@@ -1148,6 +1179,8 @@ bool RxPollFreeBuffer(void* param_ptr, CdiSgList* ret_packet_buffer_sgl_ptr)
                 SglMoveEntries(&sgl_packets, &memory_state_ptr->endpoint_packet_buffer_sgl);
                 ret = true;
             }
+            CdiPoolPut(handle->connection_state_ptr->rx_state.rx_payload_state_pool_handle,
+                       memory_state_ptr->payload_state_ptr);
         }
 
         if (ret) {

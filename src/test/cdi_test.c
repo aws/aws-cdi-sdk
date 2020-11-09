@@ -69,11 +69,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
-#include "logger_api.h"
-#include "optarg.h"
+
+#include "cdi_logger_api.h"
 #include "cdi_os_api.h"
 #include "cdi_test.h"
+#include "optarg.h"
 #include "run_test.h"
 #include "test_common.h"
 #include "test_console.h"
@@ -327,6 +329,9 @@ int main(int argc, const char **argv)
     if (!CdiLoggerInitialize()) {
         status = kProgramExecutionStatusExitError;
     }
+
+    // Initialize the AVM CDI SDK baseline profile components.
+    CdiAvmInitializeBaselineProfiles();
 
     // Get, parse, validate, and conform command line arguments into the test_settings data structure. Each
     // test_settings structure represents either a tx or rx connection. Takes in command-line arguments, sanitizes

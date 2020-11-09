@@ -15,7 +15,6 @@
 #include <stdint.h>
 
 #include "cdi_os_api.h"
-#include "singly_linked_list_api.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -47,6 +46,9 @@ typedef enum {
 
     kQueueSignalPopPushWait, ///< In this mode, signals are enabled for both push and pop operations (see above).
 } CdiQueueSignalMode;
+
+/// Forward declaration of CdiSinglyLinkedListEntry defined in singly_linked_list_api.h
+typedef struct CdiSinglyLinkedListEntry CdiSinglyLinkedListEntry;
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************

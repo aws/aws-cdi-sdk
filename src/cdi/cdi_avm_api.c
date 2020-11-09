@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+#include "cdi_baseline_profile_api.h"
 #include "internal.h"
 #include "internal_tx.h"
 #include "internal_rx.h"

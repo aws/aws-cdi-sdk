@@ -215,5 +215,11 @@
     <ClCompile Include="..\src\cdi\adapter_control_interface.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\cdi\baseline_profiles_1_00.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\baseline_profiles_2_00.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

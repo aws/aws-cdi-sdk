@@ -11,7 +11,9 @@
 #ifndef CDI_INTERNAL_LOG_H__
 #define CDI_INTERNAL_LOG_H__
 
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
+
 #include "cdi_log_api.h"
 #include "private.h"
 

@@ -15,10 +15,10 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "logger_api.h"
-#include "internal_rx.h"
+#include "cdi_logger_api.h"
 #include "cdi_raw_api.h"
 #include "cdi_test.h"
+#include "internal_rx.h"
 #include "rx_reorder.h"
 #include "test_control.h"
 #include "test_receiver.h"
@@ -58,6 +58,8 @@ bool TestUnitRxReorder(void)
 
     CdiEndpointState endpoint_state = { 0 };
     CdiEndpointState* endpoint_state_ptr = &endpoint_state;
+    RxPayloadState rx_payload_state;
+    endpoint_state_ptr->rx_state.payload_state_array_ptr[0] = &rx_payload_state;
 
     CdiSglEntry* sgl_entry_ptr = NULL;
     CdiSgList* new_sgl_list_ptr = NULL;
@@ -147,7 +149,7 @@ bool TestUnitRxReorder(void)
                 }
             } else {
                 // This is sequence number 0.
-                memset(&endpoint_state_ptr->rx_state.payload_state[0].work_request_state.app_payload_cb_data.payload_sgl,
+                memset(&endpoint_state_ptr->rx_state.payload_state_array_ptr[0]->work_request_state.app_payload_cb_data.payload_sgl,
                        0, sizeof(CdiSgList));
 
                 sgl_entry_ptr->address_ptr = &header_zero;
@@ -166,7 +168,7 @@ bool TestUnitRxReorder(void)
 
         rx_ret = CdiRxPayloadReorderStateInit(con_state_ptr->rx_state.payload_sgl_entry_pool_handle,
                                               con_state_ptr->rx_state.reorder_entries_pool_handle,
-                                              &endpoint_state_ptr->rx_state.payload_state[0], new_sgl_list_ptr,
+                                              endpoint_state_ptr->rx_state.payload_state_array_ptr[0], new_sgl_list_ptr,
                                               cdi_header_size, common_hdr_ptr->packet_sequence_num);
 
         for (int i=1; rx_ret && i!=TEST_UNIT_RX_REORDER_NUM_SGLS; i++) {
@@ -174,23 +176,23 @@ bool TestUnitRxReorder(void)
             common_hdr_ptr = new_sgl_list_ptr->sgl_head_ptr->address_ptr;
             rx_ret = CdiRxReorder(con_state_ptr->rx_state.payload_sgl_entry_pool_handle,
                                   con_state_ptr->rx_state.reorder_entries_pool_handle,
-                                  &endpoint_state_ptr->rx_state.payload_state[0], new_sgl_list_ptr,
+                                  endpoint_state_ptr->rx_state.payload_state_array_ptr[0], new_sgl_list_ptr,
                                   cdi_header_size, common_hdr_ptr->packet_sequence_num);
         }
-        if (NULL != endpoint_state_ptr->rx_state.payload_state[0].reorder_list_ptr->next_ptr &&
-            NULL != endpoint_state_ptr->rx_state.payload_state[0].reorder_list_ptr->prev_ptr) {
+        if (NULL != endpoint_state_ptr->rx_state.payload_state_array_ptr[0]->reorder_list_ptr->next_ptr &&
+            NULL != endpoint_state_ptr->rx_state.payload_state_array_ptr[0]->reorder_list_ptr->prev_ptr) {
             CDI_LOG_THREAD(kLogError, "Test finished and there are dangling lists.");
-            CdiReorderList* reorder_list_ptr = endpoint_state_ptr->rx_state.payload_state[0].reorder_list_ptr;
+            CdiReorderList* reorder_list_ptr = endpoint_state_ptr->rx_state.payload_state_array_ptr[0]->reorder_list_ptr;
             while (reorder_list_ptr) {
                 CDI_LOG_THREAD(kLogDebug, "Dangling list [%d-%d].", reorder_list_ptr->top_sequence_num,reorder_list_ptr->bot_sequence_num);
                 reorder_list_ptr = reorder_list_ptr->next_ptr;
             }
             ret = kCdiStatusFatal;
         }
-        // At this point the list can be checked by starting with endpoint_state_ptr->rx_state.payload_state[0].reorder_list_ptr->sglist.sgl_head_ptr.
+        // At this point the list can be checked by starting with endpoint_state_ptr->rx_state.payload_state_array_ptr[0]->reorder_list_ptr->sglist.sgl_head_ptr.
 #ifdef DEBUG_INTERNAL_SGL_ENTRIES
         int packet_sequence_num = 0;
-        CdiSglEntry* reorder_entry_ptr = endpoint_state_ptr->rx_state.payload_state[0].reorder_list_ptr->sglist.sgl_head_ptr;
+        CdiSglEntry* reorder_entry_ptr = endpoint_state_ptr->rx_state.payload_state_array_ptr[0]->reorder_list_ptr->sglist.sgl_head_ptr;
         while (reorder_entry_ptr) {
             if (packet_sequence_num != reorder_entry_ptr->packet_sequence_num) {
                 CDI_LOG_THREAD(kLogError, "Yah! Expected packet sequence [%d] and got [%d].",packet_sequence_num,reorder_entry_ptr->packet_sequence_num);
@@ -204,7 +206,7 @@ bool TestUnitRxReorder(void)
     }
 #endif
     // get rid of everything
-    CdiReorderList* reorder_list_ptr = endpoint_state_ptr->rx_state.payload_state[0].reorder_list_ptr;
+    CdiReorderList* reorder_list_ptr = endpoint_state_ptr->rx_state.payload_state_array_ptr[0]->reorder_list_ptr;
     while (reorder_list_ptr) {
         CdiSglEntry* entry_ptr = reorder_list_ptr->sglist.sgl_head_ptr;
         while (entry_ptr) {

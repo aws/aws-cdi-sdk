@@ -13,10 +13,10 @@
 
 #include "cloudwatch.h"
 
+#include "cdi_logger_api.h"
 #include "cdi_os_api.h"
 #include "cloudwatch_sdk_metrics.h"
 #include "internal_log.h"
-#include "logger_api.h"
 #include "statistics.h"
 
 #ifdef CLOUDWATCH_METRICS_ENABLED

@@ -14,11 +14,11 @@
 
 #include "statistics.h"
 
+#include "cdi_logger_api.h"
 #include "cdi_os_api.h"
 #include "cloudwatch.h"
 #include "endpoint_manager.h"
 #include "internal_log.h"
-#include "logger_api.h"
 #include "t_digest.h"
 
 //*********************************************************************************************************************

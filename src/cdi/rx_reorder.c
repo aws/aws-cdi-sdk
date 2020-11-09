@@ -170,11 +170,11 @@
 
 #include "rx_reorder.h"
 
-#include "logger_api.h"
-#include "private.h"
 #include "cdi_core_api.h"
+#include "cdi_logger_api.h"
 #include "cdi_pool_api.h"
 #include "cdi_raw_api.h"
+#include "private.h"
 #include "utilities_api.h"
 
 //*********************************************************************************************************************

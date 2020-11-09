@@ -12,8 +12,10 @@
 #define T_DIGEST_H__
 #include <stdbool.h>
 
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
-#include "logger_api.h"
+
+#include "cdi_logger_api.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
