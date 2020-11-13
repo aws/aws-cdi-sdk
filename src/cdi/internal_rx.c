@@ -830,7 +830,8 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
         }
     }
 
-    if (kCdiStatusOk == rs) {
+    // Socket adapter does not dynamically create Rx endpoints, so create it here.
+    if (kCdiStatusOk == rs && kCdiAdapterTypeSocket == config_data_ptr->adapter_handle->adapter_data.adapter_type) {
         rs = EndpointManagerRxCreateEndpoint(con_state_ptr->endpoint_manager_handle, config_data_ptr->dest_port, NULL);
     }
 
