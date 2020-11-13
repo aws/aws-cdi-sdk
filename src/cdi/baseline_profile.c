@@ -236,7 +236,7 @@ CdiReturnStatus CdiAvmParseBaselineConfiguration(const CdiAvmConfig* config_ptr,
 CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConfig* config_ptr,
                                                   CdiAvmBaselineConfigCommon* baseline_config_ptr)
 {
-    CdiReturnStatus ret = kCdiStatusOk;
+    CdiReturnStatus ret = kCdiStatusNonFatal;
 
     // Ensure that uri and data_size meet specifications.
     if ((sizeof(config_ptr->uri) - 1) <= strlen(config_ptr->uri)) {
@@ -251,11 +251,7 @@ CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConfig* config_ptr
             key = CdiUtilityStringToEnumValue(avm_uri_strings, config_ptr->uri);
         }
         CdiAvmBaselineConfigCommon common_config = { 0 };
-        if (CDI_INVALID_ENUM_VALUE == key) {
-            // This isn't a type from the baseline profile. Set the type accordingly. The function still returns an
-            // error but downstream logic may be simplified by having this "invalid" type set.
-            ret = kCdiStatusNonFatal;
-        } else {
+        if (CDI_INVALID_ENUM_VALUE != key) {
             // This is a valid baseline profile, set its type.
             common_config.payload_type = (CdiBaselineAvmPayloadType)key;
 
@@ -268,33 +264,28 @@ CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConfig* config_ptr
                 found_str += CdiOsStrCpy(str_buf, sizeof(str_buf), found_str);
                 if (';' != *found_str) {
                     CDI_LOG_THREAD(kLogError, "Expected ';' at end of version 'xx.xx'. Found[%s].", found_str);
-                    ret = kCdiStatusNonFatal;
-                }
-                if (ret == kCdiStatusOk && !CdiAvmParseBaselineVersionString(str_buf, &common_config.version)) {
+                } else if (!CdiAvmParseBaselineVersionString(str_buf, &common_config.version)) {
                     CDI_LOG_THREAD(kLogError, "Unable to parse profile version 'xx.xx'. Found[%s].", str_buf);
-                    ret = kCdiStatusNonFatal;
+                } else {
+                    // Successfully parsed the version, now try to find the corresponding profile.
+                    BaselineProfileData* profile_data_ptr = FindProfileVersion(common_config.payload_type,
+                                                                               &common_config.version);
+                    if (profile_data_ptr) {
+                        // Clear the entire structure then plug in the payload type and version number.
+                        memset(baseline_config_ptr, 0, profile_data_ptr->vtable_api.structure_size);
+                        baseline_config_ptr->payload_type = common_config.payload_type;
+                        baseline_config_ptr->version = common_config.version;
+
+                        // Have the version and payload type specific function fill in the rest.
+                        if ((profile_data_ptr->vtable_api.parse_config_ptr)(config_ptr, baseline_config_ptr)) {
+                            ret = kCdiStatusOk; // Successfully parsed, so change ret status to ok.
+                        }
+                    } else {
+                        ret = kCdiStatusProfileNotSupported;
+                    }
                 }
             } else {
                 CDI_LOG_THREAD(kLogError, "Unable to parse profile version string 'cdi_profile_version='.");
-                ret = kCdiStatusNonFatal;
-            }
-
-            if (kCdiStatusOk == ret) {
-                BaselineProfileData* profile_data_ptr = FindProfileVersion(common_config.payload_type,
-                                                                           &common_config.version);
-                if (profile_data_ptr) {
-                    // Clear the entire structure then plug in the payload type and version number.
-                    memset(baseline_config_ptr, 0, profile_data_ptr->vtable_api.structure_size);
-                    baseline_config_ptr->payload_type = common_config.payload_type;
-                    baseline_config_ptr->version = common_config.version;
-
-                    // Have the version and payload type specific function fill in the rest.
-                    if (!(profile_data_ptr->vtable_api.parse_config_ptr)(config_ptr, baseline_config_ptr)) {
-                        ret = kCdiStatusNonFatal;
-                    }
-                } else {
-                    ret = kCdiStatusProfileNotSupported;
-                }
             }
         }
     }
@@ -315,17 +306,15 @@ CdiReturnStatus CdiAvmGetBaselineUnitSize(const CdiAvmBaselineConfig* baseline_c
 CdiReturnStatus CdiAvmGetBaselineUnitSize2(const CdiAvmBaselineConfigCommon* baseline_config_ptr,
                                            int* payload_unit_size_ptr)
 {
-    bool ret = false;
+    CdiReturnStatus ret = kCdiStatusNonFatal;
 
     BaselineProfileData* profile_data_ptr = FindProfileVersion(baseline_config_ptr->payload_type,
                                                                 &baseline_config_ptr->version);
     if (profile_data_ptr) {
-        if ((profile_data_ptr->vtable_api.get_unit_size_ptr)(baseline_config_ptr, payload_unit_size_ptr)) {
-            ret = kCdiStatusOk;
-        }
+        ret = (profile_data_ptr->vtable_api.get_unit_size_ptr)(baseline_config_ptr, payload_unit_size_ptr);
     }
 
-    return ret ? kCdiStatusOk : kCdiStatusFatal;
+    return ret;
 }
 
 const char* CdiAvmKeyEnumToString(CdiAvmBaselineEnumStringKeyTypes key_type, int enum_value,
