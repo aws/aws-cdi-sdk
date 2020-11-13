@@ -602,7 +602,9 @@ void EndpointManagerShutdownConnection(EndpointManagerHandle handle)
     // Now that shutdown command has been added to the queue for each endpoint, set shutdown flags so pull thread's
     // exit their main loop and start shutting down by invoking EndpointManagerPollThreadExit().
     mgr_ptr->got_shutdown = true;
-    CdiOsSignalSet(handle->connection_state_ptr->adapter_connection_ptr->shutdown_signal);
+    if (handle->connection_state_ptr->adapter_connection_ptr) {
+        CdiOsSignalSet(handle->connection_state_ptr->adapter_connection_ptr->shutdown_signal);
+    }
 
     // If threads have started and the done signal is valid, wait for all threads associated with this connection to
     // process being shutdown.
@@ -699,7 +701,8 @@ void EndpointManagerConnectionStateChange(CdiEndpointHandle handle, CdiConnectio
             CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
             CdiEndpointHandle found_handle = EndpointManagerGetFirstEndpoint(mgr_ptr);
             while (found_handle) {
-                if (kCdiConnectionStatusConnected != found_handle->adapter_endpoint_ptr->connection_status_code) {
+                if (handle != found_handle &&
+                    kCdiConnectionStatusConnected != found_handle->adapter_endpoint_ptr->connection_status_code) {
                     status_code = kCdiConnectionStatusDisconnected;
                     break;
                 } else {
