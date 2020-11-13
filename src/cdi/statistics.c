@@ -1,7 +1,8 @@
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------
 // Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
-// ---------------------------------------------------------------------------
+// This file is part of the AWS CDI-SDK, licensed under the BSD 2-Clause "Simplified" License.
+// License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
+// -------------------------------------------------------------------------------------------
 
 /**
  * @file
@@ -147,18 +148,21 @@ static void SendUserStatsMessage(StatisticsState* stats_state_ptr, int destinati
     // Collect the stats from all of the endpoints of the connection.
     CdiEndpointHandle endpoint_handle =
         EndpointManagerGetFirstEndpoint(stats_state_ptr->con_state_ptr->endpoint_manager_handle);
-    while (endpoint_handle) {
-        GetStats(endpoint_handle, cb_data.transfer_stats_array + cb_data.stats_count++, destination_idx);
-        endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
-    }
 
-    if (stats_state_ptr->user_cb_ptr) {
-        (stats_state_ptr->user_cb_ptr)(&cb_data);
-    }
+    if (endpoint_handle) {
+        while (endpoint_handle) {
+            GetStats(endpoint_handle, cb_data.transfer_stats_array + cb_data.stats_count++, destination_idx);
+            endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
+        }
 
-    if (stats_state_ptr->cloudwatch_handle) {
-        CloudWatchStatisticsMessage(stats_state_ptr->cloudwatch_handle, cb_data.stats_count,
-                                    cb_data.transfer_stats_array);
+        if (stats_state_ptr->user_cb_ptr) {
+            (stats_state_ptr->user_cb_ptr)(&cb_data);
+        }
+
+        if (stats_state_ptr->cloudwatch_handle) {
+            CloudWatchStatisticsMessage(stats_state_ptr->cloudwatch_handle, cb_data.stats_count,
+                                        cb_data.transfer_stats_array);
+        }
     }
 }
 

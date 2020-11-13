@@ -1,6 +1,8 @@
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------
 // Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
-// ---------------------------------------------------------------------------
+// This file is part of the AWS CDI-SDK, licensed under the BSD 2-Clause "Simplified" License.
+// License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
+// -------------------------------------------------------------------------------------------
 
 /**
  * @file
@@ -119,6 +121,9 @@ static int signal_handler_count = 0;
 
 /// If true, the CDI logger will be used to generate error messages, otherwise output will be sent to stderr.
 static bool use_logger = false;
+
+/// State of winsock initialization.
+static bool winsock_initialized = false;
 
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
@@ -259,15 +264,14 @@ static time_t ConvertSystemTime(SYSTEMTIME* time_sys_ptr)
  */
 bool InitializeWinsock(void)
 {
-    static bool initialized = false;
-    if (!initialized) {
+    if (!winsock_initialized) {
         int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
         if (iResult != 0) {
             ERROR_MESSAGE("WSAStartup failed. Returned[%d]", iResult);
         }
-        initialized = true;
+        winsock_initialized = true;
     }
-    return initialized;
+    return winsock_initialized;
 }
 
 //*********************************************************************************************************************
@@ -1271,4 +1275,5 @@ bool CdiOsEnvironmentVariableSet(const char* name_str, const char* value_str)
 void CdiOsShutdown()
 {
     WSACleanup();
+    winsock_initialized = false;
 }
