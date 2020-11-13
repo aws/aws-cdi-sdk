@@ -1,6 +1,8 @@
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------
 // Copyright Amazon.com Inc. or its affiliates. All Rights Reserved.
-// ---------------------------------------------------------------------------
+// This file is part of the AWS CDI-SDK, licensed under the BSD 2-Clause "Simplified" License.
+// License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
+// -------------------------------------------------------------------------------------------
 
 #ifndef CDI_LOG_API_H__
 #define CDI_LOG_API_H__
