@@ -128,15 +128,15 @@ Completed installation.
 
 **Caution**: Do not install a new version of the AWS CDI SDK over an old one.
 
-**Note**: Refer to the [linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk) for information about how to acquire the code repositories, steps to install, and folder descriptions.
-**Windows PowerShell** and [git for windows](https://git-scm.com/download/win) may be used while following the steps outlined in the Linux installation guide, or the code may be downloaded directly from zip archives.
+**Note**: **Windows PowerShell** and [git for windows](https://git-scm.com/download/win) may be used to acquire source repositories while following the steps outlined in the Linux installation guide, or the code may be downloaded directly from zip archives.
 
-(Optional) Download and install **PDCurses**.
-    **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. It is **not** required for the AWS CDI SDK to be built or used. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
+1. Clone (or download) the **libfabric** repo as described in [linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk)
 
-1. Download and install the most recent stable version of **PDCurses**.
+1. Place the **libfabric** folder is at the same directory level as the **aws-cdi-sdk** folder.
 
-1. Clone the GitHub repo linked at [PDCurses](https://pdcurses.org/).
+1. Clone (or download) the PDCurses GitHub repo linked at [PDCurses](https://pdcurses.org/).
+
+    **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
 
 1. Place the **PDCurses** folder at the same level as the **aws-cdi-sdk** and **libfabric** folders.
 
@@ -220,6 +220,8 @@ The extracted AWS CDI SDK solution, cdi_proj.sln, contains three test applicatio
 ## Download and build the AWS SDK for C++
 
 **Note**: The AWS CDI SDK was tested with AWS SDK version 1.8.46.
+
+**Note**: The AWS SDK for C++ is essential for metrics gathering functions of AWS CDI SDK to operate properly. Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
 
 1. Follow the instructions from the [AWS SDK Developer guide](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html) taking note of the following.
     - Additional files for AWS performance metrics gathering need to be copied from the AWS CDI SDK directory to the AWS SDK directory before running any of the ```cmake``` commands. Windows Explorer or a Powershell command like ```copy -recurse .\aws-cpp-sdk-cdi\ <path to AWS SDK>``` from the top level AWS CDI SDK can be used to perform this step.
