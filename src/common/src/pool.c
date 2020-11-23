@@ -371,7 +371,7 @@ void CdiPoolDestroy(CdiPoolHandle handle)
 
 bool CdiPoolPeekInUse(CdiPoolHandle handle, void** ret_item_ptr)
 {
-    bool ret = true;
+    bool ret = false;
     CdiPoolState* state_ptr = (CdiPoolState*)handle;
 
     if (state_ptr) {
@@ -380,10 +380,10 @@ bool CdiPoolPeekInUse(CdiPoolHandle handle, void** ret_item_ptr)
         CdiListEntry* list_entry_ptr = CdiListPeek(&state_ptr->in_use_list);
         if (NULL == list_entry_ptr) {
             *ret_item_ptr = NULL;
-            ret = false;
         } else {
             CdiPoolItem* pool_item_ptr = (CdiPoolItem*)CONTAINER_OF(list_entry_ptr, CdiPoolItem, in_use_list_entry);
             *ret_item_ptr = GetDataItem(pool_item_ptr);
+            ret = true;
         }
 
         MultithreadedRelease(state_ptr);
@@ -441,6 +441,10 @@ void CdiPoolPut(CdiPoolHandle handle, const void* item_ptr)
 
     MultithreadedReserve(state_ptr);
 
+    // Add the item back to the free list and remove from the in use list.
+    CdiSinglyLinkedListPushHead(&state_ptr->free_list, &pool_item_ptr->list_entry);
+    CdiListRemove(&state_ptr->in_use_list, &pool_item_ptr->in_use_list_entry);
+
 #ifdef DEBUG
     if (state_ptr->debug_cb_ptr) {
         CdiPoolCbData cb_data = {
@@ -451,10 +455,6 @@ void CdiPoolPut(CdiPoolHandle handle, const void* item_ptr)
         (state_ptr->debug_cb_ptr)(&cb_data);
     }
 #endif
-
-    // Add the item back to the free list and remove from the in use list.
-    CdiSinglyLinkedListPushHead(&state_ptr->free_list, &pool_item_ptr->list_entry);
-    CdiListRemove(&state_ptr->in_use_list, &pool_item_ptr->in_use_list_entry);
 
     MultithreadedRelease(state_ptr);
 }

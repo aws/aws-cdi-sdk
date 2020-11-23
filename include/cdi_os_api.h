@@ -129,9 +129,6 @@
     #define CdiOsAtomicLoadPointer(x) *(volatile void**)(x)
     #define CdiOsAtomicStorePointer(x, v) *(volatile void**)(x) = (v)
 
-    // Define portable socket ID type.
-    typedef SOCKET CdiSocket;
-
     typedef struct siginfo_t siginfo_t;
 
     struct siginfo_t {
@@ -231,9 +228,6 @@
 
     /// Define portable invalid handle.
     #define INVALID_HANDLE_VALUE -1
-
-    /// Define portable socket ID type.
-    typedef int CdiSocket;
 #endif // _LINUX
 
 #define MAX_THREAD_NAME     (50)         ///< Maximum thread name size.
@@ -257,6 +251,9 @@ typedef struct {
 /// @brief Define portable thread type. Separate name from type, otherwise the typedef that follows it will generate a
 /// compile error (duplicate typedef).
 typedef struct CdiThreadID_t* CdiThreadID;
+
+/// Define portable socket type.
+typedef struct CdiSocket_t* CdiSocket;
 
 /// Maximum number of signal handlers.
 #define MAX_SIGNAL_HANDLERS     (10)

@@ -847,11 +847,18 @@ THREAD TestTxCreateThread(void* arg_ptr)
         connection_info_ptr->config_data.tx.stats_cb_ptr = TestStatisticsCallback;
         connection_info_ptr->config_data.tx.stats_user_cb_param = connection_info_ptr;
 
-        // Create a Tx user data memory pool for this connection. Will allocate enough pool items to allow for 1 + the
-        // maximum number of simultaneous connections (see POOL_PAYLOAD_ITEM_COUNT).
+        // Determine size of pool to create.
+        int pool_size = connection_info_ptr->config_data.tx.max_simultaneous_tx_payloads;
+        // Will allocate enough pool items to allow for 1 + the maximum number of simultaneous connections.
+        if (0 == pool_size) {
+            pool_size = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION + 1;
+        }
+        pool_size++;
+
+        // Create a Tx user data memory pool for this connection.
         got_error = !CdiPoolCreate(
                             "TestTxUserData Pool", // Name of the pool.
-                            POOL_PAYLOAD_ITEM_COUNT, // Number of pool items.
+                            pool_size, // Number of pool items.
                             0, // Grow count size (don't want to grow).
                             0, // Max grow count (don't want to grow).
                             sizeof(TestTxUserData), // Payload buffer size.

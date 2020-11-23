@@ -60,7 +60,10 @@ typedef struct {
     CdiSignalType wake_pop_waiters_signal;      ///< If enabled, signal set whenever item is pushed.
     CdiSignalType wake_push_waiters_signal;     ///< If enabled, signal set whenever item is popped.
 
+    CdiCsID multiple_writer_cs;                 ///< Optional mutex used to make pushing to queue thread safe.
+
 #ifdef DEBUG
+    int occupancy;                              ///< The number of entries currently enqueued.
     CdiQueueCallback debug_cb_ptr;              ///< Pointer to user-provided debug callback function
 #endif
 } QueueState;
@@ -304,14 +307,21 @@ bool CdiQueueCreate(const char* name_str, uint32_t item_count, uint32_t grow_cou
         state_ptr->entry_read_ptr = state_ptr->entry_write_ptr;
     }
 
-    if (ret && (kQueueSignalPopWait == signal_mode || kQueueSignalPopPushWait == signal_mode)) {
+    // Mask off option bits leaving only the mode selection.
+    const CdiQueueSignalMode signal_mode_masked = signal_mode & kQueueSignalModeMask;
+
+    if (ret && (kQueueSignalPopWait == signal_mode_masked || kQueueSignalPopPushWait == signal_mode_masked)) {
         // Create signal used for blockable CdiQueuePopWait().
         ret = CdiOsSignalCreate(&state_ptr->wake_pop_waiters_signal);
     }
 
-    if (ret && (kQueueSignalPushWait == signal_mode || kQueueSignalPopPushWait == signal_mode)) {
+    if (ret && (kQueueSignalPushWait == signal_mode_masked || kQueueSignalPopPushWait == signal_mode_masked)) {
         // Create signal used for blockable CdiQueuePushWait().
         ret = CdiOsSignalCreate(&state_ptr->wake_push_waiters_signal);
+    }
+
+    if (ret && ((kQueueMultipleWriters & signal_mode) != 0)) {
+        ret = CdiOsCritSectionCreate(&state_ptr->multiple_writer_cs);
     }
 
     if (!ret) {
@@ -349,12 +359,15 @@ bool CdiQueuePop(CdiQueueHandle handle, void* item_dest_ptr)
     }
 
 #ifdef DEBUG
+    const int current_occupancy = CdiOsAtomicDec32(&state_ptr->occupancy);
+
     if (state_ptr->debug_cb_ptr) {
         CdiQueueCbData cb_data = {
             .is_pop = true,
             .read_ptr = entry_read_ptr,
             .write_ptr = entry_write_ptr,
-            .item_data_ptr = item_dest_ptr
+            .item_data_ptr = item_dest_ptr,
+            .occupancy = current_occupancy,
         };
         (state_ptr->debug_cb_ptr)(&cb_data);
     }
@@ -405,6 +418,10 @@ bool CdiQueuePush(CdiQueueHandle handle, const void* data_ptr)
     bool ret = true;
     QueueState* state_ptr = (QueueState*)handle;
 
+    if (state_ptr->multiple_writer_cs) {
+        CdiOsCritSectionReserve(state_ptr->multiple_writer_cs);
+    }
+
     // Use atomic operations to ensure latest memory is being read from.
     CdiSinglyLinkedListEntry* entry_read_ptr = (CdiSinglyLinkedListEntry*)CdiOsAtomicLoadPointer(&state_ptr->entry_read_ptr);
     CdiSinglyLinkedListEntry* entry_write_ptr = (CdiSinglyLinkedListEntry*)CdiOsAtomicLoadPointer(&state_ptr->entry_write_ptr);
@@ -430,12 +447,15 @@ bool CdiQueuePush(CdiQueueHandle handle, const void* data_ptr)
         memcpy(item_dest_ptr, data_ptr, state_ptr->queue_item_data_byte_size);
 
 #ifdef DEBUG
+        const int current_occupancy = CdiOsAtomicInc32(&state_ptr->occupancy);
+
         if (state_ptr->debug_cb_ptr) {
             CdiQueueCbData cb_data = {
                 .is_pop = false,
                 .read_ptr = entry_read_ptr,
                 .write_ptr = entry_write_ptr,
-                .item_data_ptr = item_dest_ptr
+                .item_data_ptr = item_dest_ptr,
+                .occupancy = current_occupancy,
             };
             (state_ptr->debug_cb_ptr)(&cb_data);
         }
@@ -449,6 +469,10 @@ bool CdiQueuePush(CdiQueueHandle handle, const void* data_ptr)
         if (state_ptr->wake_pop_waiters_signal) {
             CdiOsSignalSet(state_ptr->wake_pop_waiters_signal);
         }
+    }
+
+    if (state_ptr->multiple_writer_cs) {
+        CdiOsCritSectionRelease(state_ptr->multiple_writer_cs);
     }
 
     return ret;
@@ -566,6 +590,11 @@ void CdiQueueDestroy(CdiQueueHandle handle)
             CdiSinglyLinkedListEntry* next_allocated_buffer_ptr = CdiSinglyLinkedListNextEntry(allocated_buffer_ptr);
             CdiOsMemFree(allocated_buffer_ptr);
             allocated_buffer_ptr = next_allocated_buffer_ptr;
+        }
+
+        if (state_ptr->multiple_writer_cs) {
+            CdiOsCritSectionDelete(state_ptr->multiple_writer_cs);
+            state_ptr->multiple_writer_cs = NULL;
         }
 
         CdiOsSignalDelete(state_ptr->wake_push_waiters_signal);

@@ -446,12 +446,22 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
     }
 
     if (kCdiStatusOk == rs) {
-        // Create a pool used to hold error message strings.
-        int max_rx_payloads = handle->rx_state.config_data.max_simultaneous_rx_payloads_per_connection;
-        if (max_rx_payloads == 0) {
-            max_rx_payloads = MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
+        //Create a pool used to hold error message strings.
+        int max_rx_payloads = MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
+        int max_tx_payloads = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+
+        if (handle->handle_type == kHandleTypeRx) {
+            if (handle->rx_state.config_data.max_simultaneous_rx_payloads_per_connection) {
+                max_rx_payloads = handle->rx_state.config_data.max_simultaneous_rx_payloads_per_connection;
+            }
+        } else {
+            if (handle->tx_state.config_data.max_simultaneous_tx_payloads) {
+                max_tx_payloads = handle->tx_state.config_data.max_simultaneous_tx_payloads;
+            }
         }
-        int size = CDI_MAX(MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION, max_rx_payloads);
+
+        int size = CDI_MAX(max_tx_payloads, max_rx_payloads);
+
         if (!CdiPoolCreate("Error Messages Pool", size, NO_GROW_SIZE, NO_GROW_COUNT, MAX_ERROR_STRING_LENGTH,
                            true, // true= Make thread-safe
                            &handle->error_message_pool)) {

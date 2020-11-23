@@ -234,7 +234,6 @@ static void FreePacketPool(EfaEndpointState* endpoint_state_ptr)
     }
 }
 
-
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -336,7 +335,7 @@ CdiReturnStatus EfaRxEndpointRxBuffersFree(const AdapterEndpointHandle handle, c
     return rs;
 }
 
-CdiReturnStatus EfaRxEndpointStart(EfaEndpointState* endpoint_state_ptr)
+CdiReturnStatus EfaRxPacketPoolCreate(EfaEndpointState* endpoint_state_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;
 
@@ -352,7 +351,7 @@ CdiReturnStatus EfaRxEndpointStart(EfaEndpointState* endpoint_state_ptr)
     return rs;
 }
 
-void EfaRxEndpointStop(EfaEndpointState* endpoint_state_ptr)
+void EfaRxPacketPoolFree(EfaEndpointState* endpoint_state_ptr)
 {
     FreePacketPool(endpoint_state_ptr);
 }

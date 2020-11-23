@@ -329,7 +329,8 @@ static bool GetAudioUnitSize(const CdiAvmBaselineConfig* baseline_config_ptr, in
             break;
         // No default so compiler complains about missing cases.
     }
-    *payload_unit_size_ptr = sizeof(uint32_t)* 3 * channel_count;
+    // Each audio sample is 3 bytes. Unit size must contain all the bytes of the samples of all the channels.
+    *payload_unit_size_ptr = sizeof(uint8_t) * 3 * channel_count;
     return ret;
 }
 

@@ -241,13 +241,20 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         ret = fi_ep_bind(endpoint_ptr->endpoint_ptr, &endpoint_ptr->completion_queue_ptr->fid, flags);
     }
 
-    if (0 == ret && is_transmitter) {
-        CdiAdapterState* adapter_state_ptr =
-            endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr;
-        // Register the Tx buffer with libfabric.
-        ret = fi_mr_reg(endpoint_ptr->domain_ptr, adapter_state_ptr->adapter_data.ret_tx_buffer_ptr,
-                        adapter_state_ptr->adapter_data.tx_buffer_size_bytes, FI_SEND, 0, 0, 0,
-                        &endpoint_ptr->tx_state.memory_region_ptr, NULL);
+    if (0 == ret) {
+        if (is_transmitter) {
+            CdiAdapterState* adapter_state_ptr =
+                endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr;
+            // Register the Tx buffer with libfabric.
+            ret = fi_mr_reg(endpoint_ptr->domain_ptr, adapter_state_ptr->adapter_data.ret_tx_buffer_ptr,
+                            adapter_state_ptr->adapter_data.tx_buffer_size_bytes, FI_SEND, 0, 0, 0,
+                            &endpoint_ptr->tx_state.memory_region_ptr, NULL);
+        } else {
+            rs = EfaRxPacketPoolCreate(endpoint_ptr);
+            if (kCdiStatusOk != rs) {
+                ret = -1;
+            }
+        }
     }
 
     if (0 == ret) {
@@ -274,8 +281,7 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         fi_freeinfo(hints_ptr);
     }
 
-    if (0 != ret) {
-        assert(0 == ret);
+    if (0 != ret && kCdiStatusOk == rs) {
         rs = kCdiStatusFatal;
     }
 
@@ -289,6 +295,12 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
  */
 static void LibFabricEndpointClose(EfaEndpointState* endpoint_ptr)
 {
+    bool is_transmitter = (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction);
+
+    if (!is_transmitter) {
+        EfaRxPacketPoolFree(endpoint_ptr);
+    }
+
     if (endpoint_ptr->endpoint_ptr) {
         fi_close(&endpoint_ptr->endpoint_ptr->fid);
         endpoint_ptr->endpoint_ptr = NULL;
@@ -341,8 +353,6 @@ static CdiReturnStatus EfaAdapterEndpointStop(EfaEndpointState* endpoint_ptr, bo
 
     if (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction) {
         EfaTxEndpointStop(endpoint_ptr);
-    } else {
-        EfaRxEndpointStop(endpoint_ptr);
     }
 
     // Close libfabric endpoint resources.
@@ -774,8 +784,6 @@ CdiReturnStatus EfaAdapterEndpointStart(EfaEndpointState* endpoint_ptr)
 
     if (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction) {
         rs = EfaTxEndpointStart(endpoint_ptr);
-    } else {
-        rs = EfaRxEndpointStart(endpoint_ptr);
     }
 
     return rs;

@@ -114,6 +114,17 @@ struct SignalInfo
     struct SignalInfo* other_sigs_ptr_array[MAX_THREADS_WAITING]; ///< Other signals to wake up when this is signaled.
 };
 
+/// @brief Forward declaration to create pointer to socket info when used.
+typedef struct SocketInfo SocketInfo;
+/**
+ * @brief Structure used to hold semaphore state data.
+ */
+struct SocketInfo
+{
+    int fd; ///< Socket file descriptor
+    struct sockaddr_in addr; ///< IP address and port
+};
+
 /// @brief Macro used within this file to handle generation of error messages either to the logger or stderr.
 #define ERROR_MESSAGE(...) ErrorMessage(__FUNCTION__, __LINE__, __VA_ARGS__)
 
@@ -1221,40 +1232,42 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
 {
     bool ret = false;
 
-    // Create an Internet socket which will be used for writing or reading.
-    const int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (fd >= 0) {
-        // Start with an address that can be used in either direction.
-        struct sockaddr_in addr = {
-            .sin_family = AF_INET,
-            .sin_port = htons(port_number),
-            .sin_addr = { 0 },
-            .sin_zero = { 0 }
-        };
-        if (host_address_str == NULL) {
-            // Bind to the specified port number on any interface.
-            addr.sin_addr.s_addr = INADDR_ANY;
-            const int rv = bind(fd, (struct sockaddr*)&addr, sizeof addr);
-            if (rv == 0) {
-                ret = true;
-            } else {
-                ERROR_MESSAGE("bind() failed[%d]", errno);
-            }
-        } else {
-            // Convert the IP address from a string to a binary representation.
-            const in_addr_t ip_addr = inet_addr(host_address_str);
-            if (ip_addr != (in_addr_t)-1) {
-                // Set the default destination host and port number for writing to the socket.
-                addr.sin_addr.s_addr = ip_addr;
-                if (connect(fd, (struct sockaddr*)&addr, sizeof addr) == 0) {
+    SocketInfo* info_ptr = CdiOsMemAllocZero(sizeof(SocketInfo));
+    if (NULL == info_ptr) {
+        ERROR_MESSAGE("failed to allocate memory");
+    } else {
+        // Create an Internet socket which will be used for writing or reading.
+        info_ptr->fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (info_ptr->fd >= 0) {
+            // Start with an address that can be used in either direction.
+            info_ptr->addr.sin_family = AF_INET;
+            info_ptr->addr.sin_port = htons(port_number);
+
+            if (host_address_str == NULL) {
+                // Bind to the specified port number on any interface.
+                info_ptr->addr.sin_addr.s_addr = INADDR_ANY;
+                const int rv = bind(info_ptr->fd, (struct sockaddr*)&info_ptr->addr, sizeof info_ptr->addr);
+                if (rv == 0) {
                     ret = true;
+                } else {
+                    ERROR_MESSAGE("bind() failed[%d]", errno);
+                }
+            } else {
+                // Convert the IP address from a string to a binary representation.
+                info_ptr->addr.sin_addr.s_addr = inet_addr(host_address_str);
+                if (info_ptr->addr.sin_addr.s_addr != (in_addr_t)-1) {
+                    ret = true;
+                } else {
+                    ERROR_MESSAGE("inet_addr() failed[%d]", errno);
                 }
             }
-        }
-        if (ret) {
-            *new_socket_ptr = fd;
-        } else {
-            close(fd);
+            if (ret) {
+                *new_socket_ptr = (CdiSocket)info_ptr;
+            } else {
+                close(info_ptr->fd);
+                CdiOsMemFree(info_ptr);
+                info_ptr = NULL;
+            }
         }
     }
 
@@ -1267,9 +1280,10 @@ bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr)
         return false;
     }
 
+    SocketInfo* info_ptr = (SocketInfo*)s;
     struct sockaddr_in sin;
     socklen_t len = sizeof(sin);
-    if (getsockname(s, (struct sockaddr *)&sin, &len) != 0) {
+    if (getsockname(info_ptr->fd, (struct sockaddr *)&sin, &len) != 0) {
         return false;
     } else {
         *port_number_ptr = ntohs(sin.sin_port);
@@ -1279,23 +1293,27 @@ bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr)
 
 bool CdiOsSocketClose(CdiSocket s)
 {
-    return close(s) == 0;
+    SocketInfo* info_ptr = (SocketInfo*)s;
+    bool ret = close(info_ptr->fd) == 0;
+    CdiOsMemFree(info_ptr);
+    return ret;
 }
 
 bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
 {
     bool ret = true;
+    SocketInfo* info_ptr = (SocketInfo*)s;
 
     // Only one file descriptor will be waited on.
     struct pollfd fdset = {
-        .fd = s,
+        .fd = info_ptr->fd,
         .events = POLLIN
     };
 
     // Time out every 10 ms to check for shutdown.
     const int rv = poll(&fdset, 1, 10);
     if (rv > 0) {
-        const size_t bytes_read = read(s, buffer_ptr, *byte_count_ptr);
+        const size_t bytes_read = read(info_ptr->fd, buffer_ptr, *byte_count_ptr);
         if (bytes_read <= 0) {
             ret = false;
         } else {
@@ -1314,12 +1332,16 @@ bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
 
 bool CdiOsSocketWrite(CdiSocket s, struct iovec* iov, int iovcnt, int* byte_count_ptr)
 {
+    SocketInfo* info_ptr = (SocketInfo*)s;
+
     // Send the packet via the socket.
     const struct msghdr msg = {
         .msg_iov = iov,
-        .msg_iovlen = iovcnt
+        .msg_iovlen = iovcnt,
+        .msg_name = &info_ptr->addr,
+        .msg_namelen = sizeof(info_ptr->addr)
     };
-    const ssize_t rv = sendmsg(s, &msg, 0);
+    const ssize_t rv = sendmsg(info_ptr->fd, &msg, 0);
     // Partial socket writes cannot occur here because the O_NONBLOCK attribute was never used when opening the
     // socket's descriptor.  So, simply check to see that at least 1 byte was sent and that no error occurred (-1 return
     // code).

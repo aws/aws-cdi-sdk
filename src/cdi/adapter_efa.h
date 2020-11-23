@@ -176,10 +176,18 @@ CdiReturnStatus EfaRxEndpointClose(EfaEndpointState* endpoint_ptr);
 /// @see CdiAdapterFreeBuffer
 CdiReturnStatus EfaRxEndpointRxBuffersFree(const AdapterEndpointHandle handle, const CdiSgList* sgl_ptr);
 
-/// @see EfaAdapterEndpointStart
-CdiReturnStatus EfaRxEndpointStart(EfaEndpointState* endpoint_ptr);
+/**
+ * Create pool of Rx packet buffers for the endpoint.
+ *
+ * @param endpoint_state_ptr Pointer to endpoint.
+ *
+ * @return kCdiStatusOk if successful, otherwise a value that indicates the nature of the failure is returned.
+ */
+CdiReturnStatus EfaRxPacketPoolCreate(EfaEndpointState* endpoint_state_ptr);
 
-/// @see EfaAdapterEndpointStop
-void EfaRxEndpointStop(EfaEndpointState* endpoint_ptr);
+/**
+ * Frees the previously allocated receive packet buffer pool for the endpoint.
+ */
+void EfaRxPacketPoolFree(EfaEndpointState* endpoint_ptr);
 
 #endif // ADAPTER_EFA_H__

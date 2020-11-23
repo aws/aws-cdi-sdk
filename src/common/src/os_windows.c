@@ -84,6 +84,17 @@ struct SignalInfo
                                 // OS resources.
 };
 
+/// @brief Forward declaration to create pointer to socket info when used.
+typedef struct SocketInfo SocketInfo;
+/**
+ * @brief Structure used to hold semaphore state data.
+ */
+struct SocketInfo
+{
+    SOCKET s; ///< Socket descriptor
+    struct sockaddr addr; ///< Socket address info
+};
+
 /// @brief Macro used within this file to handle generation of error messages with OS message either to the logger or
 /// stderr.
 #define LAST_ERROR_MESSAGE(...) LastErrorMessage(__FUNCTION__, __LINE__, __VA_ARGS__)
@@ -604,7 +615,7 @@ bool CdiOsSignalCreateNamed(CdiSignalType* signal_handle_ptr, char* signal_name_
     SignalInfo* signal_info_ptr = CdiOsMemAllocZero(sizeof(SignalInfo));
     if (NULL == signal_info_ptr) {
         return_val = false;
-        ERROR_MESSAGE("failed to allocate memory");
+        ERROR_MESSAGE("Failed to allocate memory");
     } else {
         signal_info_ptr->event_handle = CreateEventA(NULL, true, false, signal_name_str);
         if (NULL == signal_info_ptr->event_handle) {
@@ -1156,34 +1167,48 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
     bool ret = false;
 
     if (InitializeWinsock()) {
-        SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (s != INVALID_SOCKET) {
-            char port_str[20];
-            snprintf(port_str, sizeof(port_str), "%d", port_number);
+        SocketInfo* info_ptr = CdiOsMemAllocZero(sizeof(SocketInfo));
+        if (NULL == info_ptr) {
+            ERROR_MESSAGE("Failed to allocate memory");
+        } else {
+            info_ptr->s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            if (info_ptr->s != INVALID_SOCKET) {
+                char port_str[20];
+                snprintf(port_str, sizeof(port_str), "%d", port_number);
 
-            struct addrinfo hints = {
-                .ai_family = AF_INET,
-                .ai_socktype = SOCK_DGRAM,
-                .ai_protocol = IPPROTO_UDP,
-                .ai_flags = AI_PASSIVE
-            };
+                struct addrinfo hints = {
+                    .ai_family = AF_INET,
+                    .ai_socktype = SOCK_DGRAM,
+                    .ai_protocol = IPPROTO_UDP,
+                    .ai_flags = AI_PASSIVE
+                };
 
-            struct addrinfo* result_ptr = NULL;
-            const int iResult = getaddrinfo(host_address_str, port_str, &hints, &result_ptr);
-            if (iResult == 0) {
-                if (host_address_str == NULL) {
-                    if (bind(s, result_ptr->ai_addr, result_ptr->ai_addrlen) == 0) {
+                struct addrinfo* result_ptr = NULL;
+                const int iResult = getaddrinfo(host_address_str, port_str, &hints, &result_ptr);
+                if (iResult == 0) {
+                    memcpy(&info_ptr->addr, result_ptr->ai_addr, result_ptr->ai_addrlen);
+                    if (host_address_str == NULL) {
+                        if (bind(info_ptr->s, result_ptr->ai_addr, result_ptr->ai_addrlen) == 0) {
+                            ret = true;
+                        } else {
+                            int code = WSAGetLastError();
+                            ERROR_MESSAGE("bind failed. Port[%d] might be in use by another application. Code[%d]", port_number, code);
+                        }
+                    } else {
                         ret = true;
                     }
-                } else {
-                    if (connect(s, result_ptr->ai_addr, result_ptr->ai_addrlen) == 0) {
-                        ret = true;
-                    }
+                    freeaddrinfo(result_ptr);
                 }
-                freeaddrinfo(result_ptr);
-                if (ret) {
-                    *new_socket_ptr = s;
+            }
+
+            if (ret) {
+                *new_socket_ptr = (CdiSocket)info_ptr;
+            } else {
+                if (info_ptr->s != INVALID_SOCKET) {
+                    closesocket(info_ptr->s);
                 }
+                CdiOsMemFree(info_ptr);
+                info_ptr = NULL;
             }
         }
     }
@@ -1194,10 +1219,11 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
 bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr)
 {
     assert(port_number_ptr != NULL);
+    SocketInfo* info_ptr = (SocketInfo*)s;
 
     struct sockaddr_in sin;
     int len = sizeof(sin);
-    if (getsockname(s, (struct sockaddr*)&sin, &len) != 0) {
+    if (getsockname(info_ptr->s, (struct sockaddr*)&sin, &len) != 0) {
         return false;
     } else {
         *port_number_ptr = ntohs(sin.sin_port);
@@ -1207,7 +1233,10 @@ bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr)
 
 bool CdiOsSocketClose(CdiSocket s)
 {
-    return closesocket(s) == 0;
+    SocketInfo* info_ptr = (SocketInfo*)s;
+    bool ret = closesocket(info_ptr->s) == 0;
+    CdiOsMemFree(info_ptr);
+    return ret;
 }
 
 bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
@@ -1215,9 +1244,10 @@ bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
     assert(NULL != byte_count_ptr);
 
     bool ret = false;
+    SocketInfo* info_ptr = (SocketInfo*)s;
 
     WSAPOLLFD pollfd = {
-        .fd = s,
+        .fd = info_ptr->s,
         .events = POLLIN
     };
     int rv = WSAPoll(&pollfd, 1, 10);
@@ -1227,7 +1257,7 @@ bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
             .buf = buffer_ptr
         };
         DWORD flags = 0;
-        rv = WSARecv(s, &wsabuf, 1, byte_count_ptr, &flags, NULL, NULL);
+        rv = WSARecv(info_ptr->s, &wsabuf, 1, byte_count_ptr, &flags, NULL, NULL);
         if (rv == 0) {
             ret = true;
         } else {
@@ -1248,6 +1278,7 @@ bool CdiOsSocketWrite(CdiSocket s, struct iovec* iov, int iovcnt, int* byte_coun
 {
     // Windows has a slightly different idea of an iovec.
     WSABUF wsabufs[10];
+    SocketInfo* info_ptr = (SocketInfo*)s;
 
     if (iovcnt > CDI_ARRAY_ELEMENT_COUNT(wsabufs)) {
         return false;
@@ -1257,7 +1288,8 @@ bool CdiOsSocketWrite(CdiSocket s, struct iovec* iov, int iovcnt, int* byte_coun
             wsabufs[i].len = iov[i].iov_len;
         }
 
-        return WSASend(s, wsabufs, iovcnt, byte_count_ptr, 0, NULL, NULL) == 0;
+        return WSASendTo(info_ptr->s, wsabufs, iovcnt, byte_count_ptr, 0, &info_ptr->addr, sizeof(info_ptr->addr),
+                         NULL, NULL) == 0;
     }
 }
 
