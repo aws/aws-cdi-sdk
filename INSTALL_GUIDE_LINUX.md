@@ -7,6 +7,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 - [Install AWS CDI SDK](#install-aws-cdi-sdk)
 - [Install AWS CloudWatch and AWS CLI](#install-aws-cloudwatch-and-aws-cli)
   - [Install AWS CLI](#install-aws-cli)
+  - [Install Package Dependencies](#install-package-dependencies)
   - [Install CMake](#install-cmake)
   - [Download AWS SDK](#download-aws-sdk)
 - [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications)
@@ -130,6 +131,21 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
     ls ~/.aws
     ```
 
+## Install Package Dependencies
+Installation of dependent packages is required before building the AWS CDI SDK and CMake:
+
+- CentOS 7 and Amazon Linux 2:
+
+    ```bash
+    sudo yum -y install gcc-c++ make libnl3-devel autoconf automake libtool doxygen ncurses-devel
+    ```
+
+- Ubuntu:
+
+    ```bash
+    sudo apt-get install –y libncurses-dev autoconf automake libtool libnl-3-dev
+    ```
+
 ## Install CMake
 CMake is required to build AWS SDK C++.
 
@@ -179,20 +195,6 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
 ---
 
 # Build CDI libraries and test applications
-
-1. An installation of dependent packages is required before building the AWS CDI SDK:
-
-    - CentOS 7 and Amazon Linux 2:
-
-    ```bash
-    sudo yum -y install gcc-c++ make libnl3-devel autoconf automake libtool doxygen ncurses-devel
-    ```
-
-    - Ubuntu:
-
-    ```bash
-    sudo apt-get install –y libncurses-dev autoconf automake libtool libnl-3-dev
-    ```
 
 1. Run the Makefile in aws-cdi-sdk to build the static libraries and test application in debug mode. This step also automatically builds the necessary shared library files from AWS SDK C++ and links them to AWS CDI SDK, as well as generates the HTML documentation. You should run the debug build for ALL initial development as it will catch many problems (i.e. asserts). However, performance testing should always be done with the release build, which can be built without the DEBUG=y Make option.
 
