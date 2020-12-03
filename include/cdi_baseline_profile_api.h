@@ -138,14 +138,6 @@ extern "C" {
 #endif
 
 /**
- * Initialize the AVM layer of the CDI-SDK. NOTE: Must be called before using any of the other AVM baseline profile
- * APIs.
- *
- * @return A value from the CdiReturnStatus enumeration.
- */
-CDI_INTERFACE CdiReturnStatus CdiAvmInitializeBaselineProfiles(void);
-
-/**
  * @brief Register a baseline profile.
  *
  * @param profile_type Enum which indicates the type of profile (ie. video, audio or ancillary data).

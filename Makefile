@@ -314,7 +314,7 @@ $(libsdk) : $(libfabric_config_h) $(objs.cdi) $(libfabric) $(libaws) | $(build_d
 	@echo "GCC version is" $(GCCVERSION)
 	$(Q)$(CC) -shared -o $@ -Wl,-z,defs,-soname=$(basename $(notdir $@)),--version-script,libcdisdk.vers \
 		$(objs.cdi) -L$(build_dir.lib) $(aws_sdk_library_flags) \
-		-lfabric -ldl -lrt $(EXTRA_CC_LIBS) -lnl-3 -lm $(EXTRA_LD_LIBS) -lncurses -lpthread -lc \
+		-lfabric -ldl -lrt $(EXTRA_CC_LIBS) -lnl-3 -lm $(EXTRA_LD_LIBS) -lpthread -lc \
 		$(ASAN_LIBS) -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib
 	$(Q)ln -fs $@ $(basename $@)
 	$(Q)ln -fs $@ $(basename $(basename $@))

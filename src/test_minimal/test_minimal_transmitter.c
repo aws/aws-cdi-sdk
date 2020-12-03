@@ -355,9 +355,6 @@ int main(int argc, const char** argv)
 {
     CdiLoggerInitialize(); // Intialize logger so we can use the CDI_LOG_THREAD() macro to generate console messages.
 
-    // Initialize the AVM CDI SDK baseline profile components.
-    CdiAvmInitializeBaselineProfiles();
-
     // Setup default test settings.
     TestConnectionInfo con_info = {
         .test_settings.protocol_type = DEFAULT_PROTOCOL_TYPE,

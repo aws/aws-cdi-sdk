@@ -271,7 +271,7 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
             char gid_name_str[MAX_IPV6_ADDRESS_STRING_LENGTH];
             DeviceGidToString(endpoint_ptr->local_ipv6_gid_array,
                               sizeof(endpoint_ptr->local_ipv6_gid_array), gid_name_str, sizeof(gid_name_str));
-            CDI_LOG_HANDLE(endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->log_handle, kLogInfo,
+            CDI_LOG_HANDLE(endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->log_handle, kLogDebug,
                            "Using local EFA device GID[%s].", gid_name_str);
         }
     }
@@ -487,10 +487,12 @@ static CdiReturnStatus EfaEndpointOpen(AdapterEndpointHandle endpoint_handle, co
         rs = LibFabricEndpointOpen(endpoint_ptr);
     }
 
-    if (kEndpointDirectionSend == endpoint_handle->adapter_con_state_ptr->direction) {
-        rs = EfaTxEndpointOpen(endpoint_ptr, remote_address_str, port_number);
-    } else {
-        rs = EfaRxEndpointOpen(endpoint_ptr);
+    if (kCdiStatusOk == rs) {
+        if (kEndpointDirectionSend == endpoint_handle->adapter_con_state_ptr->direction) {
+            rs = EfaTxEndpointOpen(endpoint_ptr, remote_address_str, port_number);
+        } else {
+            rs = EfaRxEndpointOpen(endpoint_ptr);
+        }
     }
 
     if (kCdiStatusOk != rs) {

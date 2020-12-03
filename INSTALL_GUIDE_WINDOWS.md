@@ -267,6 +267,8 @@ Do the following to ensure the firewall does not block traffic to or from the te
 
 - Click **Browse...** and navigate to the test application executable that was built in [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications).
 
+**Note**: Each executable must be individually allowed through the firewall. As an example cdi_test_minimal_rx.exe and cdi_test_minimal_tx.exe must be allowed individually. "Debug" and "Release" variants of executables must also be individually allowed.
+
 ## Help
 
 Running the ```--help``` command displays all of the command-line options for the ```cdi_test.exe``` application.

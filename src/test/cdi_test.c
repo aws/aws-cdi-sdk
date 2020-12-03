@@ -332,9 +332,6 @@ int main(int argc, const char **argv)
         status = kProgramExecutionStatusExitError;
     }
 
-    // Initialize the AVM CDI SDK baseline profile components.
-    CdiAvmInitializeBaselineProfiles();
-
     // Get, parse, validate, and conform command line arguments into the test_settings data structure. Each
     // test_settings structure represents either a tx or rx connection. Takes in command-line arguments, sanitizes
     // them for syntax and correctness, and then assigns them to the test_settings data structure.

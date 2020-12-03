@@ -240,6 +240,7 @@ CdiReturnStatus ProbeControlSendCommand(ProbeEndpointState* probe_ptr, ProbeComm
                                          packet_ptr->common_hdr.senders_stream_identifier,
                                          InternalUtilityKeyEnumToString(kKeyProbeCommand, command),
                                          packet_ptr->common_hdr.control_packet_num, requires_ack);
+                CDI_LOG_THREAD(kLogInfo, "Sending connection request.");
             }
         }
 

@@ -1069,7 +1069,8 @@ void RxPacketReceive(void* param_ptr, Packet* packet_ptr)
         still_ok = CopyToLinearBuffer(con_state_ptr, packet_ptr, payload_state_ptr, common_hdr_ptr, cdi_header_size);
     }
 
-    if (!still_ok && ((kPayloadInProgress        == payload_state_ptr->payload_state) ||
+    if (!still_ok && (NULL != payload_state_ptr) &&
+                     ((kPayloadInProgress        == payload_state_ptr->payload_state) ||
                       (kPayloadPacketZeroPending == payload_state_ptr->payload_state))) {
             // An error occurred so clean-up resources, notify the application that there was a Rx payload error. Enter
             // the payload ignore state so any more packets that arrive as part of this payload will not be processed.
@@ -1082,7 +1083,7 @@ void RxPacketReceive(void* param_ptr, Packet* packet_ptr)
             payload_state_ptr->payload_state = kPayloadError;
     }
 
-    if (kPayloadInProgress == payload_state_ptr->payload_state &&
+    if (still_ok && kPayloadInProgress == payload_state_ptr->payload_state &&
         payload_state_ptr->data_bytes_received >= payload_state_ptr->expected_payload_data_size) {
         // The entire payload has been received, so finalize it and add it to the payload reordering list in the correct
         // order.

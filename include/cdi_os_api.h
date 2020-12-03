@@ -136,6 +136,22 @@
         long si_uid;
     };
 
+    typedef HANDLE CdiStaticMutexType;
+    #define CDI_STATIC_MUTEX_INITIALIZER    NULL
+    #define CdiOsStaticMutexLock(x) StaticMutexLockWin32(&(x))
+    // If two threads enter the if-body, then only one succeeds in initializing the lock. When the application exists,
+    // the mutex handle held in x will be freed by the windows OS.
+    static inline void StaticMutexLockWin32(volatile HANDLE* x) {
+        if (*x == NULL) {
+            HANDLE tmp = CreateMutex(NULL, FALSE, NULL);
+            if (InterlockedCompareExchangePointer((PVOID*)x, (PVOID)tmp, NULL) != NULL) {
+                CloseHandle(tmp);
+            }
+        }
+        WaitForSingleObject(*x, INFINITE);
+    }
+    #define CdiOsStaticMutexUnlock(x) (ReleaseMutex(x) == 0)
+
 #elif defined _LINUX
     #define CDI_STDIN  stdin   ///< Definition of OS agnostic standard input stream.
     #define CDI_STDOUT stdout  ///< Definition of OS agnostic standard output stream.
@@ -228,6 +244,15 @@
 
     /// Define portable invalid handle.
     #define INVALID_HANDLE_VALUE -1
+
+    /// Define portable static mutex type.
+    typedef pthread_mutex_t CdiStaticMutexType;
+    /// @brief Initialization value used to initialize the value of a static mutex variable.
+    #define CDI_STATIC_MUTEX_INITIALIZER    PTHREAD_MUTEX_INITIALIZER
+    /// @brief Lock a statically generated mutex.
+    #define CdiOsStaticMutexLock(x)         pthread_mutex_lock(&(x))
+    /// @brief Unlock a statically generated mutex.
+    #define CdiOsStaticMutexUnlock(x)       pthread_mutex_unlock(&(x))
 #endif // _LINUX
 
 #define MAX_THREAD_NAME     (50)         ///< Maximum thread name size.

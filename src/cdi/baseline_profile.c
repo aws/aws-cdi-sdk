@@ -22,6 +22,12 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
+/// @brief Used to determine if static instance data used within this file has been initialized.
+static volatile bool initialized = false;
+
+/// @brief Statically allocated mutex used to make initialization of profile data thread-safe.
+static CdiStaticMutexType mutex_lock = CDI_STATIC_MUTEX_INITIALIZER;
+
 /// @brief Value used to define the maximum number of profiles stored for each profile type.
 #define PROFILES_MAX    (10)
 
@@ -98,6 +104,32 @@ static CdiBaselineAvmPayloadType EnumStringKeyTypeToPayloadType(CdiAvmBaselineEn
 }
 
 /**
+ * Initialize the AVM layer of the CDI-SDK.
+ *
+ * @return A value from the CdiReturnStatus enumeration.
+ */
+static CdiReturnStatus InitializeBaselineProfiles(void)
+{
+    CdiReturnStatus ret = kCdiStatusOk;
+
+    // Register profiles based on 01.00.
+    extern CdiReturnStatus RegisterAvmBaselineProfiles_1_00(void);
+    ret = RegisterAvmBaselineProfiles_1_00();
+
+    if (kCdiStatusOk == ret) {
+        // Register profiles based on 02.00.
+        extern CdiReturnStatus RegisterAvmBaselineProfiles_2_00(void);
+        ret = RegisterAvmBaselineProfiles_2_00();
+    }
+
+    if (kCdiStatusOk != ret) {
+        CDI_LOG_THREAD(kLogError, "Failed to initialize baseline profiles. Error[%s].", ret);
+    }
+
+    return ret;
+}
+
+/**
  * @brief Find the baseline profile for the specified payload type and version.
  *
  * @param payload_type Enum value of payload type (same as profile type)
@@ -112,6 +144,16 @@ static BaselineProfileData* FindProfileVersion(CdiBaselineAvmPayloadType payload
 
     // profile_type_count_array and baseline_profile_array are indexed with kCdiAvmVideo at element 0.
     const int payload_type_idx = payload_type - kCdiAvmVideo;
+
+    // No need to use lock if we have already completed initialization.
+    if (!initialized) {
+        CdiOsStaticMutexLock(mutex_lock);
+        if (!initialized) {
+            InitializeBaselineProfiles();
+            initialized = true;
+        }
+        CdiOsStaticMutexUnlock(mutex_lock);
+    }
 
     // If desired version is NULL or 0.0, then default to first profile (ie. 1.0).
     if (NULL == version_ptr || (0 == version_ptr->major && 0 == version_ptr->minor)) {
@@ -146,23 +188,6 @@ static BaselineProfileData* FindProfileVersion(CdiBaselineAvmPayloadType payload
 ////////////////////////////////////////////////////////////////////////////////
 // Doxygen commenting for these functions is in cdi_baseline_profile_api.h.
 ////////////////////////////////////////////////////////////////////////////////
-
-CdiReturnStatus CdiAvmInitializeBaselineProfiles(void)
-{
-    CdiReturnStatus ret = kCdiStatusOk;
-
-    // Register profiles based on 01.00.
-    extern CdiReturnStatus RegisterAvmBaselineProfiles_1_00(void);
-    ret = RegisterAvmBaselineProfiles_1_00();
-
-    if (kCdiStatusOk == ret) {
-        // Register profiles based on 02.00.
-        extern CdiReturnStatus RegisterAvmBaselineProfiles_2_00(void);
-        ret = RegisterAvmBaselineProfiles_2_00();
-    }
-
-    return ret;
-}
 
 CdiReturnStatus CdiAvmRegisterBaselineProfile(CdiBaselineAvmPayloadType profile_type,
                                               const char* profile_version_str,
