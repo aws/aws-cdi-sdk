@@ -23,7 +23,7 @@
 //*********************************************************************************************************************
 
 /// @brief Used to determine if static instance data used within this file has been initialized.
-static volatile bool initialized = false;
+static int initialized = false;
 
 /// @brief Statically allocated mutex used to make initialization of profile data thread-safe.
 static CdiStaticMutexType mutex_lock = CDI_STATIC_MUTEX_INITIALIZER;
@@ -146,11 +146,11 @@ static BaselineProfileData* FindProfileVersion(CdiBaselineAvmPayloadType payload
     const int payload_type_idx = payload_type - kCdiAvmVideo;
 
     // No need to use lock if we have already completed initialization.
-    if (!initialized) {
+    if (!CdiOsAtomicLoad32(&initialized)) {
         CdiOsStaticMutexLock(mutex_lock);
-        if (!initialized) {
+        if (!CdiOsAtomicLoad32(&initialized)) {
             InitializeBaselineProfiles();
-            initialized = true;
+            CdiOsAtomicStore32(&initialized, true);
         }
         CdiOsStaticMutexUnlock(mutex_lock);
     }

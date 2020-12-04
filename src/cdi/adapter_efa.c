@@ -249,7 +249,9 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
             ret = fi_mr_reg(endpoint_ptr->domain_ptr, adapter_state_ptr->adapter_data.ret_tx_buffer_ptr,
                             adapter_state_ptr->adapter_data.tx_buffer_size_bytes, FI_SEND, 0, 0, 0,
                             &endpoint_ptr->tx_state.memory_region_ptr, NULL);
-        } else {
+        } else if (!is_socket_based) {
+            // For the EFA a packet pool must be created before marking the endpoint enabled or else packets end up in
+            // a shared buffer that is never emptied and can overrun.
             rs = EfaRxPacketPoolCreate(endpoint_ptr);
             if (kCdiStatusOk != rs) {
                 ret = -1;
@@ -259,6 +261,15 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
 
     if (0 == ret) {
         ret = fi_enable(endpoint_ptr->endpoint_ptr);
+        // For Socket based receivers the endpoint must be enabled before creating the packet pool. This is because the
+        // socket receiver code in libfabric's sock_ep_recvmsg() will return an error (FI_EOPBADSTATE) if
+        // EfaRxPacketPoolCreate() is called befor fi_enable because rx_ctx->enabled is false on line 91 of sock_msg.c.
+        if (!is_transmitter && is_socket_based) {
+            rs = EfaRxPacketPoolCreate(endpoint_ptr);
+            if (kCdiStatusOk != rs) {
+                ret = -1;
+            }
+        }
     }
 
     if (0 == ret) {
