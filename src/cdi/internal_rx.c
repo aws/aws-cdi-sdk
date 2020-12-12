@@ -98,7 +98,8 @@ static void UpdatePayloadStats(CdiEndpointState* endpoint_ptr, RxPayloadWorkRequ
 
     // Update these stats whenever we receive a payload or have a payload error.
     StatsGatherPayloadStatsFromConnection(endpoint_ptr, kCdiStatusOk == app_payload_cb_data_ptr->payload_status_code,
-                                          work_request_ptr->start_time, work_request_ptr->max_latency_microsecs);
+                                          work_request_ptr->start_time, work_request_ptr->max_latency_microsecs,
+                                          app_payload_cb_data_ptr->payload_sgl.total_data_size);
 }
 
 /**
@@ -1282,9 +1283,17 @@ bool RxBufferedPayloadGet(CdiConnectionState* con_state_ptr, uint32_t* ret_timeo
         // clock is changed, including by NTP. CLOCK_MONOTONIC represents the absolute elapsed wall-clock time since
         // some arbitrary, fixed point in the past. It isn't affected by changes in the system time-of-day clock.
         if (llabs(elapsed_utc_time - elapsed_monotonic_time) > ELAPSED_UTC_TIME_TOLERANCE_US) {
-            CDI_LOG_THREAD(kLogInfo, "Elapsed real-time clock[%lld]us exceeded elapsed monotonic clock[%lld]us "
-                           "by [%lld]us. Using monotonic clock.", elapsed_utc_time, elapsed_monotonic_time,
-                           llabs(elapsed_utc_time - elapsed_monotonic_time));
+            if (0 == con_state_ptr->rx_state.realtime_monotonic_clock_mismatch_count++) {
+                CDI_LOG_THREAD(kLogWarning, "Elapsed real-time clock[%lld]us exceeded elapsed monotonic clock[%lld]us "
+                               "by [%lld]us. Using monotonic clock.", elapsed_utc_time, elapsed_monotonic_time,
+                               llabs(elapsed_utc_time - elapsed_monotonic_time));
+            } else {
+                CDI_LOG_THREAD(kLogDebug, "Elapsed real-time clock[%lld]us exceeded elapsed monotonic clock[%lld]us "
+                               "by [%lld]us. Using monotonic clock. This has occurred [%u] times.", elapsed_utc_time,
+                               elapsed_monotonic_time, llabs(elapsed_utc_time - elapsed_monotonic_time),
+                               con_state_ptr->rx_state.realtime_monotonic_clock_mismatch_count);
+
+            }
             elapsed_time = elapsed_monotonic_time;
         } else {
             elapsed_time = elapsed_utc_time;

@@ -1190,17 +1190,24 @@ static bool ParseGlobalOptions(int argc, const char** argv_ptr, OptArg* opt_ptr)
                 break;
             case kTestOptStatsConfigCloudWatch:
                 global_test_settings_ptr->use_cloudwatch = true;
-                // Collect statistics parameters into stats_config structure. If "NULL" was specified, then skip the
-                // value.
+
+                // Collect statistics parameters into stats_config structure. If "NULL" was specified set string to "\0".
                 if (0 != CdiOsStrCaseCmp(opt_ptr->args_array[0], "NULL")) {
                     global_test_settings_ptr->cloudwatch_config.namespace_str = opt_ptr->args_array[0];
                 }
+
                 // If "NULL" was specified, then skip the value.
                 if (0 != CdiOsStrCaseCmp(opt_ptr->args_array[1], "NULL")) {
                     global_test_settings_ptr->cloudwatch_config.region_str = opt_ptr->args_array[1];
                 }
-                // This value is required (no need to check for "NULL").
-                global_test_settings_ptr->cloudwatch_config.dimension_domain_str = opt_ptr->args_array[2];
+
+                // A dimension domain string must be provided.
+                if (0 != CdiOsStrCaseCmp(opt_ptr->args_array[2], "NULL")) {
+                    global_test_settings_ptr->cloudwatch_config.dimension_domain_str = opt_ptr->args_array[2];
+                } else {
+                    TestConsoleLog(kLogError, "CloudWatch dimension domain string cannot be NULL");
+                    arg_error = true;
+                }
                 break;
             default:
                 // Add do-nothing default statement to keep compiler from complaining about not enumerating all cases.

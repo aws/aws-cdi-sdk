@@ -128,6 +128,9 @@ static void CalculateDeltas(CloudWatchState* cw_state_ptr, const CdiTransferStat
         delta_stats_ptr->delta_num_payloads_late = (int)(counter_stats_ptr->num_payloads_late -
                                                     prev_counter_stats_ptr->num_payloads_late);
 
+        delta_stats_ptr->delta_num_bytes_transferred = counter_stats_ptr->num_bytes_transferred -
+                                                    prev_counter_stats_ptr->num_bytes_transferred;
+
         const CdiAdapterEndpointStats* endpoint_stats_ptr = &transfer_stats_ptr->endpoint_stats;
         const CdiAdapterEndpointStats* prev_endpoint_stats_ptr = &cw_state_ptr->previous_stats.endpoint_stats;
         delta_stats_ptr->delta_dropped_connection_count = endpoint_stats_ptr->dropped_connection_count -

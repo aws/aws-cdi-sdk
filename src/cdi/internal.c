@@ -239,8 +239,32 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
     // configuration strings. This is done so the caller can free the memory used by the data.
     if (kCdiStatusOk == rs && core_config_ptr->cloudwatch_config_ptr) {
 #ifdef CLOUDWATCH_METRICS_ENABLED
+        CloudWatchConfigData cleaned_cloudwatch_config = { 0 };
+        const CloudWatchConfigData* cloudwatch_config_ptr = core_config_ptr->cloudwatch_config_ptr;
+
+        // If a namespace string is not provided for cloudwatch use the CDI SDK default namespace string.
+        if (!cloudwatch_config_ptr->namespace_str || ('\0' == cloudwatch_config_ptr->namespace_str[0])) {
+            SDK_LOG_GLOBAL(kLogInfo, "CloudWatch namespace string not provided. Using default [%s].", 
+                           CLOUDWATCH_DEFAULT_NAMESPACE_STRING);
+            cleaned_cloudwatch_config.namespace_str = CLOUDWATCH_DEFAULT_NAMESPACE_STRING;
+        } else {
+            cleaned_cloudwatch_config.namespace_str = cloudwatch_config_ptr->namespace_str;
+        }
+
+        // Region does not need any cleaning because the AWS SDK will automatically use the region called from if
+        // a region is not set.
+        cleaned_cloudwatch_config.region_str = cloudwatch_config_ptr->region_str;
+
+        // A dimension domain string must be provided.
+        if (!cloudwatch_config_ptr->dimension_domain_str || ('\0' == cloudwatch_config_ptr->dimension_domain_str[0])) {
+            SDK_LOG_GLOBAL(kLogError, "CloudWatch dimension domain string cannot be NULL.");
+            rs = kCdiStatusInvalidParameter;
+        } else {
+            cleaned_cloudwatch_config.dimension_domain_str = cloudwatch_config_ptr->dimension_domain_str;
+        }
+
         if (kCdiStatusOk == rs) {
-            rs = CloudWatchSdkMetricsCreate(core_config_ptr->cloudwatch_config_ptr, &cdi_global_context.cw_sdk_handle);
+            rs = CloudWatchSdkMetricsCreate(&cleaned_cloudwatch_config, &cdi_global_context.cw_sdk_handle);
         }
 #else  // CLOUDWATCH_METRICS_ENABLED
         SDK_LOG_GLOBAL(kLogError,
@@ -251,9 +275,12 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
 
 #ifdef METRICS_GATHERING_SERVICE_ENABLED
     if (kCdiStatusOk == rs) {
+        bool use_default_dimension_string = (NULL == core_config_ptr->cloudwatch_config_ptr) ||
+                                            (NULL == core_config_ptr->cloudwatch_config_ptr->dimension_domain_str) ||
+                                            ('\0' == core_config_ptr->cloudwatch_config_ptr->dimension_domain_str[0]);
         const MetricsGathererConfigData config = {
-            .dimension_domain_str = core_config_ptr->cloudwatch_config_ptr
-                                    ? core_config_ptr->cloudwatch_config_ptr->dimension_domain_str : "<none>"
+            .dimension_domain_str = use_default_dimension_string ? "<none>" :
+                                        core_config_ptr->cloudwatch_config_ptr->dimension_domain_str
         };
         rs = MetricsGathererCreate(&config, &cdi_global_context.metrics_gathering_sdk_handle);
     }
@@ -435,9 +462,18 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
     }
 
     if (kCdiStatusOk == rs) {
+        bool is_rx_buffered = (handle->handle_type == kHandleTypeRx &&
+                               handle->rx_state.config_data.buffer_delay_ms);
+        int reserve_queue_entries = MAX_PAYLOADS_PER_CONNECTION;
+        if (is_rx_buffered) {
+            // Rx buffer delay is enabled, so we need to allocate additional queue entries.
+            reserve_queue_entries += (MAX_PAYLOADS_PER_CONNECTION * handle->rx_state.config_data.buffer_delay_ms) /
+                                     RX_BUFFER_DELAY_BUFFER_MS_DIVISOR;
+        }
+
         // Create payload receive message queue that is used to send messages to the application via the user-registered
         // callback.
-        if (!CdiQueueCreate("PayloadRequests AppPayloadCallbackData Queue", MAX_PAYLOADS_PER_CONNECTION,
+        if (!CdiQueueCreate("PayloadRequests AppPayloadCallbackData Queue", reserve_queue_entries,
                             FIXED_QUEUE_SIZE, FIXED_QUEUE_SIZE, sizeof(AppPayloadCallbackData),
                             kQueueSignalPopWait, // Queue can block on pops.
                             &handle->app_payload_message_queue_handle)) {

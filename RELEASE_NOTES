@@ -5,7 +5,44 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
-CDI (Cloud Digital Interface) SDK Version 2.0.0 pre-release - 11/18/2020
+CDI (Cloud Digital Interface) SDK Version 2.0.0 - 12/14/2020
+---------------------------------------------------------------------------
+
+What's New
+------------
+* Documentation updates.
+* Added support for additional AVM baseline profiles. See new types/APIs in include/baseline_profile_api.h.
+* Added AVM Baseline profile 2.00.
+* Added configuration settings to the following structures:
+   * CdiTxConfigData: Added max_simultaneous_tx_payloads and max_simultaneous_tx_payload_sgl_entries.
+   * CdiRxConfigData: Added max_simultaneous_rx_payloads_per_connection.
+   These settings were previously statically defined. To use the static values, set these to zero. NOTE. Use memset or a
+   zero structure initializer (= {0}) to set the whole structure to zero before setting the desired members to the
+   actual values required.
+* Added new core utility APIs for getting TAI time. See CdiCoreGetPtpTimestamp() and CdiCoreGetTaiTimeMicroseconds().
+* Added new OS types and APIs for using statically allocated mutexes. See CdiStaticMutexType,
+  CDI_STATIC_MUTEX_INITIALIZER, CdiOsStaticMutexLock() and CdiOsStaticMutexUnlock().
+* Added new OS portable type for use by the CdiOsSocket...() APIs to hold socket instance data (ie. port number). This
+  was done so the transmit side socket no longer has to call connect(), thus preventing failed sends due to ICMP port
+  unreachable responses. See CdiSocket.
+* Moved the Logger to the public API. Header file is located at include/cdi_logger_api.h.
+* Moved the Queue to the public API. Header file is located at include/cdi_queue_api.h. Also, added support for multiple
+  writers. See the new types kQueueSignalModeMask and kQueueMultipleWriters.
+* Added new OS portable type for converting between nanoseconds and seconds. See NANOSECONDS_PER_SECOND.
+* Added number of bytes transferred to statistics. See num_bytes_transferred in cdi_core_api.h and BytesTransferred in
+  cloudwatch_sdk_metrics.cpp.
+
+Bug Fixes
+------------
+* Several connection related issues and segfaults as described in published GitHub issues.
+
+Known Issues
+------------
+
+Please refer to the README.md file for a complete list of known issues.
+
+---------------------------------------------------------------------------
+CDI (Cloud Digital Interface) SDK Version 1.0.0 - 09/15/2020
 ---------------------------------------------------------------------------
 
 What's New

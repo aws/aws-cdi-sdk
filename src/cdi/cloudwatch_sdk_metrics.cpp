@@ -32,6 +32,8 @@
 #include "cdi_logger_api.h"
 #undef GetMessage                   // workaround for AWSError method GetMessage()
 
+using namespace Aws::CloudWatch::Model;
+
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
@@ -163,10 +165,12 @@ private:
      *                        resolution).
      * @param timestamp Timestamp of the metric.
      * @param metric_name_str Reference to name of the metric.
+     * @param unit AWS CloudWatch Standard Unit enum.
      */
-    void SetDatumBoilerplate(Aws::CloudWatch::Model::MetricDatum& datum, const Aws::String& connection_name_str,
+    void SetDatumBoilerplate(MetricDatum& datum, const Aws::String& connection_name_str,
                              const Aws::String& direction_str, bool high_resolution,
-                             const Aws::Utils::DateTime timestamp, const Aws::String& metric_name_str);
+                             const Aws::Utils::DateTime timestamp, const Aws::String& metric_name_str,
+                             StandardUnit unit);
 
     /**
      * Create a new metric datum object using a standard data point value and add it to the specified request.
@@ -179,12 +183,13 @@ private:
      * @param timestamp Timestamp of the metric.
      * @param metric_name_str Reference to name of the metric.
      * @param data_point Value of the metric to add.
+     * @param unit AWS CloudWatch Standard Unit enum.
      *
      * @return true if successful, otherwise false.
      */
-    bool AddDatum(Aws::CloudWatch::Model::PutMetricDataRequest& request, const Aws::String& connection_name_str,
+    bool AddDatum(PutMetricDataRequest& request, const Aws::String& connection_name_str,
                   const Aws::String& direction_str, bool high_resolution, const Aws::Utils::DateTime timestamp,
-                  const Aws::String& metric_name_str, int data_point);
+                  const Aws::String& metric_name_str, double data_point, StandardUnit unit);
 
     /**
      * Create a new metric datum object using a statistic set of values and add it to the specified request.
@@ -200,12 +205,13 @@ private:
      * @param min Minimum value in the set.
      * @param max Maximum value in the set.
      * @param sum Sum of the values in the set.Minimum value in the set.
+     * @param unit AWS CloudWatch Standard Unit enum.
      *
      * @return true if successful, otherwise false.
      */
-    bool AddDatum(Aws::CloudWatch::Model::PutMetricDataRequest& request, const Aws::String& connection_name_str,
+    bool AddDatum(PutMetricDataRequest& request, const Aws::String& connection_name_str,
                   const Aws::String& direction_str, bool high_resolution, const Aws::Utils::DateTime timestamp,
-                  const Aws::String& metric_name, int sample_count, int min, int max, int sum);
+                  const Aws::String& metric_name, int sample_count, int min, int max, int sum, StandardUnit unit);
 
     // Private data members.
     Aws::String m_region_str;               ///< Region string.
@@ -317,7 +323,7 @@ CdiReturnStatus UserMetrics::Send(const CloudWatchTransferStats* stats_ptr)
     client_config.region = m_region_str;
     Aws::CloudWatch::CloudWatchClient cw(client_config);
 
-    Aws::CloudWatch::Model::PutMetricDataRequest request;
+    PutMetricDataRequest request;
     request.SetNamespace(m_namespace_str);
 
     const Aws::Utils::DateTime timestamp(static_cast<int64_t>(stats_ptr->timestamp_in_ms_since_epoch));
@@ -326,33 +332,36 @@ CdiReturnStatus UserMetrics::Send(const CloudWatchTransferStats* stats_ptr)
     const bool high_resolution = stats_ptr->high_resolution;
 
     AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "DroppedPayloads",
-             stats_ptr->count_based_delta_stats.delta_num_payloads_dropped);
+             stats_ptr->count_based_delta_stats.delta_num_payloads_dropped, StandardUnit::Count);
     AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "LatePayloads",
-            stats_ptr->count_based_delta_stats.delta_num_payloads_late);
+            stats_ptr->count_based_delta_stats.delta_num_payloads_late, StandardUnit::Count);
     AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "Disconnections",
-            stats_ptr->count_based_delta_stats.delta_dropped_connection_count);
+            stats_ptr->count_based_delta_stats.delta_dropped_connection_count, StandardUnit::Count);
     AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "Connected",
-             stats_ptr->connected);
+             stats_ptr->connected, StandardUnit::None);
     AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "CpuUtilization",
-             stats_ptr->cpu_utilization / 100);
+             stats_ptr->cpu_utilization / 100, StandardUnit::Percent);
     AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "ProbeRetries",
-            stats_ptr->count_based_delta_stats.delta_probe_command_retry_count);
+            stats_ptr->count_based_delta_stats.delta_probe_command_retry_count, StandardUnit::Count);
+    AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "BytesTransferred",
+            stats_ptr->count_based_delta_stats.delta_num_bytes_transferred, StandardUnit::Bytes);
     AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "PayloadTimeP50",
-            stats_ptr->payload_time_interval_stats.transfer_time_P50);
+            stats_ptr->payload_time_interval_stats.transfer_time_P50, StandardUnit::Microseconds);
     AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "PayloadTimeP90",
-            stats_ptr->payload_time_interval_stats.transfer_time_P90);
+            stats_ptr->payload_time_interval_stats.transfer_time_P90, StandardUnit::Microseconds);
     AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "PayloadTimeP99",
-            stats_ptr->payload_time_interval_stats.transfer_time_P99);
+            stats_ptr->payload_time_interval_stats.transfer_time_P99, StandardUnit::Microseconds);
 
     if (0 != stats_ptr->payload_time_interval_stats.transfer_count) {
         AddDatum(request, connection_str, direction_str, high_resolution, timestamp, "PayloadTime",
                  stats_ptr->payload_time_interval_stats.transfer_count,
                  stats_ptr->payload_time_interval_stats.transfer_time_min,
                  stats_ptr->payload_time_interval_stats.transfer_time_max,
-                 stats_ptr->payload_time_interval_stats.transfer_time_sum);
+                 stats_ptr->payload_time_interval_stats.transfer_time_sum,
+                 StandardUnit::Microseconds);
     }
 
-    Aws::CloudWatch::Model::PutMetricDataOutcome outcome;
+    PutMetricDataOutcome outcome;
     try {
         outcome = cw.PutMetricData(request);
     } catch (...) {
@@ -404,20 +413,20 @@ CdiReturnStatus UserMetrics::Send(const CloudWatchTransferStats* stats_ptr)
     return rs;
 }
 
-void UserMetrics::SetDatumBoilerplate(Aws::CloudWatch::Model::MetricDatum& datum,
-                                      const Aws::String& connection_name_str, const Aws::String& direction_str,
-                                      bool high_resolution, const Aws::Utils::DateTime timestamp,
-                                      const Aws::String& metric_name_str)
+void UserMetrics::SetDatumBoilerplate(MetricDatum& datum, const Aws::String& connection_name_str,
+                                      const Aws::String& direction_str, bool high_resolution,
+                                      const Aws::Utils::DateTime timestamp, const Aws::String& metric_name_str,
+                                      StandardUnit unit)
 {
     datum.SetTimestamp(timestamp);
     datum.SetMetricName(metric_name_str);
-    datum.SetUnit(Aws::CloudWatch::Model::StandardUnit::Count);
+    datum.SetUnit(unit);
 
     if (high_resolution) {
         datum.SetStorageResolution(1); // Valid values are 1 or 60.
     }
 
-    Aws::CloudWatch::Model::Dimension dimension;
+    Dimension dimension;
     dimension.SetName("Domain");
     dimension.SetValue(m_dimension_domain_str);
     datum.AddDimensions(dimension);
@@ -431,32 +440,30 @@ void UserMetrics::SetDatumBoilerplate(Aws::CloudWatch::Model::MetricDatum& datum
     datum.AddDimensions(dimension);
 }
 
-bool UserMetrics::AddDatum(Aws::CloudWatch::Model::PutMetricDataRequest& request,
-                           const Aws::String& connection_name_str, const Aws::String& direction_str,
-                           bool high_resolution, const Aws::Utils::DateTime timestamp,
-                           const Aws::String& metric_name_str, int data_point)
+bool UserMetrics::AddDatum(PutMetricDataRequest& request, const Aws::String& connection_name_str,
+                           const Aws::String& direction_str, bool high_resolution, const Aws::Utils::DateTime timestamp,
+                           const Aws::String& metric_name_str, double data_point, StandardUnit unit)
 {
-    Aws::CloudWatch::Model::MetricDatum datum;
-    SetDatumBoilerplate(datum, connection_name_str, direction_str, high_resolution, timestamp, metric_name_str);
+    MetricDatum datum;
+    SetDatumBoilerplate(datum, connection_name_str, direction_str, high_resolution, timestamp, metric_name_str, unit);
     datum.SetValue(data_point);
     request.AddMetricData(datum);
     return true;
 }
 
-bool UserMetrics::AddDatum(Aws::CloudWatch::Model::PutMetricDataRequest& request,
-                           const Aws::String& connection_name_str, const Aws::String& direction_str,
-                           bool high_resolution, const Aws::Utils::DateTime timestamp,
-                           const Aws::String& metric_name_str, int sample_count, int min, int max, int sum)
+bool UserMetrics::AddDatum(PutMetricDataRequest& request, const Aws::String& connection_name_str,
+                           const Aws::String& direction_str, bool high_resolution, const Aws::Utils::DateTime timestamp,
+                           const Aws::String& metric_name_str, int sample_count, int min, int max, int sum,
+                           StandardUnit unit)
 {
-    Aws::CloudWatch::Model::StatisticSet stat_set;
+    StatisticSet stat_set;
     stat_set.SetSampleCount(sample_count);
     stat_set.SetMinimum(min);
     stat_set.SetMaximum(max);
     stat_set.SetSum(sum);
 
-    Aws::CloudWatch::Model::MetricDatum datum;
-    SetDatumBoilerplate(datum, connection_name_str, direction_str, high_resolution, timestamp, metric_name_str);
-    datum.SetUnit(Aws::CloudWatch::Model::StandardUnit::Microseconds);
+    MetricDatum datum;
+    SetDatumBoilerplate(datum, connection_name_str, direction_str, high_resolution, timestamp, metric_name_str, unit);
     datum.SetStatisticValues(stat_set);
     request.AddMetricData(datum);
 
@@ -543,6 +550,7 @@ CdiReturnStatus MetricsGatherer::Send(const CloudWatchTransferStats* stats_ptr)
     m_group.SetDisconnections(stats_ptr->count_based_delta_stats.delta_dropped_connection_count);
     m_group.SetDroppedPayloads(stats_ptr->count_based_delta_stats.delta_num_payloads_dropped);
     m_group.SetLatePayloads(stats_ptr->count_based_delta_stats.delta_num_payloads_late);
+    m_group.SetBytesTransferred(stats_ptr->count_based_delta_stats.delta_num_bytes_transferred);
     m_group.SetPayloadTime(statistics_set);
     m_group.SetPayloadTimeP50(stats_ptr->payload_time_interval_stats.transfer_time_P50);
     m_group.SetPayloadTimeP90(stats_ptr->payload_time_interval_stats.transfer_time_P90);

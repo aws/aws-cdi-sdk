@@ -28,7 +28,7 @@ namespace CDIMonitoring
 namespace Model
 {
 
-MetricGroup::MetricGroup() : 
+MetricGroup::MetricGroup() :
     m_connected(false),
     m_connectedHasBeenSet(false),
     m_connectionNameHasBeenSet(false),
@@ -40,6 +40,8 @@ MetricGroup::MetricGroup() :
     m_droppedPayloadsHasBeenSet(false),
     m_latePayloads(0),
     m_latePayloadsHasBeenSet(false),
+    m_bytesTransferred(0),
+    m_bytesTransferredHasBeenSet(false),
     m_payloadTimeHasBeenSet(false),
     m_payloadTimeP50(0),
     m_payloadTimeP50HasBeenSet(false),
@@ -55,7 +57,7 @@ MetricGroup::MetricGroup() :
 {
 }
 
-MetricGroup::MetricGroup(JsonView jsonValue) : 
+MetricGroup::MetricGroup(JsonView jsonValue) :
     m_connected(false),
     m_connectedHasBeenSet(false),
     m_connectionNameHasBeenSet(false),
@@ -67,6 +69,8 @@ MetricGroup::MetricGroup(JsonView jsonValue) :
     m_droppedPayloadsHasBeenSet(false),
     m_latePayloads(0),
     m_latePayloadsHasBeenSet(false),
+    m_bytesTransferred(0),
+    m_bytesTransferredHasBeenSet(false),
     m_payloadTimeHasBeenSet(false),
     m_payloadTimeP50(0),
     m_payloadTimeP50HasBeenSet(false),
@@ -125,6 +129,13 @@ MetricGroup& MetricGroup::operator =(JsonView jsonValue)
     m_latePayloads = jsonValue.GetInt64("latePayloads");
 
     m_latePayloadsHasBeenSet = true;
+  }
+
+  if(jsonValue.ValueExists("bytesTransferred"))
+  {
+    m_bytesTransferred = jsonValue.GetInt64("bytesTransferred");
+
+    m_bytesTransferredHasBeenSet = true;
   }
 
   if(jsonValue.ValueExists("payloadTime"))
@@ -216,6 +227,12 @@ JsonValue MetricGroup::Jsonize() const
   if(m_latePayloadsHasBeenSet)
   {
    payload.WithInt64("latePayloads", m_latePayloads);
+
+  }
+
+  if(m_bytesTransferredHasBeenSet)
+  {
+   payload.WithInt64("bytesTransferred", m_bytesTransferred);
 
   }
 

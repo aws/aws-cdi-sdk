@@ -179,26 +179,22 @@ static bool GetVideoUnitSize(const CdiAvmBaselineConfig* baseline_config_ptr, in
 }
 
 /**
- * Populates the provided generic configuration structure with the information from a video baseline configuration
- * structure.
+ * Populates the optional_params_str with optional video configuration information.
  *
- * @param baseline_ptr Pointer to the source configuration; its payload_type must be kCdiAvmVideo.
- * @param config_ptr Address of where the generic configuration is to be written.
- * @param payload_unit_size_ptr Pointer to where the payload unit size is to be written.
+ * @param video_config_ptr Pointer to the video configuration.
+ * @param optional_params_str Pointer to the optional params string.
+ * @param array_size The size of the optional params string.
  *
  * @return true if the conversion was successful, false if it failed.
  */
-static bool MakeBaselineVideoConfiguration(const CdiAvmBaselineConfigCommon* baseline_ptr, CdiAvmConfig* config_ptr,
-                                           int* payload_unit_size_ptr)
+static bool CreateOptionalParamsString(const CdiAvmVideoConfig* video_config_ptr, char* optional_params_str,
+                                       const size_t array_size)
 {
-    bool ret = false;
-    const CdiAvmBaselineConfig* baseline_config_ptr = (CdiAvmBaselineConfig*)baseline_ptr;
-
-    const CdiAvmVideoConfig* video_config_ptr = &baseline_config_ptr->video_config;
-    char optional_params_str[512];
+    bool ret = true;
     optional_params_str[0] = '\0';
     size_t pos = 0;
-    const size_t max_pos = sizeof(optional_params_str);
+    const size_t max_pos = array_size;
+
 
     // Optionally add "interlace" parameter.
     if (max_pos > pos && video_config_ptr->interlace) {
@@ -243,10 +239,51 @@ static bool MakeBaselineVideoConfiguration(const CdiAvmBaselineConfigCommon* bas
                         video_config_ptr->start_horizontal_pos, video_config_ptr->start_vertical_pos);
     }
 
+    // Verify that the string is not longer than the buffer size.
     if (max_pos <= pos) {
         CDI_LOG_THREAD(kLogError, "optional parameters list is too long");
-    } else {
+        ret = false;
+    }
+
+    return ret;
+}
+
+/**
+ * Populates the provided generic configuration structure with the information from a video baseline configuration
+ * structure.
+ *
+ * @param baseline_ptr Pointer to the source configuration; its payload_type must be kCdiAvmVideo.
+ * @param config_ptr Address of where the generic configuration is to be written.
+ * @param payload_unit_size_ptr Pointer to where the payload unit size is to be written.
+ *
+ * @return true if the conversion was successful, false if it failed.
+ */
+static bool MakeBaselineVideoConfiguration(const CdiAvmBaselineConfigCommon* baseline_ptr, CdiAvmConfig* config_ptr,
+                                           int* payload_unit_size_ptr)
+{
+    bool ret = true;
+    const CdiAvmBaselineConfig* baseline_config_ptr = (CdiAvmBaselineConfig*)baseline_ptr;
+
+    const CdiAvmVideoConfig* video_config_ptr = &baseline_config_ptr->video_config;
+    char optional_params_str[512];
+    optional_params_str[0] = '\0';
+    const size_t max_pos = sizeof(optional_params_str);
+
+    // Verify the aspect ratios have valid parameters.
+    if (video_config_ptr->par_height == 0 || video_config_ptr->par_width == 0) {
+        CDI_LOG_THREAD(kLogError, "PAR values improperly configured. A value of 0 was detected: width[%d], height[%d].",
+                       video_config_ptr->par_width, video_config_ptr->par_height);
+        ret = false;
+    }
+
+    // Create an optional parameter string.
+    if (ret) {
+        ret = CreateOptionalParamsString(video_config_ptr, optional_params_str, max_pos);
+    }
+
+    if (ret) {
         char rate_str[20];
+        size_t pos = 0;
         if (1 == video_config_ptr->frame_rate_den) {
             snprintf(rate_str, sizeof(rate_str), "%u", video_config_ptr->frame_rate_num);
         } else {

@@ -273,6 +273,10 @@ typedef struct {
     /// within the expected range.
     uint64_t payload_base_timestamp_us;
 
+    /// @brief A count tracking the number of times a payload is received and the systems montonic clock does not match
+    /// the realtime clock. This isn't an error but it could be indicative of clock instability within the sytem.
+    uint32_t realtime_monotonic_clock_mismatch_count;
+
     /// @brief Pool used to hold payload state data (AppPayloadCallbackData) that is stored in ptp_ordered_payload_list
     /// ordered by PTP. NOTE: This pool is only used if Rx payload buffering is enabled for the connection (@see
     /// CdiRxConfigData.buffer_delay_ms).

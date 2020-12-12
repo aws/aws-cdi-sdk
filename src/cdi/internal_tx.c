@@ -620,7 +620,8 @@ static void PayloadTransferComplete(CdiEndpointState* endpoint_ptr, TxPayloadSta
 
     StatsGatherPayloadStatsFromConnection(endpoint_ptr,
         kCdiStatusOk == payload_state_ptr->app_payload_cb_data.payload_status_code,
-        payload_state_ptr->start_time, payload_state_ptr->max_latency_microsecs);
+        payload_state_ptr->start_time, payload_state_ptr->max_latency_microsecs,
+        payload_state_ptr->data_bytes_transferred);
 
     // Post message to notify application that payload transfer had an error.
     if (!CdiQueuePush(con_state_ptr->app_payload_message_queue_handle, &payload_state_ptr->app_payload_cb_data)) {

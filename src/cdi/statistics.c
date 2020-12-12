@@ -451,7 +451,8 @@ CdiReturnStatus StatsConfigure(StatisticsHandle handle, const CdiStatsConfigData
 }
 
 void StatsGatherPayloadStatsFromConnection(CdiEndpointState* endpoint_ptr, bool payload_ok,
-                                           uint64_t start_time, uint64_t max_latency_microsecs)
+                                           uint64_t start_time, uint64_t max_latency_microsecs,
+                                           uint64_t bytes_transferred)
 {
     StatisticsState* stats_state_ptr = endpoint_ptr->connection_state_ptr->stats_state_ptr;
     CdiPayloadCounterStats* counter_stats_ptr = &endpoint_ptr->transfer_stats.payload_counter_stats;
@@ -489,6 +490,7 @@ void StatsGatherPayloadStatsFromConnection(CdiEndpointState* endpoint_ptr, bool 
 
     if (payload_ok) {
         counter_stats_ptr->num_payloads_transferred++;
+        counter_stats_ptr->num_bytes_transferred += bytes_transferred;
     } else {
         // This value is also incremented in TxPayloadThread(), so use atomic operation here.
         CdiOsAtomicInc32(&counter_stats_ptr->num_payloads_dropped);

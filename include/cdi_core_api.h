@@ -447,6 +447,9 @@ typedef struct {
 
     /// @brief Number of payloads that were transmitted late since the connection was created.
     int num_payloads_late;
+
+    /// @brief Number of bytes that were transmitted since the connection was created.
+    uint64_t num_bytes_transferred;
 } CdiPayloadCounterStats;
 
 /**
