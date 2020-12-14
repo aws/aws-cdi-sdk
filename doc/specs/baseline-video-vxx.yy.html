@@ -25,6 +25,7 @@
 		a:link { color: #000080; so-language: zxx; text-decoration: underline }
 		a:visited { color: #800000; so-language: zxx; text-decoration: underline }
 		strong { font-weight: bold }
+		ol.western { font-family: "DejaVu Sans Mono", monospace }
 	</style>
 </head>
 <body lang="en-US" link="#000080" vlink="#800000" dir="ltr">
@@ -231,14 +232,15 @@ on the values are described below.</p>
 <p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
 Data must be placed into memory buffers with the proper format before
 transmission in order for the receiving end to be able to consume it.
- The application is solely responsible for this formatting.  Video
-payloads transported by the CDI SDK shall only contain sample data.
+The application is solely responsible for this formatting. The layout
+follows Sample Row Data Segments as specified in ST 2110-22-2017, section
+6.2. Video payloads transported by the CDI SDK shall only contain sample data.
 Sample Row Data Headers shall not be present in the buffer.  Sample
 order and layout in memory is as shown in Table 2 for YCbCr-4:2:2 and
 in Table 1 for YCbCr-4:4:4 of ST 2110-20-2017.  Unlike in ST 2110-20,
 both fields of interlaced video are sent in the same payload; the
 second field's first sample follows immediately after the last byte
-of the last sample of the first field.</p>
+of the last sample of the first field while honoring padding rules.</p>
 <p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
 Interlaced video affects how the partial_frame configuration
 parameter is interpreted. The vertical offset and height specified
@@ -247,17 +249,22 @@ corresponding lines of the second field are implicitly included in
 the resulting rectangle.</p>
 <p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
 Pgroups are honored by the transmit side packetizer which guarantees
-that scatter gather list entries on the receive side have boundaries
-between samples. Because of pgroups, the horizontal values of the
-partial_frame parameter must be integer multiples of the pgroup
-coverage values for the configured video format as shown in Tables 1
-and 2 of ST 2110-20-2017.</p>
+that scatter gather list entries on the receive side do not have
+boundaries that fall within samples.</p>
 <p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
 An additional consideration for using the CDI SDK is whether an alpha
 channel is enabled. If so, the primary samples are placed first in
-the memory buffer followed by the alpha channel, according to the
-usual layout rules, followed immediately by the alpha samples (luma
-only) with the same bit depth as the primary samples.</p>
+the memory buffer, according to the usual layout rules, followed
+immediately by the alpha samples (luma only) with the same bit depth
+and layout as the primary samples.</p>
+<p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
+When an alpha channel is used with interlaced video, the order is:<br>
+<ol class="western">
+<li>primary field 1</li>
+<li>primary field 2</li>
+<li>alpha field 1</li>
+<li>alpha field 2</li>
+</ol>
 <h2 class="western">References</h2>
 <ol>
 	<li><p class="western" style="margin-top: 0.06in; margin-bottom: 0.06in; background: transparent; line-height: 100%">
