@@ -235,7 +235,7 @@ The extracted AWS CDI SDK solution, cdi_proj.sln, contains three test applicatio
 
 **Note**: The following instructions will install the AWS SDK for C++ at the same directory level as the AWS CDI SDK. This is not required but is recommended for simplicity of installation.
 
-1. Open Microsoft Visual Studio 2019 by right clicking on it and selectiong **Run as Administrator**.
+1. Open Microsoft Visual Studio 2019 by right clicking on it and selecting **Run as Administrator**.
 1. Inside Microsoft Visual Studio 2019 click **Open a project or solution** and navigate to the install directory used in the section [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and open the solution file ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
 1. Open a Powershell by selecting **Tools > Command Line > Developer Powershell**.
 1. Inside the shell navigate to the install directory used for [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and download the AWS SDK for C++.
