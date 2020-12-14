@@ -47,19 +47,12 @@ CDI (Cloud Digital Interface) SDK Version 1.0.0 - 09/15/2020
 
 What's New
 ------------
- * AWS CDI SDK AVM 2.0 profile preview.
- * Improvements to received packets memory management.
- * Miscillenaous minor improvements.
+Initial release of the SDK.
 
 Bug Fixes
 ------------
- * Fixed siginfo declartion for Windows.
 
 Known Issues
 ------------
-  * Windows has intermittent issues establishing connection using socket
-      adapter.
-  * Windows CDI EFA transmitter can stop sending data if there are frequent
-     receiver restarts.
 
 Please refer to the README.md file for a complete list of known issues.
