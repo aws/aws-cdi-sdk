@@ -22,7 +22,7 @@
 //*********************************************************************************************************************
 
 /// @brief The maximum number of arguments allowed for any command line option.
-#define OPTARG_MAX_OPTION_ARGS (18)
+#define OPTARG_MAX_OPTION_ARGS (20)
 
 /// @brief The maximum length of any option string.
 #define OPTARG_MAX_OPTION_LENGTH (15)

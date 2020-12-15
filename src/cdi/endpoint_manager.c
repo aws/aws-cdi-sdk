@@ -49,12 +49,12 @@
 #include "endpoint_manager.h"
 
 #include "adapter_api.h"
+#include "cdi_logger_api.h"
+#include "cdi_os_api.h"
 #include "internal.h"
 #include "internal_rx.h"
 #include "internal_tx.h"
 #include "internal_utility.h"
-#include "logger_api.h"
-#include "cdi_os_api.h"
 #include "statistics.h"
 #include "utilities_api.h"
 
@@ -101,6 +101,7 @@ struct EndpointManagerState {
     /// @brief Lock used to protect access to endpoint state.
     CdiCsID state_lock;
 
+    CdiSignalType shutdown_signal;     ///< Signal used to shutdown endpoint manager.
     CdiSignalType new_command_signal;  ///< Signal used to start processing a command.
     CdiSignalType command_done_signal; ///< Signal used when command processing has finished.
 
@@ -116,7 +117,7 @@ struct EndpointManagerState {
     CdiSignalType all_threads_running_signal;
 
     int thread_wait_count;       ///< Number of endpoint threads that are waiting.
-    int registered_thread_count; ///< Numober of registered threads associated with this endpoint.
+    int registered_thread_count; ///< Number of registered threads associated with this endpoint.
 };
 
 //*********************************************************************************************************************
@@ -253,40 +254,48 @@ static THREAD EndpointManagerThread(void* ptr)
     // Set this thread to use the connection's log. Can now use CDI_LOG_THREAD() for logging within this thread.
     CdiLoggerThreadLogSet(mgr_ptr->connection_state_ptr->log_handle);
 
-    bool keep_alive = true;
-    while (!CdiOsSignalGet(mgr_ptr->connection_state_ptr->shutdown_signal) && keep_alive) {
-        // Wait for all registered threads to be waiting.
-        CdiOsSignalWait(mgr_ptr->all_threads_waiting_signal, CDI_INFINITE, NULL);
-        CdiOsSignalClear(mgr_ptr->all_threads_waiting_signal);
+    CdiSignalType signal_array[2];
+    signal_array[0] = mgr_ptr->all_threads_waiting_signal;
+    signal_array[1] = mgr_ptr->shutdown_signal;
+    uint32_t signal_index;
 
-        // Walk through the list of endpoints associated with this Endpoint Manager and process commands in the
-        // endpoint's queue.
-        CdiEndpointHandle endpoint_handle = EndpointManagerGetFirstEndpoint(mgr_ptr);
-        while (endpoint_handle) {
-            InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(endpoint_handle);
-            EndpointManagerCommand command;
-            while (internal_endpoint_ptr && CdiQueuePop(internal_endpoint_ptr->command_queue_handle, &command)) {
-                CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
-                                         "Endpoint Manager stream ID[%d] processing command[%s]",
-                                         internal_endpoint_ptr->cdi_endpoint.stream_identifier,
-                                         InternalUtilityKeyEnumToString(kKeyEndpointManagerCommand, command));
-                switch (command) {
-                    case kEndpointStateIdle:
-                        // Nothing special to do.
-                        break;
-                    case kEndpointStateReset:
-                        FlushResources(internal_endpoint_ptr);
-                        break;
-                    case kEndpointStateStart:
-                        CdiAdapterStartEndpoint(endpoint_handle->adapter_endpoint_ptr);
-                        break;
-                    case kEndpointStateShutdown:
-                        FlushResources(internal_endpoint_ptr);
-                        keep_alive = false;
-                        break;
-                }
+    bool keep_alive = true;
+    while (!CdiOsSignalGet(mgr_ptr->shutdown_signal) && keep_alive) {
+        // Wait for all registered threads to be waiting.
+        CdiOsSignalsWait(signal_array, 2, false, CDI_INFINITE, &signal_index);
+
+        if (0 == signal_index) { // If shutdown_signal was set then do not walk through endpoints.
+            CdiOsSignalClear(mgr_ptr->all_threads_waiting_signal);
+
+            // Walk through the list of endpoints associated with this Endpoint Manager and process commands in the
+            // endpoint's queue.
+            CdiEndpointHandle endpoint_handle = EndpointManagerGetFirstEndpoint(mgr_ptr);
+            while (endpoint_handle) {
+                InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(endpoint_handle);
+                EndpointManagerCommand command;
+                while (internal_endpoint_ptr && CdiQueuePop(internal_endpoint_ptr->command_queue_handle, &command)) {
+                    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
+                                             "Endpoint Manager stream ID[%d] processing command[%s]",
+                                             internal_endpoint_ptr->cdi_endpoint.stream_identifier,
+                                             InternalUtilityKeyEnumToString(kKeyEndpointManagerCommand, command));
+                    switch (command) {
+                        case kEndpointStateIdle:
+                            // Nothing special to do.
+                            break;
+                        case kEndpointStateReset:
+                            FlushResources(internal_endpoint_ptr);
+                            break;
+                        case kEndpointStateStart:
+                            CdiAdapterStartEndpoint(endpoint_handle->adapter_endpoint_ptr);
+                            break;
+                        case kEndpointStateShutdown:
+                            FlushResources(internal_endpoint_ptr);
+                            keep_alive = false;
+                            break;
+                    }
+               }
+               endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
             }
-            endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
         }
         // Commands have completed. Set signal to unblock registered connection threads that are blocked in
         // EndpointManagerThreadWait() so they can continue running.
@@ -405,9 +414,16 @@ CdiReturnStatus EndpointManagerCreate(CdiConnectionHandle handle, CdiCoreStatsCa
 
     mgr_ptr->connection_state_ptr = handle;
 
-    if (!CdiOsSignalCreate(&mgr_ptr->new_command_signal)) {
+    if (!CdiOsSignalCreate(&mgr_ptr->shutdown_signal)) {
         rs = kCdiStatusNotEnoughMemory;
     }
+
+    if (kCdiStatusOk == rs) {
+        if (!CdiOsSignalCreate(&mgr_ptr->new_command_signal)) {
+            rs = kCdiStatusNotEnoughMemory;
+        }
+    }
+
     if (kCdiStatusOk == rs) {
         if (!CdiOsSignalCreate(&mgr_ptr->all_threads_running_signal)) {
             rs = kCdiStatusNotEnoughMemory;
@@ -528,6 +544,9 @@ void EndpointManagerDestroy(EndpointManagerHandle handle)
         CdiOsSignalDelete(mgr_ptr->new_command_signal);
         mgr_ptr->new_command_signal = NULL;
 
+        CdiOsSignalDelete(mgr_ptr->shutdown_signal);
+        mgr_ptr->shutdown_signal = NULL;
+
         CdiOsMemFree(mgr_ptr);
     }
 }
@@ -607,20 +626,22 @@ void EndpointManagerShutdownConnection(EndpointManagerHandle handle)
     }
 
     // If threads have started and the done signal is valid, wait for all threads associated with this connection to
-    // process being shutdown.
+    // process being shutdown. If there are no registered threads then skip this check.
     //
     // NOTE: The start_signal only gets set at the end of RxCreateInternal() and TxCreateInternal() if the connection
     // has been succesfully created. In the case where creation has failed, this function has already been called from
     // within those same functions, so no additional race-condition logic is required here.
-    if (mgr_ptr->connection_state_ptr->start_signal && mgr_ptr->command_done_signal &&
-        CdiOsSignalGet(mgr_ptr->connection_state_ptr->start_signal)) {
-        // Ok to wait for the shutdown command to be processed.
-        CdiOsSignalWait(mgr_ptr->command_done_signal, CDI_INFINITE, NULL);
-    }
+    if (mgr_ptr->registered_thread_count) {
+        if (mgr_ptr->connection_state_ptr->start_signal && mgr_ptr->command_done_signal &&
+             CdiOsSignalGet(mgr_ptr->connection_state_ptr->start_signal)) {
+            // Ok to wait for the shutdown command to be processed.
+            CdiOsSignalWait(mgr_ptr->command_done_signal, CDI_INFINITE, NULL);
+        }
 
-    if (mgr_ptr->poll_thread_exit_signal) {
-        // Wait for the poll thread to exit.
-        CdiOsSignalWait(mgr_ptr->poll_thread_exit_signal, CDI_INFINITE, NULL);
+        if (mgr_ptr->poll_thread_exit_signal) {
+            // Wait for the poll thread to exit.
+            CdiOsSignalWait(mgr_ptr->poll_thread_exit_signal, CDI_INFINITE, NULL);
+        }
     }
 
     // Destroy stats before endpoints are destroyed, so we can capture the last stats set from the endpoints.
@@ -637,6 +658,11 @@ void EndpointManagerShutdownConnection(EndpointManagerHandle handle)
     while (NULL != (cdi_endpoint_handle = EndpointManagerGetFirstEndpoint(handle))) {
         // This removes the endpoint from the list, so just keep getting the first one.
         DestroyEndpoint(cdi_endpoint_handle);
+    }
+
+    // Now that all of the endpoints have been shutdown the endpoint manager thread can also be shutdown.
+    if (handle->connection_state_ptr->endpoint_manager_handle->shutdown_signal) {
+        CdiOsSignalSet(handle->connection_state_ptr->endpoint_manager_handle->shutdown_signal);
     }
 
     CdiAdapterDestroyConnection(mgr_ptr->connection_state_ptr->adapter_connection_ptr);

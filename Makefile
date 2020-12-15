@@ -7,6 +7,11 @@ top.sdk := $(abspath $(CURDIR)/)
 # all SDK build artifacts go into a debug or release directory under top.build
 top.build := $(top.sdk)/build
 
+### The AWS SDK is a required dependency of the CDI SDK by default for the metrics gathering service and for publishing
+### metrics to CloudWatch. If the #defines of both CLOUDWATCH_METRICS_ENABLED and METRICS_GATHERING_SERVICE_ENABLED are
+### commented out in src/cdi/configuration.h, this requirement can be removed by commenting out the following line.
+require_aws_sdk := yes
+
 #-----------------------------------------------------------------------------
 # Get product name and version information from text file.
 #-----------------------------------------------------------------------------
@@ -76,6 +81,7 @@ build_dir := $(top.build)/$(config)
 # object files go into obj dir, libraries under lib, and programs in bin
 build_dir.obj := $(build_dir)/obj
 build_dir.lib := $(build_dir)/lib
+build_dir.lib64 := $(build_dir)/lib64
 build_dir.bin := $(build_dir)/bin
 build_dir.results := $(build_dir)/results
 build_dir.image := $(build_dir)/image
@@ -211,11 +217,6 @@ all : libfabric libsdk test docs docs_api $(EXTRA_ALL_TARGETS)
 .PHONY : lib
 lib : libfabric libsdk
 
-### The AWS SDK is a required dependency of the CDI SDK by default for the metrics gathering service and for publishing
-### metrics to CloudWatch. If the #defines of both CLOUDWATCH_METRICS_ENABLED and METRICS_GATHERING_SERVICE_ENABLED are
-### commented out in src/cdi/configuration.h, this requirement can be removed by commenting out the following line.
-require_aws_sdk := yes
-
 # Ensure that the location of the AWS SDK source code tree was specified unless explicitly opted out. Define and augment
 # some variables needed for building and linking to the AWS SDK.
 ifeq ($(require_aws_sdk),yes)
@@ -227,7 +228,7 @@ ifeq ($(require_aws_sdk),yes)
             ifeq (0,$(shell if [ -d $(AWS_SDK_ABS)/aws-cpp-sdk-core ]; then echo 1; else echo 0; fi))
                 $(error AWS_SDK does not point to the root of the AWS SDK.)
             else
-                libaws := $(foreach component,monitoring core cdi,$(build_dir.lib)/libaws-cpp-sdk-$(component).so)
+                libaws := $(foreach component,monitoring core cdi,$(build_dir.lib64)/libaws-cpp-sdk-$(component).so)
 
                 # add necessary flags for compiler and linker
                 CXXFLAGS += -I$(build_dir)/include
@@ -313,7 +314,7 @@ $(libsdk) : $(libfabric_config_h) $(objs.cdi) $(libfabric) $(libaws) | $(build_d
 	@echo "GCC version is" $(GCCVERSION)
 	$(Q)$(CC) -shared -o $@ -Wl,-z,defs,-soname=$(basename $(notdir $@)),--version-script,libcdisdk.vers \
 		$(objs.cdi) -L$(build_dir.lib) $(aws_sdk_library_flags) \
-		-lfabric -ldl -lrt $(EXTRA_CC_LIBS) -lnl-3 -lm $(EXTRA_LD_LIBS) -lncurses -lpthread -lc \
+		-lfabric -ldl -lrt $(EXTRA_CC_LIBS) -lnl-3 -lm $(EXTRA_LD_LIBS) -lpthread -lc \
 		$(ASAN_LIBS) -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib
 	$(Q)ln -fs $@ $(basename $@)
 	$(Q)ln -fs $@ $(basename $(basename $@))

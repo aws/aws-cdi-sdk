@@ -17,11 +17,11 @@
 
 #include <string.h>
 
+#include "cdi_queue_api.h"
 #include "endpoint_manager.h"
 #include "internal.h"
 #include "payload.h"
 #include "private.h"
-#include "queue_api.h"
 #include "statistics.h"
 
 //*********************************************************************************************************************
@@ -95,7 +95,7 @@ static void DebugTxPacketSglEntries(TxPacketWorkRequest* work_request_ptr)
  *
  * @param con_state_ptr Pointer to connection state data.
  */
-void ProcessWorkRequestCompletionQueue(CdiConnectionState* con_state_ptr)
+static void ProcessWorkRequestCompletionQueue(CdiConnectionState* con_state_ptr)
 {
     CdiSinglyLinkedList packet_list = { 0 };
     while (CdiQueuePop(con_state_ptr->tx_state.work_req_comp_queue_handle, (void*)&packet_list)) {
@@ -150,9 +150,11 @@ static THREAD TxPayloadThread(void* ptr)
     CdiSignalType notification_signal = EndpointManagerThreadRegister(mgr_handle,
                                             CdiOsThreadGetName(con_state_ptr->payload_thread_id));
 
+    CdiSignalType comp_queue_signal = CdiQueueGetPopWaitSignal(con_state_ptr->tx_state.work_req_comp_queue_handle);
+
     CdiSignalType signal_array[2];
     signal_array[0] = notification_signal;
-    signal_array[1] = CdiQueueGetPopWaitSignal(con_state_ptr->tx_state.work_req_comp_queue_handle);
+    signal_array[1] = comp_queue_signal;
 
     // Packets are sent to the endpoint in batches starting with a single packet. The number is doubled with each
     // batch. This gives a quick start but as the queue backs up, the larger batch sizes lead to higher efficiency
@@ -202,6 +204,7 @@ static THREAD TxPayloadThread(void* ptr)
     // This loop should only block at the call to CdiQueuePopWaitMultiple(). If a pool runs dry or the output queue is
     // full, the logic inside of the loop should maintain enough state to suspend the process of packetizing the current
     // payload and resume when resources are available.
+    TxPayloadState* payload_state_ptr = NULL;
     while (!CdiOsSignalGet(con_state_ptr->shutdown_signal) && !EndpointManagerIsConnectionShuttingDown(mgr_handle)) {
 
         // If connected and queue is empty, then clear enqueue active flag so PollThread() can sleep. While not
@@ -211,28 +214,38 @@ static THREAD TxPayloadThread(void* ptr)
             CdiOsSignalClear(con_state_ptr->adapter_connection_ptr->poll_do_work_signal);
         }
 
-        // Wait for work to do from the payload queue, the work request complete queue, or a signal from the endpoint
-        // manager.
         uint32_t signal_index = 0;
-        TxPayloadState* payload_state_ptr;
-        if (!CdiQueuePopWaitMultiple(con_state_ptr->tx_state.payload_queue_handle, CDI_INFINITE, signal_array, 2,
-                                     &signal_index, (void**)&payload_state_ptr)) {
+        bool payload_received = false;
+        if (kPayloadStateIdle == payload_processing_state) {
+            // Wait for work from the payload queue, the work request complete queue, or a signal from the endpoint
+            // manager.
+            payload_received = CdiQueuePopWaitMultiple(con_state_ptr->tx_state.payload_queue_handle, CDI_INFINITE,
+                                                       signal_array, 2, &signal_index, (void**)&payload_state_ptr);
+        } else {
+            // A payload is currently in process. Wait for completion requests or a signal from the Endpoint Manager.
+            CdiOsSignalsWait(signal_array, 2, false, CDI_INFINITE, &signal_index);
+        }
+        if (!payload_received) {
+            // Either processing an existing payload or did not get a new one. Got a signal from either the Endpoint
+            // Manager or work_req_comp_queue_handle (the queue contains data).
             if (0 == signal_index) {
                 // Got a notification_signal. The endpoint state has changed, so wait until it has completed.
                 EndpointManagerThreadWait(mgr_handle);
-                continue;
-            } else if (1 == signal_index) {
-                // Got a signal that there is data in the work_req_comp_queue_handle queue.
-                ProcessWorkRequestCompletionQueue(con_state_ptr);
-            } else {
-                /// Just continue for now until keep alive is implemented here.
-                assert(false);
-                continue;
+                // An Endpoint Manager state change means that Tx resources have been flushed or queued to be flushed,
+                // including the current Tx payload that we could be processing. Reset our current payload state back to
+                // idle. Allow the logic to drop below so if needed ProcessWorkRequestCompletionQueue() is invoked.
+                payload_processing_state = kPayloadStateIdle;
+                payload_state_ptr = NULL;
             }
         } else {
             payload_processing_state = kPayloadStateWorkReceived;
         }
-        CdiEndpointHandle cdi_endpoint_handle = payload_state_ptr->cdi_endpoint_handle;
+
+        // Always check the completion queue here. Don't want to starve it in case either several Endpoint Manager
+        // notifications are received or the payload_queue_handle doesn't go empty.
+        if (CdiOsSignalReadState(comp_queue_signal)) {
+            ProcessWorkRequestCompletionQueue(con_state_ptr);
+        }
 
         // Either resume work on a payload in progress or start a new one.
         if (kPayloadStateWorkReceived == payload_processing_state) {
@@ -274,7 +287,7 @@ static THREAD TxPayloadThread(void* ptr)
             // the adapter's queue. If the adapter's queue gets full it will start generating queue full log message
             // errors.
             AdapterEndpointHandle adapter_endpoint_handle =
-                EndpointManagerEndpointToAdapterEndpoint(cdi_endpoint_handle);
+                EndpointManagerEndpointToAdapterEndpoint(payload_state_ptr->cdi_endpoint_handle);
             if (kCdiConnectionStatusConnected != adapter_endpoint_handle->connection_status_code) {
                 break;
             }
@@ -326,14 +339,21 @@ static THREAD TxPayloadThread(void* ptr)
             if (kPayloadStateEnqueuing == payload_processing_state) {
                 // Enqueue packets. packet_list is copied so it can simply be initialized here to start fresh.
                 if (kCdiStatusOk != CdiAdapterEnqueueSendPackets(
-                        EndpointManagerEndpointToAdapterEndpoint(cdi_endpoint_handle), &packet_list)) {
+                        EndpointManagerEndpointToAdapterEndpoint(payload_state_ptr->cdi_endpoint_handle),
+                        &packet_list)) {
                     keep_going = false;
                 } else {
                     CdiSinglyLinkedListInit(&packet_list);
                     batch_size *= 2;
 
-                    payload_processing_state = last_packet ? kPayloadStateIdle : kPayloadStateGetWorkRequest;
-                    keep_going = !last_packet;
+                    if (last_packet) {
+                        // The last packet of the payload has been sent; reset to start a new one.
+                        payload_processing_state = kPayloadStateIdle;
+                        payload_state_ptr = NULL;
+                        keep_going = false;
+                    } else {
+                        payload_processing_state = kPayloadStateGetWorkRequest;
+                    }
                 }
             }
         }
@@ -364,6 +384,22 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
                                           CdiCallback tx_cb_ptr, CdiConnectionHandle* ret_handle_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;
+
+    int max_tx_payloads = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+
+    // If max_simultaneous_tx_payloads has been set use that value otherwise use
+    // MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION
+    if (config_data_ptr->max_simultaneous_tx_payloads) {
+        max_tx_payloads = config_data_ptr->max_simultaneous_tx_payloads;
+    }
+
+    int max_tx_payload_sgl_entries = MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION;
+
+    // If max_simultaneous_tx_payload_sgl_entries has been set use that value otherwise use
+    // MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION
+    if (config_data_ptr->max_simultaneous_tx_payload_sgl_entries) {
+        max_tx_payload_sgl_entries = config_data_ptr->max_simultaneous_tx_payload_sgl_entries;
+    }
 
     CdiConnectionState* con_state_ptr = (CdiConnectionState*)CdiOsMemAllocZero(sizeof *con_state_ptr);
     if (con_state_ptr == NULL) {
@@ -445,9 +481,9 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
         // Create queue used to hold Tx payload messages that are sent to the TxPayloadThread() thread. Depth must be
         // less than the number of TX payloads allowed per connection to allow for proper pushback and payload state
         // data management.
-        if (!CdiQueueCreate("TxPayloadState queue Pointer", MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION-1,
+        if (!CdiQueueCreate("TxPayloadState queue Pointer", max_tx_payloads-1,
                             FIXED_QUEUE_SIZE, FIXED_QUEUE_SIZE, sizeof(TxPayloadState*),
-                            kQueueSignalPopWait, // Can use wait signal for pops (reads)
+                            kQueueSignalPopWait | kQueueMultipleWriters, // Can use wait signal for pops (reads), thread safe for multiple writers
                             &con_state_ptr->tx_state.payload_queue_handle)) {
             rs = kCdiStatusNotEnoughMemory;
         }
@@ -481,7 +517,7 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
     }
     if (kCdiStatusOk == rs) {
         // There is a limit on the number of simultaneous Tx payloads per connection, so don't allow this pool to grow.
-        if (!CdiPoolCreate("Connection Tx Payload State Pool", MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION,
+        if (!CdiPoolCreate("Connection Tx Payload State Pool", max_tx_payloads,
                            NO_GROW_SIZE, NO_GROW_COUNT, sizeof(TxPayloadState), true, // true= Is thread-safe.
                            &con_state_ptr->tx_state.payload_state_pool_handle)) {
             rs = kCdiStatusNotEnoughMemory;
@@ -489,7 +525,7 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
     }
     if (kCdiStatusOk == rs) {
         if (!CdiPoolCreate("Connection Tx Payload CdiSglEntry Pool",
-                           MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION, NO_GROW_SIZE, NO_GROW_COUNT,
+                           max_tx_payload_sgl_entries, NO_GROW_SIZE, NO_GROW_COUNT,
                            sizeof(CdiSglEntry), true, // true= Is thread-safe.
                            &con_state_ptr->tx_state.payload_sgl_entry_pool_handle)) {
             rs = kCdiStatusNotEnoughMemory;
@@ -569,6 +605,29 @@ static CdiEndpointState* FindEndpoint(EndpointManagerHandle handle, int stream_i
     }
 
     return ret_endpoint_state_ptr;
+}
+
+/**
+ * Payload transfer has completed either successfully or in error. Update stats and queue payload message to
+ * application.
+ *
+ * @param endpoint_ptr Pointer to endpoint state data.
+ * @param payload_state_ptr Pointer to payload state data.
+ */
+static void PayloadTransferComplete(CdiEndpointState* endpoint_ptr, TxPayloadState* payload_state_ptr)
+{
+    CdiConnectionState* con_state_ptr = (CdiConnectionState*)endpoint_ptr->connection_state_ptr;
+
+    StatsGatherPayloadStatsFromConnection(endpoint_ptr,
+        kCdiStatusOk == payload_state_ptr->app_payload_cb_data.payload_status_code,
+        payload_state_ptr->start_time, payload_state_ptr->max_latency_microsecs,
+        payload_state_ptr->data_bytes_transferred);
+
+    // Post message to notify application that payload transfer had an error.
+    if (!CdiQueuePush(con_state_ptr->app_payload_message_queue_handle, &payload_state_ptr->app_payload_cb_data)) {
+        CDI_LOG_THREAD(kLogError, "Queue[%s] full, push failed.",
+                        CdiQueueGetName(con_state_ptr->app_payload_message_queue_handle));
+    }
 }
 
 //*********************************************************************************************************************
@@ -705,10 +764,21 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
     CdiQueueFlush(con_state_ptr->tx_state.payload_queue_handle);
 
     // Walk through the work request pool and free associated resources.
-    TxPacketWorkRequest* work_request_ptr = NULL;
     // NOTE: All the pools used in this function are not thread-safe, so must ensure that only one thread is accessing
     // them at a time.
+    TxPayloadState* payload_state_ptr = NULL;
+    TxPacketWorkRequest* work_request_ptr = NULL;
     while (CdiPoolPeekInUse(con_state_ptr->tx_state.work_request_pool_handle, (void**)&work_request_ptr)) {
+        if (payload_state_ptr != work_request_ptr->payload_state_ptr) {
+            payload_state_ptr = work_request_ptr->payload_state_ptr;
+            PayloadTransferComplete(endpoint_ptr, payload_state_ptr);
+            // Clear this list, since the logic below has freed all the SGL entries in it that are stored in the
+            // packet_sgl_entry_pool_handle pool.
+            CdiSinglyLinkedListInit(&payload_state_ptr->completed_packets_list);
+        }
+
+        // Free all packet SGL entries related to this work request. This will free all entries that have been
+        // completed successfully and ones that have not.
         CdiSglEntry* packet_entry_hdr_ptr = work_request_ptr->packet.sg_list.sgl_head_ptr;
         if (packet_entry_hdr_ptr) {
             // Put back SGL entry for each one in the list.
@@ -816,16 +886,7 @@ void TxPacketWorkRequestComplete(void* param_ptr, Packet* packet_ptr)
                 // Payload transfer complete. Set to call the user registered Tx callback function. Check payload type
                 // (application or keep alive).
                 // Payload type is application. Update stats.
-                StatsGatherPayloadStatsFromConnection(endpoint_ptr,
-                        kAdapterPacketStatusOk == packet_ptr->tx_state.ack_status,
-                        payload_state_ptr->start_time, payload_state_ptr->max_latency_microsecs);
-
-                // Post message to notify application that payload transfer has completed.
-                if (!CdiQueuePush(con_state_ptr->app_payload_message_queue_handle,
-                                  &payload_state_ptr->app_payload_cb_data)) {
-                    CDI_LOG_THREAD(kLogError, "Queue[%s] full, push failed.",
-                                   CdiQueueGetName(con_state_ptr->app_payload_message_queue_handle));
-                }
+                PayloadTransferComplete(endpoint_ptr, payload_state_ptr);
 
                 // Put list of work requests in queue so TxPayloadThread() can free the allocated resources.
                 if (!CdiQueuePush(con_state_ptr->tx_state.work_req_comp_queue_handle,

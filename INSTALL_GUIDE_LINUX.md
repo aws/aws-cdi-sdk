@@ -180,6 +180,8 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
 
 **Note**: AWS CDI SDK has been tested with version 1.8.46 of AWS SDK C++.
 
+**Note**: The AWS SDK for C++ is essential for metrics gathering functions of AWS CDI SDK to operate properly.  Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
+
 1. Verify that the necessary [libraries are installed for AWS SDK for C++](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html).
 1. Download AWS SDK for C++ source code.
     - **Note**: This procedure replaces these instructions: ["Setting Up AWS SDK for C++"](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html).

@@ -23,7 +23,7 @@
 //*********************************************************************************************************************
 
 /**
- * @brief Structure used to hold a transmit packet work request. The lifespan of a workrequest starts when a packet is
+ * @brief Structure used to hold a transmit packet work request. The lifespan of a work request starts when a packet is
  * queued to be sent and ends when a message is received that it has either been successfully sent or a failure has
  * occurred.
  */

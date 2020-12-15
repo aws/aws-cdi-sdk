@@ -12,9 +12,9 @@
 
 #include "timeout.h"
 
+#include "cdi_logger_api.h"
 #include "internal.h"
 #include "internal_log.h"
-#include "logger_api.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************

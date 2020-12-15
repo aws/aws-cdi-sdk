@@ -275,10 +275,11 @@ CDI_INTERFACE CdiReturnStatus CdiAvmRxCreate(CdiRxConfigData* config_data_ptr, C
  *                           part is provided to the registered user TX callback function.
  * @param avm_config_ptr Pointer to configuration data that describes the contents of this payload and subsequent
  *                       payloads. The first time this function is called for a given stream_id (in
- *                       payload_config_ptr->avm_extra_data) in the connection, a value must be specified so the
- *                       receiver can identify the format of the payload data. Afterwards, NULL shall be specified
- *                       unless some aspect of the configuration for this stream has changed since the previous payload
- *                       was transmitted.
+ *                       payload_config_ptr->avm_extra_data) after the connection's status has changed to
+ *                       kCdiConnectionStatusConnected (reported to the transmit callback function), a value must be
+ *                       specified so the receiver can identify the format of the payload data. Afterwards, NULL shall
+ *                       be specified unless some aspect of the configuration for this stream has changed since the
+ *                       previous payload was transmitted.
  * @param sgl_ptr Scatter-gather list containing the data to be transmitted. The addresses in the SGL must point to
  *                locations that reside within the memory region specified in CdiAdapterData at ret_tx_buffer_ptr.
  * @param max_latency_microsecs Maximum latency in microseconds. If the transmission time of a payload exceeds this

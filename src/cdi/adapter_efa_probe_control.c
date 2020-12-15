@@ -241,6 +241,9 @@ CdiReturnStatus ProbeControlSendCommand(ProbeEndpointState* probe_ptr, ProbeComm
                                          InternalUtilityKeyEnumToString(kKeyProbeCommand, command),
                                          packet_ptr->common_hdr.control_packet_num, requires_ack);
             }
+            if (kProbeCommandReset == command) {
+                CDI_LOG_THREAD(kLogInfo, "Sending connection request.");
+            }
         }
 
         // Put packet message in the adapter's endpoint packet queue. We use "true" here so the packet is sent
@@ -367,6 +370,9 @@ THREAD ProbeControlThread(void* ptr)
                 CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Probe stream ID[%d] process state[%s] change.",
                     EndpointManagerEndpointStreamIdGet(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle),
                     InternalUtilityKeyEnumToString(kKeyProbeState, control_cmd.probe_state));
+                if (kProbeStateEfaConnected == control_cmd.probe_state) {
+                    CDI_LOG_THREAD(kLogInfo, "Connection established.");
+                }
 
                 // Set probe state, depending on endpoint direction type.
                 ProbeState* current_probe_state_ptr = (kEndpointDirectionSend == adapter_con_ptr->direction) ?

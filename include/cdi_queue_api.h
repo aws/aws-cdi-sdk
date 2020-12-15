@@ -17,7 +17,6 @@
 #include <stdint.h>
 
 #include "cdi_os_api.h"
-#include "singly_linked_list_api.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -48,7 +47,14 @@ typedef enum {
     kQueueSignalPushWait,
 
     kQueueSignalPopPushWait, ///< In this mode, signals are enabled for both push and pop operations (see above).
+
+    kQueueSignalModeMask = 0x7, ///< Mask that only includes the main mode options. Used for ignoring option flags.
+
+    kQueueMultipleWriters = 0x08,  ///< Optional flag to add locking for thread safe pushing into the queue.
 } CdiQueueSignalMode;
+
+/// Forward declaration of CdiSinglyLinkedListEntry defined in singly_linked_list_api.h
+typedef struct CdiSinglyLinkedListEntry CdiSinglyLinkedListEntry;
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
@@ -66,7 +72,7 @@ extern "C" {
  * @param grow_count Number of items that a queue may be increased by if the initial size requested is inadequate.
  * @param max_grow_count Maximum number of times a queue may be increased before an error occurs.
  * @param item_byte_size Size of each item in bytes.
- * @param signal_mode Sets type of signals, if any, to use.
+ * @param signal_mode Sets type of signals and optional locking, if any, to use.
  * @param ret_handle_ptr Pointer to returned handle of the new queue.
  *
  * @return true if successful, otherwise false is returned.
@@ -213,6 +219,7 @@ typedef struct {
     CdiSinglyLinkedListEntry* read_ptr;  ///< Current read pointer in the queue.
     CdiSinglyLinkedListEntry* write_ptr; ///< Current write pointer in the queue.
     void* item_data_ptr; ///< Pointer to item data.
+    int occupancy; ///< The number of entries currently enqueued.
 } CdiQueueCbData;
 
 /**

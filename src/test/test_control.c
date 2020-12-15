@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "logger_api.h"
+#include "cdi_logger_api.h"
 #include "cdi_test.h"
 #include "run_test.h"
 #include "test_console.h"
@@ -585,8 +585,8 @@ CdiPtpTimestamp GetPtpTimestamp(const TestConnectionInfo* connection_info_ptr,
     duration_ns += stream_info_ptr->connection_start_time.nanoseconds;
 
     CdiPtpTimestamp timestamp = {
-        .seconds = stream_info_ptr->connection_start_time.seconds + duration_ns / NANOSECONDS_TO_SECONDS,
-        .nanoseconds = duration_ns % NANOSECONDS_TO_SECONDS
+        .seconds = stream_info_ptr->connection_start_time.seconds + duration_ns / NANOSECONDS_PER_SECOND,
+        .nanoseconds = duration_ns % NANOSECONDS_PER_SECOND
     };
 
     return timestamp;

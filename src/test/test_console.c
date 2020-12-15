@@ -23,8 +23,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "cdi_logger_api.h"
 #include "cdi_test.h"
-#include "logger_api.h"
 #include "utilities_api.h"
 
 //*********************************************************************************************************************

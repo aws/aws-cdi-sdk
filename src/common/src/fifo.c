@@ -18,7 +18,9 @@
 #include <stddef.h>
 #include <assert.h>
 
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
+
 #include "cdi_os_api.h"
 
 //*********************************************************************************************************************

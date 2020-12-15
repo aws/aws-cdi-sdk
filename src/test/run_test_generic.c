@@ -26,12 +26,14 @@
 #include <stdint.h>
 #include <string.h>
 
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
+
 #include "cdi_core_api.h"
+#include "cdi_logger_api.h"
+#include "cdi_os_api.h"
 #include "cdi_raw_api.h"
 #include "cdi_test.h"
-#include "logger_api.h"
-#include "cdi_os_api.h"
 #include "test_args.h"
 #include "test_console.h"
 #include "test_dynamic.h"
@@ -300,9 +302,15 @@ static bool CreateTxBufferPools(TestConnectionInfo* connection_info_ptr, uint8_t
     bool ret = true;
 
     // Create a payload memory pool for each stream. Will allocate enough pool items to allow for 1 + the maximum number
-    // of simultaneous connections (see POOL_PAYLOAD_ITEM_COUNT). Each item in the in the pool is an SGList with one or
-    // more entries, depending on the buffer type setting for the stream.
+    // of simultaneous connections. Each item in the pool is an SGList with one or more entries, depending on the buffer
+    // type setting for the stream.
     const int num_streams = connection_info_ptr->test_settings_ptr->number_of_streams;
+    int pool_size = connection_info_ptr->config_data.tx.max_simultaneous_tx_payloads;
+    if (0 == pool_size) {
+        pool_size = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+    }
+    pool_size++; // Make the pool_size larger the maximum number of simultaneous payloads.
+
     for (int j = 0; j < num_streams && ret; j++) {
         TestConnectionStreamInfo* stream_info_ptr = &connection_info_ptr->stream_info[j];
         char pool_name_str[MAX_POOL_NAME_LENGTH];
@@ -319,7 +327,7 @@ static bool CreateTxBufferPools(TestConnectionInfo* connection_info_ptr, uint8_t
             .buffer_type = connection_info_ptr->test_settings_ptr->buffer_type
         };
         ret = CdiPoolCreateAndInitItems(pool_name_str, // Name of the pool.
-                                        POOL_PAYLOAD_ITEM_COUNT, // Number of pool items.
+                                        pool_size, // Number of pool items.
                                         0, // Grow count.
                                         0, // Max grow count.
                                         sizeof(CdiSgList),
@@ -393,7 +401,14 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                     // Calculate the required size of each buffer and keep a running total of memory required so it can
                     // later be allocated using the adapter. Round buffer size up so each can be 8 byte aligned. See
                     // CdiCoreNetworkAdapterInitialize().
-                    stream_info_ptr->tx_pool_buffer_size = POOL_PAYLOAD_ITEM_COUNT *
+
+                    int payload_pool_size = connection_info_array[i].config_data.tx.max_simultaneous_tx_payloads;
+                    if (0 == payload_pool_size) {
+                        payload_pool_size = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+                    }
+                    payload_pool_size++; // Make payload pool one larger than maximum simultaneous payloads.
+
+                    stream_info_ptr->tx_pool_buffer_size = payload_pool_size *
                         IntDivCeil(stream_info_ptr->payload_buffer_size, sizeof(uint64_t)) * sizeof(uint64_t);
                     total_tx_payload_bytes += stream_info_ptr->tx_pool_buffer_size;
                     have_tx = true;
@@ -465,7 +480,8 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                     // Add the adapter handle to this connection's Tx config data.
                     connection_info_ptr->config_data.tx.adapter_handle = adapter_handle;
 
-                    // Create pools of buffers, POOL_PAYLOAD_ITEM_COUNT per stream in this connection.
+                    // Create pools of buffers, allocates one more than the maximum number of simultaneous payloads for
+                    // each stream in this connection.
                     got_error = !CreateTxBufferPools(connection_info_ptr, &tx_buffer_ptr);
 
                     // Start the thread that creates the Tx connection and associated resources and sends requested

@@ -13,9 +13,11 @@
 #ifndef CDI_STATISTICS_H__
 #define CDI_STATISTICS_H__
 
+// The configuration.h file must be included first since it can have defines that affect subsequent files.
 #include "configuration.h"
-#include "private.h"
+
 #include "cdi_core_api.h"
+#include "private.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -74,8 +76,9 @@ CdiReturnStatus StatsConfigure(StatisticsHandle handle, const CdiStatsConfigData
  * @param payload_ok Use true if payload was successfully transferred, otherwise false.
  * @param start_time Time when transfer for the payload started in microseconds.
  * @param max_latency_microsecs The specified maximum latency in microseconds of the payload.
+ * @param bytes_transferred The number of bytes transferred for this connection.
  */
 void StatsGatherPayloadStatsFromConnection(CdiEndpointState* endpoint_ptr, bool payload_ok, uint64_t start_time,
-                                           uint64_t max_latency_microsecs);
+                                           uint64_t max_latency_microsecs, uint64_t bytes_transferred);
 
 #endif  // CDI_STATISTICS_H__

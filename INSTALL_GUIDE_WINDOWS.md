@@ -6,11 +6,13 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
 - [Connecting to Windows and activating](#connecting-to-windows-and-activating)
 - [Install the Windows EFA driver](#install-the-windows-efa-driver)
 - [Configure the EC2 Instance](#configure-the-ec2-instance)
+  - [Install the AWS SDK for C++ dependencies](#install-the-aws-sdk-for-c-dependencies)
+  - [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path)
 - [Install the AWS CDI SDK](#install-the-aws-cdi-sdk)
 - [Build the HTML documentation](#build-the-html-documentation)
 - [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications)
-  - [Install the AWS SDK for C++ on Windows](#install-the-aws-sdk-for-c-on-windows)
-  - [Download and build the AWS SDK for C++](#download-and-build-the-aws-sdk-for-c)
+  - [Install the AWS SDK for C++ dependencies](#install-the-aws-sdk-for-c-dependencies)
+  - [Install the AWS SDK for C++](#install-the-aws-sdk-for-c)
   - [Build the AWS CDI SDK](#build-the-aws-cdi-sdk)
   - [Disabling the display of performance metrics to your Amazon CloudWatch account](#disabling-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
 - [Running the Windows test application](#running-the-windows-test-application)
@@ -122,21 +124,64 @@ Completed installation.
     - Select OK, and then exit the **Server Manager**.
     - Reboot for changes to take effect.
 
+## Install the AWS SDK for C++ dependencies
+
+1. Create an IAM User with CloudWatch and performance metrics permissions.
+    - Navigate to the [AWS console IAM Policies](https://console.aws.amazon.com/iam/home#/policies)
+        - Select **Create policy** and then select **JSON**.
+        - An example policy is below:
+
+        ```JSON
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": "mediaconnect:*",
+                    "Resource": "*"
+                }
+            ]
+        }
+        ```
+
+    - To create an IAM User click on **Users** under **Access management**.
+        - Select **Add user** and provide a name and select **Programmatic access**.
+        - Select **Next: Permissions** and then select **Create group** to create a new user group.
+        - Put in a **Group name** for the new group and select the policies for the group.
+            - Select the policy that was made in the step above for mediaconnect access.
+            - Select **CloudWatchAgentServerPolicy** to provide cloudwatch access.
+            - Select **Create group**
+                - Select **Next:Tags** the select **Next:Review**.
+                - Select **Create user**
+1. Verify that CMake version 3.2 or higher is installed. If CMake is not installed, [download and install version 3.18.5](https://cmake.org/download/).
+
+## Add tools to the System Environment Variable Path
+
+- Add installed tools to the System Environment Variable: **Path**.
+    1. Select the **Windows Start button**.
+    1. Type **Environment**, and it will match with **Edit the system environment variables**. Select this suggested option.
+    1. In the resulting pop-up window, select **Environment Variables**.
+    1. In the **System Variables** section, select the **Path** variable and click **Edit**, then click **New**.
+    1. Add the following path into the new text area: ```C:\Program Files\CMake\bin```
+    1. Click **New** again and add the following path into the text area: ```C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin```
+    1. Click **New** again and add the following path into the text area: ```C:\Program Files\doxygen\bin```
+    1. select **OK**.
+
 ---
 
 # Install the AWS CDI SDK
 
 **Caution**: Do not install a new version of the AWS CDI SDK over an old one.
 
-**Note**: Refer to the [linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk) for information about how to acquire the code repositories, steps to install, and folder descriptions.
-**Windows PowerShell** and [git for windows](https://git-scm.com/download/win) may be used while following the steps outlined in the Linux installation guide, or the code may be downloaded directly from zip archives.
+**Note**: **Windows PowerShell** and [git for windows](https://git-scm.com/download/win) may be used to acquire source repositories while following the steps outlined in the Linux installation guide, or the code may be downloaded directly from zip archives.
 
-(Optional) Download and install **PDCurses**.
-    **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. It is **not** required for the AWS CDI SDK to be built or used. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
+1. Clone (or download) the **libfabric** repo as described in [linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk)
 
-1. Download and install the most recent stable version of **PDCurses**.
+1. Place the **libfabric** folder is at the same directory level as the **aws-cdi-sdk** folder.
 
-1. Clone the GitHub repo linked at [PDCurses](https://pdcurses.org/).
+1. Clone (or download) the PDCurses GitHub repo linked at [PDCurses](https://pdcurses.org/).
+
+    **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
 
 1. Place the **PDCurses** folder at the same level as the **aws-cdi-sdk** and **libfabric** folders.
 
@@ -180,64 +225,55 @@ To build the AWS CDI SDK documentation, install Doxygen using Chocolatey and con
 
 The extracted AWS CDI SDK solution, cdi_proj.sln, contains three test applications: *cdi_test*, *cdi_test_min_rx*, and *cdi_test_min_tx*. Each project can be built using either the Debug or Release configuration.
 
-## Install the AWS SDK for C++ on Windows
-
-1. Create an IAM User with CloudWatch and performance metrics permissions.
-    - Navigate to the [AWS console IAM Policies](https://console.aws.amazon.com/iam/home#/policies)
-        - Select **Create policy** and then select **JSON**.
-        - An example policy is below:
-
-        ```JSON
-        {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": "mediaconnect:*",
-                    "Resource": "*"
-                }
-            ]
-        }
-        ```
-
-    - To create an IAM User click on **Users** under **Access management**.
-        - Select **Add user** and provide a name and select **Programmatic access**.
-        - Select **Next: Permissions** and then select **Create group** to create a new user group.
-        - Put in a **Group name** for the new group and select the policies for the group.
-            - Select the policy that was made in the step above for mediaconnect access.
-            - Select **CloudWatchAgentServerPolicy** to provide cloudwatch access.
-            - Select **Create group**
-                - Select **Next:Tags** the select **Next:Review**.
-                - Select **Create user**
-1. Verify that CMake version 3.2 or higher is installed. If CMake is not installed, [download the latest version](https://cmake.org/download/).
-1. Add CMake to the System Environment Variable: **Path**.
-    - Select the **Windows Start button**.
-    - Type **Environment**, and it will match with **Edit the system environment variables**. Select this suggested option.
-    - In the resulting pop-up window, select **Environment Variables**.
-    - In the **System Variables** section, select the **Path** variable and click **Edit**, then click **New**.
-    - Add the following path into the new text area: ```C:\Program Files\CMake\bin``` and select **OK**.
-
-## Download and build the AWS SDK for C++
+## Install the AWS SDK for C++
 
 **Note**: The AWS CDI SDK was tested with AWS SDK version 1.8.46.
 
-1. Follow the instructions from the [AWS SDK Developer guide](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html) taking note of the following.
-    - Additional files for AWS performance metrics gathering need to be copied from the AWS CDI SDK directory to the AWS SDK directory before running any of the ```cmake``` commands. Windows Explorer or a Powershell command like ```copy -recurse .\aws-cpp-sdk-cdi\ <path to AWS SDK>``` from the top level AWS CDI SDK can be used to perform this step.
-    - Only the ```monitoring``` and ```cdi``` modules need to be built. Specify ```-D BUILD_ONLY="monitoring;cdi"``` with the first ```cmake``` command.
-    - You may need to add the msbuild command to your system path environment variable as described above for the cmake command.  If so, the msbuild path will be similar to ```C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin```.
-    - **Important:** You must run the install commands in a shell that was started in **Administrator mode**. For example:
-        - Open Microsoft Visual Studio 2019 in Administrator mode.
-        - Open **Tools > Command Line > Developer Powershell**.
-    - **Note**: The AWS SDK build process has two configurations: Debug and Release. If you choose to run the AWS CDI SDK in Debug mode, set the appropriate flags in CMake to Debug when installing. Set the appropriate flags in CMake to Release if you install AWS CDI SDK in Release mode.
-1. The AWS SDK C++ installation procedure in step 1 creates a folder called ```aws-cpp-sdk-all``` in ```C:\Program Files(x86)```. This is the location of the resulting .dlls and .libs along with the necessary include header files.
+**Note**: The AWS SDK for C++ is essential for metrics gathering functions of AWS CDI SDK to operate properly. Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
+
+**Note**: It is recommended to first review the [AWS SDK Developer guide](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html) before proceeding through the next steps.
+
+**Note**: The following instructions will install the AWS SDK for C++ at the same directory level as the AWS CDI SDK. This is not required but is recommended for simplicity of installation.
+
+1. Open Microsoft Visual Studio 2019 by right clicking on it and selecting **Run as Administrator**.
+1. Inside Microsoft Visual Studio 2019 click **Open a project or solution** and navigate to the install directory used in the section [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and open the solution file ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
+1. Open a Powershell by selecting **Tools > Command Line > Developer Powershell**.
+1. Inside the shell navigate to the install directory used for [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and download the AWS SDK for C++.
+
+    ```ps
+    cd <path to installation directory>
+    git clone -b 1.8.46 https://github.com/aws/aws-sdk-cpp.git
+    ```
+
+1. Copy the AWS CDI SDK files required by ```AWS SDK for C++``` to the proper location.
+
+    ```ps
+    copy -recurse .\aws-cdi-sdk\aws-cpp-sdk-cdi\ .\aws-sdk-cpp\
+    ```
+
+1. Build and install AWS SDK for C++ for use with the AWS CDI SDK.
+
+    ```ps
+    cd .\aws-sdk-cpp
+    cmake . -D CMAKE_BUILD_TYPE=Debug -D BUILD_ONLY="monitoring;cdi"
+    msbuild .\ALL_BUILD.vcxproj
+    msbuild .\INSTALL.vcxproj /p:Configuration=Debug
+    ```
+
+    **Important**: The install commands must be run in a shell in **Administrator mode**.
+
+    **Note**: This step builds and installs the AWS SDK for C++ **Debug** build. The AWS SDK for C++ **Release** build is incompatible with the AWS CDI SDK **Debug** build but the AWS SDK for C++ **Debug** build is compatible with both **Debug** and **Release** variants of AWS CDI SDK.
+
+1. Add the AWS SDK for C++ to the system **PATH**. The installation procedure creates a folder called ```aws-cpp-sdk-all``` in ```C:\Program Files (x86)```. This is the location the of the resulting .dlls and .libs along with the necessary include header files.
+
     - The folder contains 3 directories: ```bin```, ```include```, and ```lib```.
-    - Add ```C:\Program Files (x86)\aws-cpp-sdk-all\bin``` to the **Path** System Environment Variables.
+    - Add ```C:\Program Files (x86)\aws-cpp-sdk-all\bin``` to the **Path** System Environment Variable using the steps outlined in the section: [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path).
 
 ## Build the AWS CDI SDK
 
 This procedure builds the entire AWS CDI SDK solution in a Debug configuration.
 
-1. Use Microsoft Visual Studio 2019 to open the *cdi_proj.sln* solution.
+1. Use Microsoft Visual Studio 2019 and open the *cdi_proj.sln* solution file found at ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
 1. Choose a configuration. For this example, choose **Debug**.
 1. Clean the solution each time a configuration is changed by selecting: **Build** > **Clean Solution**.
 1. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications.
@@ -264,6 +300,8 @@ Do the following to ensure the firewall does not block traffic to or from the te
 - Click **Allow another app...**
 
 - Click **Browse...** and navigate to the test application executable that was built in [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications).
+
+**Note**: Each executable must be individually allowed through the firewall. As an example cdi_test_minimal_rx.exe and cdi_test_minimal_tx.exe must be allowed individually. "Debug" and "Release" variants of executables must also be individually allowed.
 
 ## Help
 

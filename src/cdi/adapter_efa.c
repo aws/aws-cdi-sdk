@@ -241,17 +241,35 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         ret = fi_ep_bind(endpoint_ptr->endpoint_ptr, &endpoint_ptr->completion_queue_ptr->fid, flags);
     }
 
-    if (0 == ret && is_transmitter) {
-        CdiAdapterState* adapter_state_ptr =
-            endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr;
-        // Register the Tx buffer with libfabric.
-        ret = fi_mr_reg(endpoint_ptr->domain_ptr, adapter_state_ptr->adapter_data.ret_tx_buffer_ptr,
-                        adapter_state_ptr->adapter_data.tx_buffer_size_bytes, FI_SEND, 0, 0, 0,
-                        &endpoint_ptr->tx_state.memory_region_ptr, NULL);
+    if (0 == ret) {
+        if (is_transmitter) {
+            CdiAdapterState* adapter_state_ptr =
+                endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr;
+            // Register the Tx buffer with libfabric.
+            ret = fi_mr_reg(endpoint_ptr->domain_ptr, adapter_state_ptr->adapter_data.ret_tx_buffer_ptr,
+                            adapter_state_ptr->adapter_data.tx_buffer_size_bytes, FI_SEND, 0, 0, 0,
+                            &endpoint_ptr->tx_state.memory_region_ptr, NULL);
+        } else if (!is_socket_based) {
+            // For the EFA a packet pool must be created before marking the endpoint enabled or else packets end up in
+            // a shared buffer that is never emptied and can overrun.
+            rs = EfaRxPacketPoolCreate(endpoint_ptr);
+            if (kCdiStatusOk != rs) {
+                ret = -1;
+            }
+        }
     }
 
     if (0 == ret) {
         ret = fi_enable(endpoint_ptr->endpoint_ptr);
+        // For Socket based receivers the endpoint must be enabled before creating the packet pool. This is because the
+        // socket receiver code in libfabric's sock_ep_recvmsg() will return an error (FI_EOPBADSTATE) if
+        // EfaRxPacketPoolCreate() is called befor fi_enable because rx_ctx->enabled is false on line 91 of sock_msg.c.
+        if (!is_transmitter && is_socket_based) {
+            rs = EfaRxPacketPoolCreate(endpoint_ptr);
+            if (kCdiStatusOk != rs) {
+                ret = -1;
+            }
+        }
     }
 
     if (0 == ret) {
@@ -264,7 +282,7 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
             char gid_name_str[MAX_IPV6_ADDRESS_STRING_LENGTH];
             DeviceGidToString(endpoint_ptr->local_ipv6_gid_array,
                               sizeof(endpoint_ptr->local_ipv6_gid_array), gid_name_str, sizeof(gid_name_str));
-            CDI_LOG_HANDLE(endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->log_handle, kLogInfo,
+            CDI_LOG_HANDLE(endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->log_handle, kLogDebug,
                            "Using local EFA device GID[%s].", gid_name_str);
         }
     }
@@ -274,8 +292,7 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         fi_freeinfo(hints_ptr);
     }
 
-    if (0 != ret) {
-        assert(0 == ret);
+    if (0 != ret && kCdiStatusOk == rs) {
         rs = kCdiStatusFatal;
     }
 
@@ -289,6 +306,12 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
  */
 static void LibFabricEndpointClose(EfaEndpointState* endpoint_ptr)
 {
+    bool is_transmitter = (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction);
+
+    if (!is_transmitter) {
+        EfaRxPacketPoolFree(endpoint_ptr);
+    }
+
     if (endpoint_ptr->endpoint_ptr) {
         fi_close(&endpoint_ptr->endpoint_ptr->fid);
         endpoint_ptr->endpoint_ptr = NULL;
@@ -341,8 +364,6 @@ static CdiReturnStatus EfaAdapterEndpointStop(EfaEndpointState* endpoint_ptr, bo
 
     if (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction) {
         EfaTxEndpointStop(endpoint_ptr);
-    } else {
-        EfaRxEndpointStop(endpoint_ptr);
     }
 
     // Close libfabric endpoint resources.
@@ -477,10 +498,12 @@ static CdiReturnStatus EfaEndpointOpen(AdapterEndpointHandle endpoint_handle, co
         rs = LibFabricEndpointOpen(endpoint_ptr);
     }
 
-    if (kEndpointDirectionSend == endpoint_handle->adapter_con_state_ptr->direction) {
-        rs = EfaTxEndpointOpen(endpoint_ptr, remote_address_str, port_number);
-    } else {
-        rs = EfaRxEndpointOpen(endpoint_ptr);
+    if (kCdiStatusOk == rs) {
+        if (kEndpointDirectionSend == endpoint_handle->adapter_con_state_ptr->direction) {
+            rs = EfaTxEndpointOpen(endpoint_ptr, remote_address_str, port_number);
+        } else {
+            rs = EfaRxEndpointOpen(endpoint_ptr);
+        }
     }
 
     if (kCdiStatusOk != rs) {
@@ -774,8 +797,6 @@ CdiReturnStatus EfaAdapterEndpointStart(EfaEndpointState* endpoint_ptr)
 
     if (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction) {
         rs = EfaTxEndpointStart(endpoint_ptr);
-    } else {
-        rs = EfaRxEndpointStart(endpoint_ptr);
     }
 
     return rs;

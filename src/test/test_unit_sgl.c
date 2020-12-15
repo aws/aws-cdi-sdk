@@ -13,8 +13,8 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "logger_api.h"
 #include "cdi_core_api.h"
+#include "cdi_logger_api.h"
 #include "utilities_api.h"
 
 //*********************************************************************************************************************

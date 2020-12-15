@@ -19,11 +19,13 @@
 
 #include <inttypes.h>
 
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
-#include "logger_api.h"
+
+#include "cdi_logger_api.h"
 #include "cdi_os_api.h"
-#include "run_test.h"
 #include "cdi_utility_api.h"
+#include "run_test.h"
 #include "test_control.h"
 #include "test_dynamic.h"
 #include "utilities_api.h"
@@ -464,13 +466,11 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
                    test_settings_ptr->connection_name_str, rate_period_microseconds);
 
     // Set initial timestamp for PTP time.
-    struct timespec start_time;
-    CdiCoreGetUtcTime(&start_time);
+    const CdiPtpTimestamp start_time = CdiCoreGetPtpTimestamp(NULL);
     // Set start time for each stream.
     for (int i = 0; i < test_settings_ptr->number_of_streams; i++) {
         TestConnectionStreamInfo* stream_info_ptr = &connection_info_ptr->stream_info[i];
-        stream_info_ptr->connection_start_time.seconds = (uint32_t)start_time.tv_sec;
-        stream_info_ptr->connection_start_time.nanoseconds = start_time.tv_nsec;
+        stream_info_ptr->connection_start_time  = start_time;
     }
 
     // Loop through all payloads.
@@ -511,7 +511,7 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
             CdiPtpTimestamp next_timestamp = GetPtpTimestamp(connection_info_ptr, stream_settings_ptr, stream_info_ptr,
                                                              ptp_rate_count);
             uint64_t next_ptp_start_time = CdiUtilityPtpTimestampToMicroseconds(&next_timestamp);
-            uint64_t current_ptp_time = CdiCoreGetUtcTimeMicroseconds(); // Function used to get PTP time.
+            uint64_t current_ptp_time = CdiCoreGetTaiTimeMicroseconds(); // Function used to get PTP time.
             if (current_ptp_time > next_ptp_start_time) {
                 // We ran over our timing budget.
                 uint64_t overtime = current_ptp_time - next_ptp_start_time;
@@ -525,7 +525,7 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
                                        max_overtime, overtime - max_overtime);
                         WaitForTxPayloadsToComplete(connection_info_ptr, payload_count,
                                                     (uint32_t)(max_overtime / 1000L)); // Convert us to ms.
-                        current_ptp_time = CdiCoreGetUtcTimeMicroseconds(); // Function used to get PTP time.
+                        current_ptp_time = CdiCoreGetTaiTimeMicroseconds(); // Function used to get PTP time.
                         overtime = current_ptp_time - next_ptp_start_time;
                     }
                 }
@@ -656,7 +656,8 @@ static bool TestTxSendTestData(TestConnectionInfo* connection_info_ptr)
                         // Make generic config data structure for ancillary data; no specific configuration
                         // parameters are allowed for this type.
                         CdiAvmBaselineConfig baseline_config = {
-                            .payload_type = kCdiAvmAncillary
+                            .payload_type = kCdiAvmAncillary,
+                            .ancillary_data_config = stream_settings_ptr->ancillary_data_params
                         };
                         CdiAvmMakeBaselineConfiguration(&baseline_config, &stream_settings_ptr->avm_config,
                                                         &stream_settings_ptr->unit_size);
@@ -846,11 +847,18 @@ THREAD TestTxCreateThread(void* arg_ptr)
         connection_info_ptr->config_data.tx.stats_cb_ptr = TestStatisticsCallback;
         connection_info_ptr->config_data.tx.stats_user_cb_param = connection_info_ptr;
 
-        // Create a Tx user data memory pool for this connection. Will allocate enough pool items to allow for 1 + the
-        // maximum number of simultaneous connections (see POOL_PAYLOAD_ITEM_COUNT).
+        // Determine size of pool to create.
+        int pool_size = connection_info_ptr->config_data.tx.max_simultaneous_tx_payloads;
+        // Will allocate enough pool items to allow for 1 + the maximum number of simultaneous connections.
+        if (0 == pool_size) {
+            pool_size = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION + 1;
+        }
+        pool_size++;
+
+        // Create a Tx user data memory pool for this connection.
         got_error = !CdiPoolCreate(
                             "TestTxUserData Pool", // Name of the pool.
-                            POOL_PAYLOAD_ITEM_COUNT, // Number of pool items.
+                            pool_size, // Number of pool items.
                             0, // Grow count size (don't want to grow).
                             0, // Max grow count (don't want to grow).
                             sizeof(TestTxUserData), // Payload buffer size.

@@ -14,7 +14,7 @@
 
 #include "test_dynamic.h"
 
-#include "logger_api.h"
+#include "cdi_logger_api.h"
 #include "cdi_test.h"
 
 //*********************************************************************************************************************

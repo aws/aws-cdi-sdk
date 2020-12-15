@@ -20,11 +20,12 @@
 #include <assert.h>
 #include <stdbool.h>
 
-#include "logger_api.h"
-#include "cdi_baseline_profile_api.h"
+#include "cdi_baseline_profile_01_00_api.h"
+#include "cdi_baseline_profile_02_00_api.h"
 #include "cdi_core_api.h"
-#include "cdi_utility_api.h"
+#include "cdi_logger_api.h"
 #include "cdi_os_api.h"
+#include "cdi_utility_api.h"
 #include "test_common.h"
 
 //*********************************************************************************************************************
@@ -130,6 +131,8 @@ typedef struct {
     CdiAvmVideoConfig video_params;
     /// Audio parameters set by user with --avm_audio option.  Unused if not --avm_audio payload type.
     CdiAvmAudioConfig audio_params;
+    /// Ancillary parameters set by user with --avm_anc option.  Unused if not --avm_anc payload type.
+    CdiAvmAncillaryDataConfig ancillary_data_params;
     /// If using audio set this true if either the sample rate, bit depth, or any of the sample groups are unspecified.
     bool do_not_use_audio_rtp_time;
     /// Integer value in attoseconds for the audio sample period. Unused if not --avm_audio payload type.

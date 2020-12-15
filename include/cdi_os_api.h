@@ -129,15 +129,28 @@
     #define CdiOsAtomicLoadPointer(x) *(volatile void**)(x)
     #define CdiOsAtomicStorePointer(x, v) *(volatile void**)(x) = (v)
 
-    // Define portable socket ID type.
-    typedef SOCKET CdiSocket;
-
     typedef struct siginfo_t siginfo_t;
 
     struct siginfo_t {
         long si_pid;
         long si_uid;
     };
+
+    typedef HANDLE CdiStaticMutexType;
+    #define CDI_STATIC_MUTEX_INITIALIZER    NULL
+    #define CdiOsStaticMutexLock(x) StaticMutexLockWin32(&(x))
+    // If two threads enter the if-body, then only one succeeds in initializing the lock. When the application exists,
+    // the mutex handle held in x will be freed by the windows OS.
+    static inline void StaticMutexLockWin32(volatile HANDLE* x) {
+        if (*x == NULL) {
+            HANDLE tmp = CreateMutex(NULL, FALSE, NULL);
+            if (InterlockedCompareExchangePointer((PVOID*)x, (PVOID)tmp, NULL) != NULL) {
+                CloseHandle(tmp);
+            }
+        }
+        WaitForSingleObject(*x, INFINITE);
+    }
+    #define CdiOsStaticMutexUnlock(x) (ReleaseMutex(x) == 0)
 
 #elif defined _LINUX
     #define CDI_STDIN  stdin   ///< Definition of OS agnostic standard input stream.
@@ -148,10 +161,9 @@
     #define CDI_STDOUT_FILENO STDOUT_FILENO ///< Definition of OS agnostic standard output file number.
     #define CDI_STDERR_FILENO STDERR_FILENO ///< Definition of OS agnostic standard error file number.
 
-    /// Define portable thread function.
-    #define THREAD_PARAM void*
-    #define THREAD int
-    typedef THREAD (*ThreadFuncName) (THREAD_PARAM);
+    #define THREAD_PARAM void*  ///< Define portable thread function parameter type.
+    #define THREAD int          ///< Define portable thread function return type.
+    typedef THREAD (*ThreadFuncName) (THREAD_PARAM); ///< Define portable thread function.
 
     /// Define portable thread data type.
     typedef pthread_key_t CdiThreadData;
@@ -201,12 +213,14 @@
     #define CdiOsAtomicAdd64(x, b) __sync_add_and_fetch((x), (b))
 
     /// @brief Atomic load value. Valid memory models are:
-    /// __ATOMIC_RELAXED : No barriers or synchronization.
-    /// __ATOMIC_CONSUME : Data dependency only for both barrier and synchronization with another thread.
-    /// __ATOMIC_ACQUIRE : Barrier to hoisting of code and synchronizes with release (or stronger) semantic stores from
-    ///                    another thread.
-    /// __ATOMIC_SEQ_CST : Full barrier in both directions and synchronizes with acquire loads and release stores in
-    ///                    all threads.
+    /*! @code
+        __ATOMIC_RELAXED : No barriers or synchronization.
+        __ATOMIC_CONSUME : Data dependency only for both barrier and synchronization with another thread.
+        __ATOMIC_ACQUIRE : Barrier to hoisting of code and synchronizes with release (or stronger) semantic stores from
+                           another thread.
+        __ATOMIC_SEQ_CST : Full barrier in both directions and synchronizes with acquire loads and release stores in
+                           all threads.
+    @endcode */
     #define CdiOsAtomicLoad16(x) __atomic_load_n((x), __ATOMIC_CONSUME)
     /// @brief 32-bit version of CdiOsAtomicLoad16 (matches windows variant, which uses functions).
     #define CdiOsAtomicLoad32(x) __atomic_load_n((x), __ATOMIC_CONSUME)
@@ -216,11 +230,13 @@
     #define CdiOsAtomicLoadPointer(x) __atomic_load_n((x), __ATOMIC_CONSUME)
 
     /// Atomic store value. Valid memory models are:
-    /// __ATOMIC_RELAXED : No barriers or synchronization.
-    /// __ATOMIC_RELEASE : Barrier to sinking of code and synchronizes with acquire (or stronger) semantic loads from
-    ///                    another thread.
-    /// __ATOMIC_SEQ_CST : Full barrier in both directions and synchronizes with acquire loads and release stores in
-    ///                    all threads.
+    /*! @code
+        __ATOMIC_RELAXED : No barriers or synchronization.
+        __ATOMIC_RELEASE : Barrier to sinking of code and synchronizes with acquire (or stronger) semantic loads from
+                           another thread.
+        __ATOMIC_SEQ_CST : Full barrier in both directions and synchronizes with acquire loads and release stores in
+                           all threads.
+    @endcode */
     #define CdiOsAtomicStore16(x, v) __atomic_store_n((x), (v), __ATOMIC_RELEASE)
     /// @brief 32-bit version of CdiOsAtomicStore16 (matches windows variant, which uses functions).
     #define CdiOsAtomicStore32(x, v) __atomic_store_n((x), (v), __ATOMIC_RELEASE)
@@ -232,8 +248,23 @@
     /// Define portable invalid handle.
     #define INVALID_HANDLE_VALUE -1
 
-    /// Define portable socket ID type.
-    typedef int CdiSocket;
+    /// Define portable static mutex type. An example implementation:
+    /*! @code
+        static CdiStaticMutexType my_lock = CDI_STATIC_MUTEX_INITIALIZER;
+
+        void Foo() {
+            CdiOsStaticMutexLock(my_lock);
+            // Do something that uses a shared resource.
+            CdiOsStaticMutexLock(my_lock);
+        }
+    @endcode */
+    typedef pthread_mutex_t CdiStaticMutexType;
+    /// @brief Initialization value used to initialize the value of a static mutex variable.
+    #define CDI_STATIC_MUTEX_INITIALIZER    PTHREAD_MUTEX_INITIALIZER
+    /// @brief Lock a statically generated mutex.
+    #define CdiOsStaticMutexLock(x)         pthread_mutex_lock(&(x))
+    /// @brief Unlock a statically generated mutex.
+    #define CdiOsStaticMutexUnlock(x)       pthread_mutex_unlock(&(x))
 #endif // _LINUX
 
 #define MAX_THREAD_NAME     (50)         ///< Maximum thread name size.
@@ -257,6 +288,9 @@ typedef struct {
 /// @brief Define portable thread type. Separate name from type, otherwise the typedef that follows it will generate a
 /// compile error (duplicate typedef).
 typedef struct CdiThreadID_t* CdiThreadID;
+
+/// Define portable socket type.
+typedef struct CdiSocket_t* CdiSocket;
 
 /// Maximum number of signal handlers.
 #define MAX_SIGNAL_HANDLERS     (10)

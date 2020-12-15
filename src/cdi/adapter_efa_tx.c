@@ -256,9 +256,6 @@ CdiReturnStatus EfaTxEndpointSend(const AdapterEndpointHandle handle, const Pack
     CdiReturnStatus rs = kCdiStatusOk;
     EfaEndpointState* endpoint_state_ptr = (EfaEndpointState*)handle->type_specific_ptr;
 
-    // Increment the Tx packets in progress count.
-    endpoint_state_ptr->tx_state.tx_packets_in_process++;
-
     struct iovec msg_iov_array[MAX_TX_SGL_PACKET_ENTRIES];
     int iov_count = 0;
 
@@ -277,6 +274,9 @@ CdiReturnStatus EfaTxEndpointSend(const AdapterEndpointHandle handle, const Pack
 
     if (!PostTxData(endpoint_state_ptr, msg_iov_array, iov_count, packet_ptr, flush_packets)) {
         rs = kCdiStatusSendFailed;
+    } else {
+        // Increment the Tx packets in progress count.
+        endpoint_state_ptr->tx_state.tx_packets_in_process++;
     }
 
     if (kCdiStatusOk != rs) {

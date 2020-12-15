@@ -20,11 +20,11 @@
 
 #include <stdbool.h>
 
-#include "fifo_api.h"
-#include "logger_api.h"
 #include "cdi_avm_api.h"
 #include "cdi_core_api.h"
+#include "cdi_logger_api.h"
 #include "cdi_test.h"
+#include "fifo_api.h"
 #include "test_control.h"
 #include "utilities_api.h"
 
@@ -429,9 +429,19 @@ static void VerifyAvmAudioConfiguration(TestConnectionInfo* connection_info_ptr,
                             test_settings_ptr->connection_name_str, stream_settings_ptr->stream_id);
         connection_info_ptr->pass_status = false;
     } else {
-        // Check the audio config data.
-        // Audio has 3 config parameters to check.  We test against what was stored in test settings based
-        // on user-supplied command line options.
+        // Check the audio config data. We test against what was stored in test settings based on user-supplied command
+        // line options.
+        if (0 != memcmp(&audio_config_ptr->version, &stream_settings_ptr->audio_params.version,
+                        sizeof(audio_config_ptr->version))) {
+            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected audio v[%02d.%02d] but got v[%02d.%02d].",
+                                test_settings_ptr->connection_name_str,
+                                stream_index,
+                                stream_settings_ptr->audio_params.version.major,
+                                stream_settings_ptr->audio_params.version.minor,
+                                audio_config_ptr->version.major,
+                                audio_config_ptr->version.minor);
+            connection_info_ptr->pass_status = false;
+        }
         if (audio_config_ptr->grouping != stream_settings_ptr->audio_params.grouping) {
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected audio grouping [%d] but got [%d].",
                                 test_settings_ptr->connection_name_str,
@@ -465,6 +475,43 @@ static void VerifyAvmAudioConfiguration(TestConnectionInfo* connection_info_ptr,
 }
 
 /**
+ * This function validates an audio AVM ancillary data payload. The pass_status of the TestConnectionInfo will be set to
+ * 'false' if there is an error in the payload.
+ *
+ * @param connection_info_ptr Pointer to the test connection info structure.
+ * @param anc_config_ptr Pointer to the ancillary data configuration structure received through the SDK.
+ * @param stream_settings_ptr Pointer to the selected stream's StreamSettings structure.
+ * @param stream_index Index of the stream_settings array for this particular stream.
+ */
+static void VerifyAvmAncillaryDataConfiguration(TestConnectionInfo* connection_info_ptr,
+                                                const CdiAvmAncillaryDataConfig* anc_config_ptr,
+                                                const StreamSettings* stream_settings_ptr, int stream_index)
+{
+    TestSettings* test_settings_ptr = connection_info_ptr->test_settings_ptr;
+
+    if (anc_config_ptr == NULL) {
+        // If there is no ancillary config data, then error.
+        TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream ID[%d]: Rx expected ancillary config data, but none detected.",
+                            test_settings_ptr->connection_name_str, stream_settings_ptr->stream_id);
+        connection_info_ptr->pass_status = false;
+    } else {
+        // Check the ancillary config data. We test against what was stored in test settings based on user-supplied
+        // command line options.
+        if (0 != memcmp(&anc_config_ptr->version, &stream_settings_ptr->ancillary_data_params.version,
+                        sizeof(anc_config_ptr->version))) {
+            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected ancillary data v[%02d.%02d] but got v[%02d.%02d].",
+                                test_settings_ptr->connection_name_str,
+                                stream_index,
+                                stream_settings_ptr->ancillary_data_params.version.major,
+                                stream_settings_ptr->ancillary_data_params.version.minor,
+                                anc_config_ptr->version.major,
+                                anc_config_ptr->version.minor);
+            connection_info_ptr->pass_status = false;
+        }
+    }
+}
+
+/**
  * This function validates a video AVM payload. The pass_status of the TestConnectionInfo will be set to 'false'
  * if there is an error in the payload.
  *
@@ -485,7 +532,19 @@ static void VerifyAvmVideoConfiguration(TestConnectionInfo* connection_info_ptr,
                             test_settings_ptr->connection_name_str, stream_settings_ptr->stream_id);
         connection_info_ptr->pass_status = false;
     } else {
-        // Check the video config data.
+        // Check the video config data. We test against what was stored in test settings based on user-supplied command
+        // line options.
+        if (0 != memcmp(&video_config_ptr->version, &stream_settings_ptr->video_params.version,
+                        sizeof(video_config_ptr->version))) {
+            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected v[%02d.%02d] but got v[%02d.%02d].",
+                                test_settings_ptr->connection_name_str,
+                                stream_index,
+                                stream_settings_ptr->video_params.version.major,
+                                stream_settings_ptr->video_params.version.minor,
+                                video_config_ptr->version.major,
+                                video_config_ptr->version.minor);
+            connection_info_ptr->pass_status = false;
+        }
         if (video_config_ptr->width != stream_settings_ptr->video_params.width) {
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected video width [%d] but got [%d].",
                                 test_settings_ptr->connection_name_str,
@@ -506,28 +565,30 @@ static void VerifyAvmVideoConfiguration(TestConnectionInfo* connection_info_ptr,
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected video sampling [%s] but got [%s].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoSamplingType,
-                                    stream_settings_ptr->video_params.sampling),
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoSamplingType, video_config_ptr->sampling));
+                                CdiAvmKeyEnumToString(kKeyAvmVideoSamplingType,
+                                    stream_settings_ptr->video_params.sampling, &video_config_ptr->version),
+                                CdiAvmKeyEnumToString(kKeyAvmVideoSamplingType, video_config_ptr->sampling,
+                                    &video_config_ptr->version));
             connection_info_ptr->pass_status = false;
         }
         if (video_config_ptr->alpha_channel != stream_settings_ptr->video_params.alpha_channel) {
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected alpha channel [%s] but got [%s].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoAlphaChannelType,
-                                    stream_settings_ptr->video_params.alpha_channel),
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoAlphaChannelType,
-                                    video_config_ptr->alpha_channel));
+                                CdiAvmKeyEnumToString(kKeyAvmVideoAlphaChannelType,
+                                    stream_settings_ptr->video_params.alpha_channel, &video_config_ptr->version),
+                                CdiAvmKeyEnumToString(kKeyAvmVideoAlphaChannelType,
+                                    video_config_ptr->alpha_channel, &video_config_ptr->version));
             connection_info_ptr->pass_status = false;
         }
         if (video_config_ptr->depth != stream_settings_ptr->video_params.depth) {
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected video depth [%s] but got [%s].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoBitDepthType,
-                                    stream_settings_ptr->video_params.depth),
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoBitDepthType, video_config_ptr->depth));
+                                CdiAvmKeyEnumToString(kKeyAvmVideoBitDepthType,
+                                    stream_settings_ptr->video_params.depth, &video_config_ptr->version),
+                                CdiAvmKeyEnumToString(kKeyAvmVideoBitDepthType, video_config_ptr->depth,
+                                    &video_config_ptr->version));
             connection_info_ptr->pass_status = false;
         }
         if (video_config_ptr->frame_rate_num != stream_settings_ptr->video_params.frame_rate_num) {
@@ -550,9 +611,10 @@ static void VerifyAvmVideoConfiguration(TestConnectionInfo* connection_info_ptr,
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected video colorimetry [%s] but got [%s].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoColorimetryType,
-                                    stream_settings_ptr->video_params.colorimetry),
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoColorimetryType, video_config_ptr->colorimetry));
+                                CdiAvmKeyEnumToString(kKeyAvmVideoColorimetryType,
+                                    stream_settings_ptr->video_params.colorimetry, &video_config_ptr->version),
+                                CdiAvmKeyEnumToString(kKeyAvmVideoColorimetryType, video_config_ptr->colorimetry,
+                                    &video_config_ptr->version));
             connection_info_ptr->pass_status = false;
         }
         if (video_config_ptr->interlace != stream_settings_ptr->video_params.interlace) {
@@ -575,18 +637,20 @@ static void VerifyAvmVideoConfiguration(TestConnectionInfo* connection_info_ptr,
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected video TCS [%s] but got [%s].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoTcsType,
-                                    stream_settings_ptr->video_params.tcs),
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoTcsType, video_config_ptr->tcs));
+                                CdiAvmKeyEnumToString(kKeyAvmVideoTcsType,
+                                    stream_settings_ptr->video_params.tcs, &video_config_ptr->version),
+                                CdiAvmKeyEnumToString(kKeyAvmVideoTcsType, video_config_ptr->tcs,
+                                    &video_config_ptr->version));
             connection_info_ptr->pass_status = false;
         }
         if (video_config_ptr->range != stream_settings_ptr->video_params.range) {
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected video range [%s] but got [%s].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoRangeType,
-                                    stream_settings_ptr->video_params.range),
-                                CdiUtilityKeyEnumToString(kKeyAvmVideoRangeType, video_config_ptr->range));
+                                CdiAvmKeyEnumToString(kKeyAvmVideoRangeType,
+                                    stream_settings_ptr->video_params.range, &video_config_ptr->version),
+                                CdiAvmKeyEnumToString(kKeyAvmVideoRangeType, video_config_ptr->range,
+                                    &video_config_ptr->version));
             connection_info_ptr->pass_status = false;
         }
         if (video_config_ptr->par_width != stream_settings_ptr->video_params.par_width) {
@@ -674,10 +738,8 @@ static void VerifyAvmConfiguration(const CdiAvmRxCbData* cb_data_ptr, CdiAvmBase
     // For whichever type of AVM data we got, we check the necessary data fields for correctness.
     bool have_valid_config = NULL != baseline_config_ptr;
     switch (stream_settings_ptr->avm_data_type) {
-        // Video has 15 config parameters to check.  We test against what was stored in test settings based on
-        // user-supplied command line options.
         case kCdiAvmVideo:
-            // Only check config data if we are expecting it on this payload.
+            // Make sure config data is received if it's expected with this payload.
             if (receive_config) {
                 CdiAvmVideoConfig* video_config_ptr = have_valid_config ? &baseline_config_ptr->video_config : NULL;
                 VerifyAvmVideoConfiguration(cb_data_ptr->core_cb_data.user_cb_param, video_config_ptr,
@@ -691,7 +753,7 @@ static void VerifyAvmConfiguration(const CdiAvmRxCbData* cb_data_ptr, CdiAvmBase
             }
             break;
         case kCdiAvmAudio:
-            // Only check config data if we are expecting it on this payload.
+            // Make sure config data is received if it's expected with this payload.
             if (receive_config) {
                 CdiAvmAudioConfig* audio_config_ptr = have_valid_config ? &baseline_config_ptr->audio_config : NULL;
                 VerifyAvmAudioConfiguration(cb_data_ptr->core_cb_data.user_cb_param, audio_config_ptr,
@@ -705,17 +767,15 @@ static void VerifyAvmConfiguration(const CdiAvmRxCbData* cb_data_ptr, CdiAvmBase
             }
             break;
         case kCdiAvmAncillary:
-            // Make sure config data is received iff it's expected with this payload.
-            if (receive_config != have_valid_config) {
-                if (have_valid_config) {
+            // Make sure config data is received if it's expected with this payload.
+            if (receive_config) {
+                CdiAvmAncillaryDataConfig* anc_config_ptr = have_valid_config ? &baseline_config_ptr->ancillary_data_config : NULL;
+                VerifyAvmAncillaryDataConfiguration(cb_data_ptr->core_cb_data.user_cb_param, anc_config_ptr,
+                                                    stream_settings_ptr, stream_index);
+            } else if (have_valid_config) {
                     TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected NO ancillary data config "
                                                    "data, but found some.",
                                         test_settings_ptr->connection_name_str, stream_index);
-                } else {
-                    TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected ancillary data config "
-                                                   "data, but found none.",
-                                        test_settings_ptr->connection_name_str, stream_index);
-                }
                 connection_info_ptr->pass_status = false;
             }
             break;

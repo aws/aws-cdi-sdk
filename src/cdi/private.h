@@ -16,16 +16,18 @@
 
 #include <stdbool.h>
 
-#include "cloudwatch_sdk_metrics.h"
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
-#include "fifo_api.h"
-#include "list_api.h"
-#include "logger_api.h"
-#include "payload.h"
+
+#include "cdi_avm_api.h"
+#include "cdi_logger_api.h"
 #include "cdi_os_api.h"
 #include "cdi_pool_api.h"
-#include "queue_api.h"
-#include "cdi_avm_api.h"
+#include "cdi_queue_api.h"
+#include "cloudwatch_sdk_metrics.h"
+#include "fifo_api.h"
+#include "list_api.h"
+#include "payload.h"
 #include "singly_linked_list_api.h"
 
 //*********************************************************************************************************************
@@ -271,10 +273,17 @@ typedef struct {
     /// within the expected range.
     uint64_t payload_base_timestamp_us;
 
+    /// @brief A count tracking the number of times a payload is received and the systems montonic clock does not match
+    /// the realtime clock. This isn't an error but it could be indicative of clock instability within the sytem.
+    uint32_t realtime_monotonic_clock_mismatch_count;
+
     /// @brief Pool used to hold payload state data (AppPayloadCallbackData) that is stored in ptp_ordered_payload_list
-    // ordered by PTP. NOTE: This pool is only used if Rx payload buffering is enabled for the connection (@see
-    // CdiRxConfigData.buffer_delay_ms).
+    /// ordered by PTP. NOTE: This pool is only used if Rx payload buffering is enabled for the connection (@see
+    /// CdiRxConfigData.buffer_delay_ms).
     CdiPoolHandle ordered_payload_pool_handle;
+
+    /// @brief Pool used to hold state data while receiving payloads.
+    CdiPoolHandle rx_payload_state_pool_handle;
 
     /// @brief List of AppPayloadCallbackData structures order by PTP (lowest PTP value first). NOTE: This list is only
     /// used if Rx payload buffering is enabled for the connection (@see CdiRxConfigData.buffer_delay_ms).
@@ -294,15 +303,16 @@ typedef struct {
  * internally by the RxPacketReceive() API and not used elsewhere.
  */
 typedef struct {
-    int payload_index;               ///< The index of the next expected payload's entry in payload_state.
+    uint8_t payload_index;               ///< The index of the next expected payload's entry in payload_state.
     /// @brief The number of the expected payload number for the beginning of the payload buffer window.
     /// Sized to match payload_num from CDI header packet #0.
     uint8_t payload_num_window_min;
 
     CdiQueueHandle free_buffer_queue_handle; ///< Circular queue of CdiSgList structures.
 
-    /// @brief Current state of the payload number being processed.
-    RxPayloadState payload_state[MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION];
+    /// @brief Current state of the payload number being processed. Array is addressed by payload_num, which is a
+    /// uint8_t.
+    RxPayloadState* payload_state_array_ptr[1<<(sizeof(uint8_t)<<3)];
 } RxEndpointState;
 
 /**
@@ -428,6 +438,8 @@ struct CdiMemoryState {
 
     CdiBufferType buffer_type;         ///< Indicates which structure of the union is valid.
     MemoryLinearState linear_state;    ///< The internal state of the structure if handleType is HandleTypeLinear.
+
+    RxPayloadState* payload_state_ptr; ///< Received payload state pointer, used to return memory allocation to pool.
 
     CdiSgList endpoint_packet_buffer_sgl; ///< The SGL and entries to be returned to the endpoint's free lists.
 };

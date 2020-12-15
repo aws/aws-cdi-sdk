@@ -85,15 +85,9 @@
 /// in the SDK. NOTE: This value is used to mask the MSBs of array indices so this value must be a power of two.
 #define MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION  (8)
 
-/// @brief The number of entries the payloads per connection queues may grow.
-#define MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION_GROW (2)
-
 /// @brief Define to limit the max number of allowable payload SGL entries that can be simultaneously sent on a single
-/// connection in the SDK.
-#define MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION   (MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION*10)
-
-/// @brief The number of entries the payload SGL entries per connection queues may grow.
-#define MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION_GROW (2)
+/// connection in the SDK. 3500 SGL entries supports 4K at 10-bits packed using 2110-20.
+#define MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION   (MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION*3500)
 
 /// @brief Define to limit the max number of allowable payloads that can be simultaneously received on a single
 /// connection in the SDK. This number should be larger than the respective Tx limit since more payloads can
@@ -103,6 +97,9 @@
 /// we make enough room in our state arrays for tracking all possible payloads that could be in flight at the same time.
 /// NOTE: This value must be a power of two because it is used to mask the MSBs of array indices. @see RxPacketReceive
 #define MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION  (32)
+
+/// @brief Define to limit the max number of payloads that can arrive out of order and be put back in order.
+#define MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER  (32)
 
 /// @brief The number of entries the Rx Payload is allowed to
 /// grow if a PoolIncrease is called.
@@ -278,6 +275,9 @@ typedef enum {
 
     /// An attempt was made to create a duplicate adapter entry.
     kCdiStatusAdapterDuplicateEntry = 32,
+
+    /// An attempt was made to use a profile that is not supported.
+    kCdiStatusProfileNotSupported   = 33,
 } CdiReturnStatus;
 
 /// @brief A structure for holding a PTP timestamp defined in seconds and nanoseconds. This PTP time as defined by
@@ -447,6 +447,9 @@ typedef struct {
 
     /// @brief Number of payloads that were transmitted late since the connection was created.
     int num_payloads_late;
+
+    /// @brief Number of bytes that were transmitted since the connection was created.
+    uint64_t num_bytes_transferred;
 } CdiPayloadCounterStats;
 
 /**
@@ -573,6 +576,21 @@ typedef struct {
     /// whatever CPU it's running whether pinned or not.
     int thread_core_num;
 
+    /// @brief The max number of allowable payloads that can be simultaneously transmitted on a single connection in the
+    /// SDK. This number should be smaller than the respective receive limit since more payloads can potentially be in
+    /// flight in the receive logic. This is because Tx packets can get acknowledged to the transmitter before being
+    /// fully processed by the receiver, allowing the transmitter to send more.
+    /// NOTE: If it's 0, then MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION will be used.
+    int max_simultaneous_tx_payloads;
+
+    /// @brief The max number of sgl entries in use at one time for each transmit connection in the SDK. This number
+    /// should be set to account for the number of payloads in flight (max_simultaneous_tx_payloads) as well as the
+    /// maximum size of the payloads being sent. A 4K video payload will have at least one entry per packet sent so
+    /// large payloads can have many SGL entries. The SGL entries for a given payload should all be returned by the
+    /// transmit callback function.
+    /// NOTE: If it's 0, then MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION will be used.
+    int max_simultaneous_tx_payload_sgl_entries;
+
     /// @brief Pointer to name of the connection. It is used as an identifier when generating log messages that are
     /// specific to this connection. If NULL, a name is internally generated. Length of name must not exceed
     /// MAX_CONNECTION_NAME_STRING_LENGTH.
@@ -693,6 +711,15 @@ typedef struct {
     /// RX buffer allocated as part of initialization of the adapter (see adapter_rx_linear_buffer_size). NOTE: This
     /// value is only used if rx_buffer_type = kCdiLinearBuffer.
     uint64_t linear_buffer_size;
+
+    /// @brief The max number of allowable payloads that can be simultaneously received on a single connection in the
+    /// SDK. This number should be larger than the respective transmit limit since more payloads can potentially be in
+    /// flight in the receive logic. This is because Tx packets can get acknowledged to the transmitter before being
+    /// fully processed by the receiver, allowing the transmitter to send more. This number must also be as large or
+    /// larger than the maximum SRD packet ordering window so that we can be sure we make enough room in our state
+    /// arrays for tracking all possible payloads that could be in flight at the same time.
+    /// NOTE: If it's 0, then MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION will be used.
+    int max_simultaneous_rx_payloads_per_connection;
 
     /// @brief User defined callback parameter passed to a registered user RX callback function. This allows the
     /// application to associate an RX connection to a single RX callback function.
@@ -881,11 +908,30 @@ CDI_INTERFACE CdiReturnStatus CdiCoreShutdown(void);
 void CdiCoreGetUtcTime(struct timespec* ret_time_ptr);
 
 /**
+ * @brief Get the current TAI time as a PTP timestamp.
+ *
+ * There seems to be no trivial solutions for automatically getting the current leap second adjustment. All leap second
+ * adjustments occur on either December 31st or June 30th. The next possible leap second introduction is June 30th 2021.
+ * This function applies a fixed 37 second adjustment to UTC time to get TAI time.
+ *
+ * @param ret_ptp_time_ptr Pointer to CdiPtpTimestamp to return the current PtpTimestamp to. This may be NULL.
+ * @return The same value that is written to the location pointed to by ret_ptp_time_ptr.
+ */
+CdiPtpTimestamp CdiCoreGetPtpTimestamp(CdiPtpTimestamp* ret_ptp_time_ptr);
+
+/**
  * Get the current synced AWS network UTC time in microseconds. It uses CdiCoreGetUtcTime().
  *
  * @return Current UTC time in microseconds.
  */
 uint64_t CdiCoreGetUtcTimeMicroseconds(void);
+
+/**
+ * Get the current TAI time in microseconds.
+ *
+ * @return Current TAI time in microseconds.
+ */
+uint64_t CdiCoreGetTaiTimeMicroseconds();
 
 /**
  * Returns a short string that briefly describes the meaning of an CDI status code.

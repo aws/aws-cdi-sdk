@@ -49,6 +49,9 @@ typedef struct {
     /// Number of probe command retries due to dropped/lost control packets. The control protocol is UDP based and does
     /// not use the SRD hardware. This provides a secondary channel of communication.
     uint32_t delta_probe_command_retry_count;
+
+    /// Number of bytes transferred over the stats period.
+    uint64_t delta_num_bytes_transferred;
 } CloudWatchCounterBasedDeltas;
 
 /**

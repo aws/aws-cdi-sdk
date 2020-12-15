@@ -133,12 +133,37 @@ void CdiCoreGetUtcTime(struct timespec* ret_time_ptr)
     CdiOsGetUtcTime(ret_time_ptr);
 }
 
+CdiPtpTimestamp CdiCoreGetPtpTimestamp(CdiPtpTimestamp* ret_ptp_time_ptr)
+{
+    struct timespec utc_time;
+    CdiCoreGetUtcTime(&utc_time);
+    // The current TAI offset relative to UTC is 37 seconds. Unfortunately at this point there are no trivial methods
+    // for automatically updated leapseconds as they are announced. This is an area of that we are continuing to study.
+    // The next possible leapsecond event June 30th 2021.
+    const CdiPtpTimestamp ptp_timestamp = {
+        .seconds = (uint32_t)utc_time.tv_sec + 37,
+        .nanoseconds = (uint32_t)utc_time.tv_nsec
+    };
+    if (NULL != ret_ptp_time_ptr) {
+        *ret_ptp_time_ptr = ptp_timestamp;
+    }
+    return ptp_timestamp;
+}
+
 uint64_t CdiCoreGetUtcTimeMicroseconds(void)
 {
     struct timespec utc_time;
     CdiCoreGetUtcTime(&utc_time);
 
     return (uint64_t)utc_time.tv_sec * 1000000L + (utc_time.tv_nsec / 1000L);
+}
+
+uint64_t CdiCoreGetTaiTimeMicroseconds(void)
+{
+    CdiPtpTimestamp ptp_time;
+    CdiCoreGetPtpTimestamp(&ptp_time);
+
+    return (uint64_t)ptp_time.seconds * 1000000L + (ptp_time.nanoseconds / 1000L);
 }
 
 

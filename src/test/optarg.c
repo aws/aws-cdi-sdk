@@ -21,7 +21,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include "logger_api.h"
+#include "cdi_logger_api.h"
 #include "cdi_test.h"
 #include "test_console.h"
 
@@ -60,6 +60,7 @@ typedef enum {
  */
 static bool SearchOptions(const char* opt_str, int type, const OptDef* opt_array_ptr, OptArg* found_opt_ptr)
 {
+    bool ret = false;
     int i;
     TestConsoleLog(kLogDebug, "Searching for the option [%s]", opt_str);
 
@@ -78,25 +79,28 @@ static bool SearchOptions(const char* opt_str, int type, const OptDef* opt_array
             (CdiOsStrCmp(opt_array_ptr[i].long_name_str, opt_str) == 0))
         {
             TestConsoleLog(kLogDebug, "Found match.");
-            found_opt_ptr->num_args = opt_array_ptr[i].num_args;
-            CdiOsStrCpy(found_opt_ptr->short_name_str, strlen(opt_array_ptr[i].short_name_str),
-                        opt_array_ptr[i].short_name_str);
-            found_opt_ptr->option_index = i;
-            return true;
+            ret = true;
+            break;
         }
 
         // If we are looking for a short option and we find it in the options array.
         if ((type == kOptShort) && (CdiOsStrCmp(opt_array_ptr[i].short_name_str, opt_str) == 0))
         {
             TestConsoleLog(kLogDebug, "Found match.");
-            found_opt_ptr->num_args = opt_array_ptr[i].num_args;
-            CdiOsStrCpy(found_opt_ptr->short_name_str, strlen(opt_array_ptr[i].short_name_str),
-                        opt_array_ptr[i].short_name_str);
-            found_opt_ptr->option_index = i;
-            return true;
+            ret = true;
+            break;
         }
     }
-    return false;
+
+    if (ret) {
+        found_opt_ptr->num_args = opt_array_ptr[i].num_args;
+        CdiOsStrCpy(found_opt_ptr->short_name_str, sizeof(found_opt_ptr->short_name_str),
+                    opt_array_ptr[i].short_name_str);
+        found_opt_ptr->option_index = i;
+        memset(found_opt_ptr->args_array, 0, sizeof(found_opt_ptr->args_array));
+    }
+
+    return ret;
 }
 
 /**
@@ -350,19 +354,34 @@ bool GetOpt(int argc, const char* argv[], int* index_ptr, OptDef* opt_array_ptr,
 
     // If we still have args left in argv, then parse.
     if (*index_ptr < argc) {
+        bool advance_index = true;
         // Parse the next option and any subsequent arguments if there isn't an error.
         if (CheckArg(argv[*index_ptr], opt_array_ptr, this_opt_ptr, true) != kArgError) {
             last_opt_index = *index_ptr;
             int thisarg;
 
-            TestConsoleLog(kLogDebug, "Found option with [%d] arguments.", this_opt_ptr->num_args);
+            // Command line options that have 1 optional argument.
+            int num_optional_args = 0;
+            if (0 ==CdiOsStrCmp(argv[last_opt_index], "--avm_video") ||
+                0 ==CdiOsStrCmp(argv[last_opt_index], "--avm_audio") ||
+                0 ==CdiOsStrCmp(argv[last_opt_index], "--avm_anc") ||
+                0 ==CdiOsStrCmp(argv[last_opt_index], "--help_video") ||
+                0 ==CdiOsStrCmp(argv[last_opt_index], "--help_audio")) {
+                num_optional_args = 1;
+            }
+
+            TestConsoleLog(kLogDebug, "Found option [%s] with [%d] arguments.", argv[last_opt_index],
+                           this_opt_ptr->num_args);
 
             // Check to make sure we have the correct number of arguments.
-            for (thisarg = 0; thisarg < this_opt_ptr->num_args; thisarg++) {
+            for (thisarg = 0; thisarg < this_opt_ptr->num_args + num_optional_args; thisarg++) {
                 (*index_ptr)++;
 
                 // Make sure we aren't at the end of the command line arguments, but are expecting more.
                 if (*index_ptr == argc) {
+                    if (thisarg >= this_opt_ptr->num_args) {
+                        break;
+                    }
                     TestConsoleLog(kLogError, "Option [%s] requires [%d] arguments.", argv[last_opt_index],
                              this_opt_ptr->num_args);
                     // Increment the index_ptr so that we can detect that this is not a normal exit by comparing
@@ -372,9 +391,15 @@ bool GetOpt(int argc, const char* argv[], int* index_ptr, OptDef* opt_array_ptr,
                 }
 
                 // If we are expecting an argument to an option, but got another option, then error out.
-                if (CheckArg(argv[*index_ptr], opt_array_ptr, this_opt_ptr, false) != kArgOnly) {
+                OptArg temp_opt;
+                if (CheckArg(argv[*index_ptr], opt_array_ptr, &temp_opt, false) != kArgOnly) {
+                    // Don't error out of 1 or more optional arguments were not provided.
+                    if (thisarg >= this_opt_ptr->num_args) {
+                        advance_index = false; // We are at next option, so don't advance the index.
+                        break;
+                    }
                     TestConsoleLog(kLogInfo, "Got option [%s] when expecting argument to option [%s].",
-                             argv[*index_ptr], argv[last_opt_index]);
+                                   argv[*index_ptr], argv[last_opt_index]);
                     return false;
                 } else {
                     // Otherwise, collect the argument into our this_opt_ptr struct.
@@ -382,17 +407,18 @@ bool GetOpt(int argc, const char* argv[], int* index_ptr, OptDef* opt_array_ptr,
                 }
 
             }
-
+            this_opt_ptr->num_args = thisarg; // Update actual number of arguments provided (some may be optional).
             for (thisarg = 0; thisarg < this_opt_ptr->num_args; thisarg++) {
                 TestConsoleLog(kLogDebug, "arg [%d] for option [%s] is [%s]", thisarg, argv[last_opt_index],
-                        this_opt_ptr->args_array[thisarg]);
+                               this_opt_ptr->args_array[thisarg]);
             }
         } else {
             // unknown option
             return false;
         }
-
-        (*index_ptr)++;
+        if (advance_index) {
+            (*index_ptr)++;
+        }
     } else {
          // No more args to parse.
         return false;

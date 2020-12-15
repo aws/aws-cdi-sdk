@@ -10,8 +10,8 @@
  * The declarations in this header file correspond to the definitions in logger.c.
  */
 
-#ifndef LOGGER_API_API_H__
-#define LOGGER_API_API_H__
+#ifndef CDI_LOGGER_API_API_H__
+#define CDI_LOGGER_API_API_H__
 
 #include "cdi_log_api.h"
 #include "cdi_os_api.h"
@@ -339,5 +339,5 @@ void CdiLoggerShutdown(bool force);
 }
 #endif
 
-#endif // LOGGER_API_API_H__
+#endif // CDI_LOGGER_API_API_H__
 

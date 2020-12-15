@@ -15,12 +15,14 @@
 
 #include <assert.h>
 
-#include "adapter_api.h"
+// The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
-#include "internal_log.h"
+
+#include "adapter_api.h"
 #include "cdi_core_api.h"
-#include "cdi_raw_api.h"
 #include "cdi_log_api.h"
+#include "cdi_raw_api.h"
+#include "internal_log.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************

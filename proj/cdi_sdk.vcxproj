@@ -44,6 +44,8 @@
     <ClInclude Include="..\src\common\include\utilities_api.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\cdi\baseline_profiles_1_00.c" />
+    <ClCompile Include="..\src\cdi\baseline_profiles_2_00.c" />
     <ClCompile Include="..\src\common\src\queue.c" />
     <ClCompile Include="..\src\cdi\adapter.c" />
     <ClCompile Include="..\src\cdi\adapter_control_interface.c" />

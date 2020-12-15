@@ -196,6 +196,7 @@ bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const ControlPac
                     if (kProbeCommandPing != packet_ack_ptr->ack_command) {
                         CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Probe Tx stream ID[%d] accepted ACK.",
                                                  common_hdr_ptr->senders_stream_identifier);
+                        CDI_LOG_THREAD(kLogInfo, "Received connection response");
                     }
 
                     if (kProbeCommandReset == packet_ack_ptr->ack_command) {
@@ -278,6 +279,10 @@ uint64_t ProbeTxControlProcessProbeState(ProbeEndpointState* probe_ptr)
         CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Probe Tx stream ID[%d] state[%s]",
                                  stream_identifier,
                                  InternalUtilityKeyEnumToString(kKeyProbeState, probe_ptr->tx_probe_state.tx_state));
+        if (kProbeStateSendReset == probe_ptr->tx_probe_state.tx_state ||
+            kProbeStateWaitForStart == probe_ptr->tx_probe_state.tx_state) {
+            CDI_LOG_THREAD(kLogInfo, "No reply to connection response received.");
+        }
     }
 
     switch (probe_ptr->tx_probe_state.tx_state) {

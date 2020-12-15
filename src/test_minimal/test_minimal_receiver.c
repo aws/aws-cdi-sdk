@@ -12,7 +12,6 @@
 
 #include <assert.h>
 
-#include "logger_api.h"
 #include "cdi_avm_api.h"
 #include "cdi_core_api.h"
 #include "cdi_raw_api.h"

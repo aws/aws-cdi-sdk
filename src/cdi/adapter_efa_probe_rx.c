@@ -301,6 +301,7 @@ bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr,
             CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
                                      "Probe Rx stream ID[%d] got Reset command from Tx. Restarting EFA connection.",
                                      common_hdr_ptr->senders_stream_identifier);
+            CDI_LOG_THREAD(kLogInfo, "Received connection request.");
             probe_ptr->rx_probe_state.rx_state = kProbeStateEfaReset;
             *wait_timeout_ms_ptr = 0;
             ret_new_state = true;

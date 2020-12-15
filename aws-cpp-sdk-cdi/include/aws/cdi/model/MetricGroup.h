@@ -212,6 +212,28 @@ namespace Model
 
 
     /**
+     * The number of bytes transferred.
+     */
+    inline void SetBytesTransferred(long long value) { m_bytesTransferredHasBeenSet = true; m_bytesTransferred = value; }
+
+    /**
+     * The number of payloads that arrived late.
+     */
+    inline long long GetBytesTransferred() const{ return m_bytesTransferred; }
+
+    /**
+     * The number of payloads that arrived late.
+     */
+    inline bool BytesTransferredHasBeenSet() const { return m_bytesTransferredHasBeenSet; }
+
+    /**
+     * The number of payloads that arrived late.
+     */
+    inline MetricGroup& WithBytesTransferred(long long value) { SetBytesTransferred(value); return *this;}
+
+
+
+    /**
      * A sample set of the time taken for each payload to be transferred in
      * microseconds.
      */
@@ -418,6 +440,9 @@ namespace Model
 
     long long m_latePayloads;
     bool m_latePayloadsHasBeenSet;
+
+    long long m_bytesTransferred;
+    bool m_bytesTransferredHasBeenSet;
 
     StatisticSet m_payloadTime;
     bool m_payloadTimeHasBeenSet;

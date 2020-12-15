@@ -20,13 +20,14 @@
 
 #include "adapter_api.h"
 #include "adapter_control_interface.h"
+#include "cdi_baseline_profile_01_00_api.h"
+#include "cdi_baseline_profile_02_00_api.h"
+#include "cdi_logger_api.h"
+#include "cdi_utility_api.h"
 #include "endpoint_manager.h"
 #include "fifo_api.h"
 #include "internal_tx.h"
 #include "internal_rx.h"
-#include "logger_api.h"
-#include "cdi_baseline_profile_api.h"
-#include "cdi_utility_api.h"
 #include "statistics.h"
 
 //*********************************************************************************************************************
@@ -238,8 +239,32 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
     // configuration strings. This is done so the caller can free the memory used by the data.
     if (kCdiStatusOk == rs && core_config_ptr->cloudwatch_config_ptr) {
 #ifdef CLOUDWATCH_METRICS_ENABLED
+        CloudWatchConfigData cleaned_cloudwatch_config = { 0 };
+        const CloudWatchConfigData* cloudwatch_config_ptr = core_config_ptr->cloudwatch_config_ptr;
+
+        // If a namespace string is not provided for cloudwatch use the CDI SDK default namespace string.
+        if (!cloudwatch_config_ptr->namespace_str || ('\0' == cloudwatch_config_ptr->namespace_str[0])) {
+            SDK_LOG_GLOBAL(kLogInfo, "CloudWatch namespace string not provided. Using default [%s].", 
+                           CLOUDWATCH_DEFAULT_NAMESPACE_STRING);
+            cleaned_cloudwatch_config.namespace_str = CLOUDWATCH_DEFAULT_NAMESPACE_STRING;
+        } else {
+            cleaned_cloudwatch_config.namespace_str = cloudwatch_config_ptr->namespace_str;
+        }
+
+        // Region does not need any cleaning because the AWS SDK will automatically use the region called from if
+        // a region is not set.
+        cleaned_cloudwatch_config.region_str = cloudwatch_config_ptr->region_str;
+
+        // A dimension domain string must be provided.
+        if (!cloudwatch_config_ptr->dimension_domain_str || ('\0' == cloudwatch_config_ptr->dimension_domain_str[0])) {
+            SDK_LOG_GLOBAL(kLogError, "CloudWatch dimension domain string cannot be NULL.");
+            rs = kCdiStatusInvalidParameter;
+        } else {
+            cleaned_cloudwatch_config.dimension_domain_str = cloudwatch_config_ptr->dimension_domain_str;
+        }
+
         if (kCdiStatusOk == rs) {
-            rs = CloudWatchSdkMetricsCreate(core_config_ptr->cloudwatch_config_ptr, &cdi_global_context.cw_sdk_handle);
+            rs = CloudWatchSdkMetricsCreate(&cleaned_cloudwatch_config, &cdi_global_context.cw_sdk_handle);
         }
 #else  // CLOUDWATCH_METRICS_ENABLED
         SDK_LOG_GLOBAL(kLogError,
@@ -250,9 +275,12 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
 
 #ifdef METRICS_GATHERING_SERVICE_ENABLED
     if (kCdiStatusOk == rs) {
+        bool use_default_dimension_string = (NULL == core_config_ptr->cloudwatch_config_ptr) ||
+                                            (NULL == core_config_ptr->cloudwatch_config_ptr->dimension_domain_str) ||
+                                            ('\0' == core_config_ptr->cloudwatch_config_ptr->dimension_domain_str[0]);
         const MetricsGathererConfigData config = {
-            .dimension_domain_str = core_config_ptr->cloudwatch_config_ptr
-                                    ? core_config_ptr->cloudwatch_config_ptr->dimension_domain_str : "<none>"
+            .dimension_domain_str = use_default_dimension_string ? "<none>" :
+                                        core_config_ptr->cloudwatch_config_ptr->dimension_domain_str
         };
         rs = MetricsGathererCreate(&config, &cdi_global_context.metrics_gathering_sdk_handle);
     }
@@ -434,9 +462,18 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
     }
 
     if (kCdiStatusOk == rs) {
+        bool is_rx_buffered = (handle->handle_type == kHandleTypeRx &&
+                               handle->rx_state.config_data.buffer_delay_ms);
+        int reserve_queue_entries = MAX_PAYLOADS_PER_CONNECTION;
+        if (is_rx_buffered) {
+            // Rx buffer delay is enabled, so we need to allocate additional queue entries.
+            reserve_queue_entries += (MAX_PAYLOADS_PER_CONNECTION * handle->rx_state.config_data.buffer_delay_ms) /
+                                     RX_BUFFER_DELAY_BUFFER_MS_DIVISOR;
+        }
+
         // Create payload receive message queue that is used to send messages to the application via the user-registered
         // callback.
-        if (!CdiQueueCreate("PayloadRequests AppPayloadCallbackData Queue", MAX_PAYLOADS_PER_CONNECTION,
+        if (!CdiQueueCreate("PayloadRequests AppPayloadCallbackData Queue", reserve_queue_entries,
                             FIXED_QUEUE_SIZE, FIXED_QUEUE_SIZE, sizeof(AppPayloadCallbackData),
                             kQueueSignalPopWait, // Queue can block on pops.
                             &handle->app_payload_message_queue_handle)) {
@@ -445,8 +482,22 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
     }
 
     if (kCdiStatusOk == rs) {
-        // Create a pool used to hold error message strings.
-        int size = CDI_MAX(MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION, MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION);
+        //Create a pool used to hold error message strings.
+        int max_rx_payloads = MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
+        int max_tx_payloads = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+
+        if (handle->handle_type == kHandleTypeRx) {
+            if (handle->rx_state.config_data.max_simultaneous_rx_payloads_per_connection) {
+                max_rx_payloads = handle->rx_state.config_data.max_simultaneous_rx_payloads_per_connection;
+            }
+        } else {
+            if (handle->tx_state.config_data.max_simultaneous_tx_payloads) {
+                max_tx_payloads = handle->tx_state.config_data.max_simultaneous_tx_payloads;
+            }
+        }
+
+        int size = CDI_MAX(max_tx_payloads, max_rx_payloads);
+
         if (!CdiPoolCreate("Error Messages Pool", size, NO_GROW_SIZE, NO_GROW_COUNT, MAX_ERROR_STRING_LENGTH,
                            true, // true= Make thread-safe
                            &handle->error_message_pool)) {
@@ -655,13 +706,13 @@ void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int e
     CDI_LOG_MULTILINE(&m_state, "payload_user_data         [%llu]", core_extra_data_ptr->payload_user_data);
     CDI_LOG_MULTILINE(&m_state, "extra_data_size           [%d]", extra_data_size);
 
-
     if (kProtocolTypeAvm == protocol_type && sizeof(avm_union_ptr->with_config) == extra_data_size) {
         CdiAvmBaselineConfig baseline_config;
         CdiAvmConfig* avm_config_ptr = &avm_union_ptr->with_config.config;
         CdiAvmParseBaselineConfiguration(avm_config_ptr, &baseline_config);
+        // NOTE: Payload type is not specific to a profile version, so using NULL here for version.
         CDI_LOG_MULTILINE(&m_state, "payload_type              [%s]",
-                          CdiUtilityKeyEnumToString(kKeyAvmPayloadType, baseline_config.payload_type));
+                          CdiAvmKeyEnumToString(kKeyAvmPayloadType, baseline_config.payload_type, NULL));
         switch (baseline_config.payload_type) {
             case kCdiAvmNotBaseline:
                 break;
@@ -674,20 +725,23 @@ void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int e
                                       video_config_ptr->height);
 
                     CDI_LOG_MULTILINE(&m_state, "sampling                  [%s]",
-                                      CdiUtilityKeyEnumToString(kKeyAvmVideoSamplingType,
-                                                                video_config_ptr->sampling));
+                                      CdiAvmKeyEnumToString(kKeyAvmVideoSamplingType,
+                                                            video_config_ptr->sampling,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "bit depth                 [%s]",
-                                      CdiUtilityKeyEnumToString(kKeyAvmVideoBitDepthType,
-                                                                video_config_ptr->depth));
+                                      CdiAvmKeyEnumToString(kKeyAvmVideoBitDepthType,
+                                                            video_config_ptr->depth,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "frame rate (num/den)      [%d/%d]",
                                       video_config_ptr->frame_rate_num,
                                       video_config_ptr->frame_rate_den);
 
                     CDI_LOG_MULTILINE(&m_state, "colorimetry               [%s]",
-                                      CdiUtilityKeyEnumToString(kKeyAvmVideoColorimetryType,
-                                                                video_config_ptr->colorimetry));
+                                      CdiAvmKeyEnumToString(kKeyAvmVideoColorimetryType,
+                                                            video_config_ptr->colorimetry,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "interlace                 [%s]",
                                       CdiUtilityBoolToString(video_config_ptr->interlace));
@@ -696,12 +750,14 @@ void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int e
                                      CdiUtilityBoolToString(video_config_ptr->segmented));
 
                     CDI_LOG_MULTILINE(&m_state, "TCS                       [%s]",
-                                     CdiUtilityKeyEnumToString(kKeyAvmVideoTcsType,
-                                                               video_config_ptr->tcs));
+                                     CdiAvmKeyEnumToString(kKeyAvmVideoTcsType,
+                                                           video_config_ptr->tcs,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "range                     [%s]",
-                                     CdiUtilityKeyEnumToString(kKeyAvmVideoRangeType,
-                                                               video_config_ptr->range));
+                                     CdiAvmKeyEnumToString(kKeyAvmVideoRangeType,
+                                                           video_config_ptr->range,
+                                                            &baseline_config.video_config.version));
 
                     CDI_LOG_MULTILINE(&m_state, "PAR (width:height)        [%d:%d]",
                                       video_config_ptr->par_width,
@@ -713,8 +769,9 @@ void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int e
                     CdiAvmAudioConfig* audio_config_ptr = &baseline_config.audio_config;
 
                     CDI_LOG_MULTILINE(&m_state, "grouping                  [%s]",
-                                      CdiUtilityKeyEnumToString(kKeyAvmAudioChannelGroupingType,
-                                                                    audio_config_ptr->grouping));
+                                      CdiAvmKeyEnumToString(kKeyAvmAudioChannelGroupingType,
+                                                            audio_config_ptr->grouping,
+                                                            &baseline_config.audio_config.version));
                 }
                 break;
             case kCdiAvmAncillary:

@@ -22,10 +22,6 @@
 /// @brief Height of stats window.
 #define STATS_WINDOW_STATIC_HEIGHT  (4)
 
-/// @brief Number of payload pool items to create for each payload pool. Must be large enough to handle 1 + the maximum
-/// number of simultaneous payloads for a single connection.
-#define POOL_PAYLOAD_ITEM_COUNT     (MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION + 1)
-
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
