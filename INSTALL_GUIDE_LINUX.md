@@ -54,7 +54,7 @@ For Linux installations, follow step 3 in [launch an Elasatic Fabric Adapter (EF
 1. The <install_dir> now contains the following folders **libfabric** and **aws-cdi-sdk**.
     - **libfabric** is a customized version of the open-source libfabric project.
     - **aws-cdi-sdk** is the directory that contains the source code for the AWS CDI SDK and its test application. The contents of the AWS CDI SDK include a Makefile and the following directories: **doc**, **include**, **src**, and **proj**.
-        - The AWS CDI SDK contains an overall Makefile that builds libfabric, the AWS CDI SDK, the test application, and the Doxygen-generated HTML documentation. The build of libfabric and the AWS CDI SDK produce shared libraries, ```libfabric.so.1``` and ```libcdisdk.so.1.0```, along with the test application, ```cdi_test```.
+        - The AWS CDI SDK contains an overall Makefile that builds libfabric, the AWS CDI SDK, the test application, and the Doxygen-generated HTML documentation. The build of libfabric and the AWS CDI SDK produce shared libraries, ```libfabric.so.1``` and ```libcdisdk.so.2.0```, along with the test application, ```cdi_test```.
         - The **doc** folder contains Doxygen source files used to generate the AWS CDI SDK HTML documentation.
             - The documentation builds to this path: aws-cdi-sdk/build/documentation
         - The **include** directory exposes the API to the AWS CDI SDK in C header files.
@@ -213,7 +213,7 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
 1. After a successful compile, the locations for the results are at:
     - Test application: ```cdi_test``` is placed at ```aws-cdi-sdk/build/debug/bin```
     - Minimal test applications: ```cdi_test_min_tx``` and ```cdi_test_min_rx``` are placed at ```aws-cdi-sdk/build/debug/bin```
-    - AWS CDI SDK and libfabric shared libraries ```libcdisdk.so.1.0``` and ```libfabric.so.1``` are placed at ```aws-cdi-sdk/build/debug/lib.```
+    - AWS CDI SDK and libfabric shared libraries ```libcdisdk.so.2.0``` and ```libfabric.so.1``` are placed at ```aws-cdi-sdk/build/debug/lib.```
     - HTML documentation can be found at ```aws-cdi-sdk/build/documentation```
 
 ## Disabling the display of performance metrics to your Amazon CloudWatch account

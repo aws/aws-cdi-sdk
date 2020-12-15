@@ -129,7 +129,7 @@ include_opts.cdi := $(foreach proj,cdi libfabric,$(addprefix -I,$(include_dirs.$
 depends.cdi := $(patsubst %.o,%.d,$(objs.cdi))
 
 # the end goal of building the SDK library
-libsdk := $(build_dir.lib)/libcdisdk.so.1.0
+libsdk := $(build_dir.lib)/libcdisdk.so.2.0
 
 # the end goal of building the libfabric shared library
 libfabric := $(build_dir.lib)/libfabric.so.1
@@ -190,7 +190,7 @@ CXXFLAGS += $(COMMON_COMPILER_FLAG_ADDITIONS) --std=c++11
 
 # additional flags to pass to the linker to create cdi_test* programs
 # The only libraries needed here are those that present new dependencies beyond what libcdisdk.so already requires.
-# An rpath is specified so cdi_test can find libcdisdk.so.1 in the same directory as cdi_test or in a sibling directory
+# An rpath is specified so cdi_test can find libcdisdk.so.2 in the same directory as cdi_test or in a sibling directory
 # named lib.
 LDFLAGS += -L$(build_dir.lib) -lcdisdk -lfabric $(EXTRA_LD_LIBS) -lncurses -lm $(aws_sdk_library_flags) \
 	   -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib

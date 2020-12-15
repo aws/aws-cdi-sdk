@@ -203,7 +203,7 @@ After the libraries have been built, library locations that are referenced by aw
 
 1. Linux:
     1. libfabric.so.1: build/debug|release/lib
-    1. libcdisdk.so.1.0: build/debug|release/lib
+    1. libcdisdk.so.2.0: build/debug|release/lib
 1. Windows:
     1. proj/x64/Debug/cdi_sdk.lib
 

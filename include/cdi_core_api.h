@@ -66,7 +66,7 @@
 // scripts to extract version information.
 
 /// @brief CDI version.
-#define CDI_SDK_VERSION             1
+#define CDI_SDK_VERSION             2
 
 /// @brief CDI major version.
 #define CDI_SDK_MAJOR_VERSION       0
