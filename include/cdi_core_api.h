@@ -72,7 +72,17 @@
 #define CDI_SDK_MAJOR_VERSION       0
 
 /// @brief CDI minor version.
-#define CDI_SDK_MINOR_VERSION       0
+#define CDI_SDK_MINOR_VERSION       1
+
+/// @brief CDI protcol version.
+#define CDI_PROTOCOL_VERSION             1
+
+/// @brief CDI protocol major version.
+#define CDI_PROTOCOL_MAJOR_VERSION       0
+
+/// @brief CDI protocol minor version. This is set to 2 to identify the sender as being from SDK version 2.
+/// This value is currently not being used, other than for informational purposes.
+#define CDI_PROTOCOL_MINOR_VERSION       2
 
 /// @brief Define to limit the max number of allowable Tx or Rx connections that can be created in the SDK.
 #define MAX_SIMULTANEOUS_CONNECTIONS                (30)

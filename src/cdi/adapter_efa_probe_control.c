@@ -167,9 +167,9 @@ void ProbeControlInitPacketCommonHeader(ProbeEndpointState* probe_ptr, ProbeComm
     AdapterEndpointState* endpoint_ptr = probe_ptr->app_adapter_endpoint_handle;
     AdapterConnectionState* adapter_con_ptr = endpoint_ptr->adapter_con_state_ptr;
 
-    header_ptr->senders_version_num = CDI_SDK_VERSION;
-    header_ptr->senders_major_version_num = CDI_SDK_MAJOR_VERSION;
-    header_ptr->senders_minor_version_num = CDI_SDK_MINOR_VERSION;
+    header_ptr->senders_version_num = CDI_PROTOCOL_VERSION;
+    header_ptr->senders_major_version_num = CDI_PROTOCOL_MAJOR_VERSION;
+    header_ptr->senders_minor_version_num = CDI_PROTOCOL_MINOR_VERSION;
     header_ptr->checksum = 0;
 
     header_ptr->command = command;
@@ -315,16 +315,21 @@ bool ProbeControlProcessPacket(ProbeEndpointState* probe_ptr, CdiSgList* packet_
     AdapterConnectionState* adapter_con_ptr = endpoint_ptr->adapter_con_state_ptr;
     ControlPacketCommonHeader* common_hdr_ptr = (ControlPacketCommonHeader*)packet_sgl_ptr->sgl_head_ptr->address_ptr;
 
-    if (CDI_SDK_VERSION != common_hdr_ptr->senders_version_num ||
-        CDI_SDK_MAJOR_VERSION != common_hdr_ptr->senders_major_version_num) {
-        char error_msg_str[MAX_ERROR_STRING_LENGTH];
-
+    char error_msg_str[MAX_ERROR_STRING_LENGTH] = {0};
+    if (2 == common_hdr_ptr->senders_version_num && 0 == common_hdr_ptr->senders_major_version_num &&
+        0 == common_hdr_ptr->senders_minor_version_num) {
+        snprintf(error_msg_str, sizeof(error_msg_str), "%s",
+                 "Remote CDI SDK 2.0.0 is not supported. Upgrade it to a newer version.");
+    } else if (CDI_PROTOCOL_VERSION != common_hdr_ptr->senders_version_num ||
+        CDI_PROTOCOL_MAJOR_VERSION != common_hdr_ptr->senders_major_version_num) {
         snprintf(error_msg_str, sizeof(error_msg_str),
                  "Remote CDI SDK not compatible. This version[%d.%d.%d]. Remote version[%d.%d.%d]",
-                 CDI_SDK_VERSION, CDI_SDK_MAJOR_VERSION, CDI_SDK_MINOR_VERSION,
+                 CDI_PROTOCOL_VERSION, CDI_PROTOCOL_MAJOR_VERSION, CDI_PROTOCOL_MINOR_VERSION,
                  common_hdr_ptr->senders_version_num, common_hdr_ptr->senders_major_version_num,
                  common_hdr_ptr->senders_minor_version_num);
+    }
 
+    if ('\0' != error_msg_str[0]) {
         CDI_LOG_THREAD(kLogError, "%s", error_msg_str);
         // Queue endpoint manager to reset the EFA connection and notify the application that we are disconnected.
         ProbeControlEfaConnectionQueueReset(probe_ptr, error_msg_str);
