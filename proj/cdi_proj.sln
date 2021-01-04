@@ -1,5 +1,4 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29403.142
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -24,31 +23,44 @@ EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
+		Release_DLL|x64 = Release_DLL|x64
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832F}.Debug|x64.ActiveCfg = Debug|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832F}.Debug|x64.Build.0 = Debug|x64
+		{5DE0BAAC-0EB0-425B-8E33-34E370AF832F}.Release_DLL|x64.ActiveCfg = Release_DLL|x64
+		{5DE0BAAC-0EB0-425B-8E33-34E370AF832F}.Release_DLL|x64.Build.0 = Release_DLL|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832F}.Release|x64.ActiveCfg = Release|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832F}.Release|x64.Build.0 = Release|x64
 		{41B2B832-0419-4AA6-98CF-5312E8608FA0}.Debug|x64.ActiveCfg = Debug|x64
 		{41B2B832-0419-4AA6-98CF-5312E8608FA0}.Debug|x64.Build.0 = Debug|x64
+		{41B2B832-0419-4AA6-98CF-5312E8608FA0}.Release_DLL|x64.ActiveCfg = Release_DLL|x64
+		{41B2B832-0419-4AA6-98CF-5312E8608FA0}.Release_DLL|x64.Build.0 = Release_DLL|x64
 		{41B2B832-0419-4AA6-98CF-5312E8608FA0}.Release|x64.ActiveCfg = Release|x64
 		{41B2B832-0419-4AA6-98CF-5312E8608FA0}.Release|x64.Build.0 = Release|x64
 		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}.Debug|x64.ActiveCfg = Debug|x64
 		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}.Debug|x64.Build.0 = Debug|x64
+		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}.Release_DLL|x64.ActiveCfg = Release|x64
+		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}.Release_DLL|x64.Build.0 = Release|x64
 		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}.Release|x64.ActiveCfg = Release|x64
 		{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}.Release|x64.Build.0 = Release|x64
 		{1B1FD6A9-1E0E-4166-BFD1-DB2632E643C0}.Debug|x64.ActiveCfg = Debug|x64
 		{1B1FD6A9-1E0E-4166-BFD1-DB2632E643C0}.Debug|x64.Build.0 = Debug|x64
+		{1B1FD6A9-1E0E-4166-BFD1-DB2632E643C0}.Release_DLL|x64.ActiveCfg = Release|x64
+		{1B1FD6A9-1E0E-4166-BFD1-DB2632E643C0}.Release_DLL|x64.Build.0 = Release|x64
 		{1B1FD6A9-1E0E-4166-BFD1-DB2632E643C0}.Release|x64.ActiveCfg = Release|x64
 		{1B1FD6A9-1E0E-4166-BFD1-DB2632E643C0}.Release|x64.Build.0 = Release|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832E}.Debug|x64.ActiveCfg = Debug|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832E}.Debug|x64.Build.0 = Debug|x64
+		{5DE0BAAC-0EB0-425B-8E33-34E370AF832E}.Release_DLL|x64.ActiveCfg = Release_DLL|x64
+		{5DE0BAAC-0EB0-425B-8E33-34E370AF832E}.Release_DLL|x64.Build.0 = Release_DLL|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832E}.Release|x64.ActiveCfg = Release|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832E}.Release|x64.Build.0 = Release|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}.Debug|x64.ActiveCfg = Debug|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}.Debug|x64.Build.0 = Debug|x64
+		{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}.Release_DLL|x64.ActiveCfg = Release_DLL|x64
+		{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}.Release_DLL|x64.Build.0 = Release_DLL|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}.Release|x64.ActiveCfg = Release|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
