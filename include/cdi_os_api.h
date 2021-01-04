@@ -68,6 +68,8 @@
 #include <stdio.h>
 #include <time.h>
 
+#include "cdi_utility_api.h"
+
 #if defined _WIN32
     #define CDI_STDIN GetStdHandle(STD_INPUT_HANDLE)    ///< Definition of OS agnostic standard input stream.
     #define CDI_STDOUT GetStdHandle(STD_OUTPUT_HANDLE)  ///< Definition of OS agnostic standard output stream.
@@ -310,7 +312,7 @@ extern "C" {
  * Enable use of the logger when generating error messages. This function is normally used internally as part of
  * initialization of the CDI SDK. If it is not used, then output will be directed to stderr.
  */
-void CdiOsUseLogger(void);
+CDI_INTERFACE void CdiOsUseLogger(void);
 
 // -- Threads --
 
@@ -322,7 +324,7 @@ void CdiOsUseLogger(void);
  *
  * @return true on success, false if there isn't enough storage to hold the signal or if there was an error.
  */
-bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr);
+CDI_INTERFACE  bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr);
 
 /**
  * Creates a thread which can optionally be pinned to a specific CPU.
@@ -336,8 +338,8 @@ bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr, const char* thread_name_str,
-                             void* thread_func_arg_ptr, CdiSignalType start_signal, int cpu_affinity);
+CDI_INTERFACE bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr, const char* thread_name_str,
+                                           void* thread_func_arg_ptr, CdiSignalType start_signal, int cpu_affinity);
 
 /**
  * Creates a thread. Note that thread pinning is inherited, so the launched thread will inherit the affinity of its
@@ -352,7 +354,7 @@ bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_
  * @return true if successful, otherwise false.
  */
 static inline bool CdiOsThreadCreate(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr,
-                                     const char* thread_name_str, void* thread_func_arg_ptr, CdiSignalType start_signal)
+                                                   const char* thread_name_str, void* thread_func_arg_ptr, CdiSignalType start_signal)
 {
     return CdiOsThreadCreatePinned(thread_func, thread_id_out_ptr, thread_name_str, thread_func_arg_ptr, start_signal,
                                    -1);
@@ -366,7 +368,7 @@ static inline bool CdiOsThreadCreate(ThreadFuncName thread_func, CdiThreadID* th
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsThreadAllocData(CdiThreadData* handle_out_ptr);
+CDI_INTERFACE bool CdiOsThreadAllocData(CdiThreadData* handle_out_ptr);
 
 /**
  * Frees a slot of thread-local storage.  Should be called before program exit but after all threads are done using the
@@ -376,7 +378,7 @@ bool CdiOsThreadAllocData(CdiThreadData* handle_out_ptr);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsThreadFreeData(CdiThreadData handle);
+CDI_INTERFACE bool CdiOsThreadFreeData(CdiThreadData handle);
 
 /**
  * Stores a value in this thread's copy of a thread-local storage slot. Calls to osThreadGetData from the same thread
@@ -387,7 +389,7 @@ bool CdiOsThreadFreeData(CdiThreadData handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsThreadSetData(CdiThreadData handle, void* content_ptr);
+CDI_INTERFACE bool CdiOsThreadSetData(CdiThreadData handle, void* content_ptr);
 
 /**
  * Get the value of this thread's copy of a thread-local storage slot.
@@ -397,7 +399,7 @@ bool CdiOsThreadSetData(CdiThreadData handle, void* content_ptr);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsThreadGetData(CdiThreadData handle, void** content_out_ptr);
+CDI_INTERFACE bool CdiOsThreadGetData(CdiThreadData handle, void** content_out_ptr);
 
 /**
  * Get the name of the thread that was created using CdiOsThreadCreatePinned().
@@ -406,7 +408,7 @@ bool CdiOsThreadGetData(CdiThreadData handle, void** content_out_ptr);
  *
  * @return Pointer to name of the thread.
  */
-const char* CdiOsThreadGetName(CdiThreadID thread_id);
+CDI_INTERFACE const char* CdiOsThreadGetName(CdiThreadID thread_id);
 
 /**
  * Waits/blocks until the given thread has finished.
@@ -417,7 +419,7 @@ const char* CdiOsThreadGetName(CdiThreadID thread_id);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsThreadJoin(CdiThreadID thread_id, uint32_t timeout_in_ms, bool* timed_out_ptr);
+CDI_INTERFACE bool CdiOsThreadJoin(CdiThreadID thread_id, uint32_t timeout_in_ms, bool* timed_out_ptr);
 
 // -- Semaphores --
 
@@ -429,7 +431,7 @@ bool CdiOsThreadJoin(CdiThreadID thread_id, uint32_t timeout_in_ms, bool* timed_
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSemaphoreCreate(CdiSemID* ret_sem_handle_ptr, int sem_count);
+CDI_INTERFACE bool CdiOsSemaphoreCreate(CdiSemID* ret_sem_handle_ptr, int sem_count);
 
 /**
  * Deletes a semaphore.
@@ -438,7 +440,7 @@ bool CdiOsSemaphoreCreate(CdiSemID* ret_sem_handle_ptr, int sem_count);
  *
  * @return returns true if successful, otherwise false is returned.
  */
-bool CdiOsSemaphoreDelete(CdiSemID sem_handle);
+CDI_INTERFACE bool CdiOsSemaphoreDelete(CdiSemID sem_handle);
 
 /**
  * Releases a semaphore.
@@ -447,7 +449,7 @@ bool CdiOsSemaphoreDelete(CdiSemID sem_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSemaphoreRelease(CdiSemID sem_handle);
+CDI_INTERFACE bool CdiOsSemaphoreRelease(CdiSemID sem_handle);
 
 /**
  * Reserves a semaphore and blocks if the current semaphore count is 0. If the semaphore is already reserved by the
@@ -458,7 +460,7 @@ bool CdiOsSemaphoreRelease(CdiSemID sem_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSemaphoreReserve(CdiSemID sem_handle, int timeout_in_ms);
+CDI_INTERFACE bool CdiOsSemaphoreReserve(CdiSemID sem_handle, int timeout_in_ms);
 
 /**
  * Returns the value of the given semaphore (ie. how many semaphore resources are available).
@@ -467,7 +469,7 @@ bool CdiOsSemaphoreReserve(CdiSemID sem_handle, int timeout_in_ms);
  *
  * @return Value of semaphore.
  */
-int CdiOsSemaphoreValueGet(CdiSemID sem_handle);
+CDI_INTERFACE int CdiOsSemaphoreValueGet(CdiSemID sem_handle);
 
 // -- Critical Sections --
 
@@ -478,21 +480,21 @@ int CdiOsSemaphoreValueGet(CdiSemID sem_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsCritSectionCreate(CdiCsID* cs_handle_ptr);
+CDI_INTERFACE bool CdiOsCritSectionCreate(CdiCsID* cs_handle_ptr);
 
 /**
  * Reserves the specified critical section.
  *
  * @param cs_handle Critical section ID to reserve.
  */
-void CdiOsCritSectionReserve(CdiCsID cs_handle);
+CDI_INTERFACE void CdiOsCritSectionReserve(CdiCsID cs_handle);
 
 /**
  * Releases the specified critical section.
  *
  * @param cs_handle Critical section ID to release.
  */
-void CdiOsCritSectionRelease(CdiCsID cs_handle);
+CDI_INTERFACE void CdiOsCritSectionRelease(CdiCsID cs_handle);
 
 /**
  *  Deletes a critical section.
@@ -501,7 +503,7 @@ void CdiOsCritSectionRelease(CdiCsID cs_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsCritSectionDelete(CdiCsID cs_handle);
+CDI_INTERFACE bool CdiOsCritSectionDelete(CdiCsID cs_handle);
 
 // -- String Functions ---
 
@@ -522,7 +524,7 @@ bool CdiOsCritSectionDelete(CdiCsID cs_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSignalCreate(CdiSignalType* signal_handle_ptr);
+CDI_INTERFACE bool CdiOsSignalCreate(CdiSignalType* signal_handle_ptr);
 
 /**
  * This function deletes a signal.
@@ -531,7 +533,7 @@ bool CdiOsSignalCreate(CdiSignalType* signal_handle_ptr);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSignalDelete(CdiSignalType signal_handle);
+CDI_INTERFACE bool CdiOsSignalDelete(CdiSignalType signal_handle);
 
 /**
  * This function clears a signal.
@@ -540,7 +542,7 @@ bool CdiOsSignalDelete(CdiSignalType signal_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSignalClear(CdiSignalType signal_handle);
+CDI_INTERFACE bool CdiOsSignalClear(CdiSignalType signal_handle);
 
 /**
  * This function sets a signal and its related state variable.
@@ -549,7 +551,7 @@ bool CdiOsSignalClear(CdiSignalType signal_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSignalSet(CdiSignalType signal_handle);
+CDI_INTERFACE bool CdiOsSignalSet(CdiSignalType signal_handle);
 
 /**
  * This function returns the value of the signal passed in.
@@ -558,7 +560,7 @@ bool CdiOsSignalSet(CdiSignalType signal_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSignalGet(CdiSignalType signal_handle);
+CDI_INTERFACE bool CdiOsSignalGet(CdiSignalType signal_handle);
 
 /**
  * This function returns the value of the signal passed in without using any OS resources. It only accesses state data.
@@ -567,7 +569,7 @@ bool CdiOsSignalGet(CdiSignalType signal_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSignalReadState(CdiSignalType signal_handle);
+CDI_INTERFACE bool CdiOsSignalReadState(CdiSignalType signal_handle);
 
 /**
  * This function waits for a signal.
@@ -578,7 +580,7 @@ bool CdiOsSignalReadState(CdiSignalType signal_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSignalWait(CdiSignalType signal_handle, uint32_t timeout_in_ms, bool* timed_out_ptr);
+CDI_INTERFACE bool CdiOsSignalWait(CdiSignalType signal_handle, uint32_t timeout_in_ms, bool* timed_out_ptr);
 
 /**
  * This function waits for an array of signals.
@@ -593,8 +595,8 @@ bool CdiOsSignalWait(CdiSignalType signal_handle, uint32_t timeout_in_ms, bool* 
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wait_all, uint32_t timeout_in_ms,
-                      uint32_t* ret_signal_index_ptr);
+CDI_INTERFACE bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wait_all, uint32_t timeout_in_ms,
+                                    uint32_t* ret_signal_index_ptr);
 
 // -- Memory --
 
@@ -605,7 +607,7 @@ bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wai
  *
  * @return Pointer to the allocated memory block. If unable to allocate the memory block, NULL is returned.
  */
-void* CdiOsMemAlloc(int32_t mem_size);
+CDI_INTERFACE void* CdiOsMemAlloc(int32_t mem_size);
 
 /**
  * Allocates a block of memory, writes zero across its entirety, and returns a pointer to the start of the block.
@@ -614,14 +616,14 @@ void* CdiOsMemAlloc(int32_t mem_size);
  *
  * @return Pointer to the allocated memory block. If unable to allocate the memory block, NULL is returned.
  */
-void* CdiOsMemAllocZero(int32_t mem_size);
+CDI_INTERFACE void* CdiOsMemAllocZero(int32_t mem_size);
 
 /**
  * Releases a previously allocated block of memory.
  *
  * @param mem_ptr Pointer to start address of memory block.
  */
-void CdiOsMemFree(void* mem_ptr);
+CDI_INTERFACE void CdiOsMemFree(void* mem_ptr);
 
 /**
  * Allocates a block of huge page memory and returns a pointer to the start of the block.
@@ -630,7 +632,7 @@ void CdiOsMemFree(void* mem_ptr);
  *
  * @return Pointer to the allocated memory block. If unable to allocate the memory block, NULL is returned.
  */
-void* CdiOsMemAllocHugePage(int32_t mem_size);
+CDI_INTERFACE void* CdiOsMemAllocHugePage(int32_t mem_size);
 
 /**
  * Releases a previously allocated block of huge page memory.
@@ -638,7 +640,7 @@ void* CdiOsMemAllocHugePage(int32_t mem_size);
  * @param mem_ptr Pointer to start address of memory block.
  * @param mem_size Number of bytes that were allocated.
  */
-void CdiOsMemFreeHugePage(void* mem_ptr, int mem_size);
+CDI_INTERFACE void CdiOsMemFreeHugePage(void* mem_ptr, int mem_size);
 
 // -- File --
 
@@ -650,7 +652,7 @@ void CdiOsMemFreeHugePage(void* mem_ptr, int mem_size);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsOpenForWrite(const char* file_name_str, CdiFileID* file_handle_ptr);
+CDI_INTERFACE bool CdiOsOpenForWrite(const char* file_name_str, CdiFileID* file_handle_ptr);
 
 /**
  * Opens a file (file_name_str) for read and returns a file handle.
@@ -660,7 +662,7 @@ bool CdiOsOpenForWrite(const char* file_name_str, CdiFileID* file_handle_ptr);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsOpenForRead(const char* file_name_str, CdiFileID* file_handle_ptr);
+CDI_INTERFACE bool CdiOsOpenForRead(const char* file_name_str, CdiFileID* file_handle_ptr);
 
 /**
  *  Closes a file.
@@ -669,7 +671,7 @@ bool CdiOsOpenForRead(const char* file_name_str, CdiFileID* file_handle_ptr);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsClose(CdiFileID file_handle);
+CDI_INTERFACE bool CdiOsClose(CdiFileID file_handle);
 
 /**
  * Reads data from a file.
@@ -681,7 +683,7 @@ bool CdiOsClose(CdiFileID file_handle);
  *
  * @return true if successful, otherwise false. Check EOF using OS's EOF API function.
  */
-bool CdiOsRead(CdiFileID file_handle, void* buffer_ptr, uint32_t byte_count, uint32_t* bytes_read_ptr);
+CDI_INTERFACE bool CdiOsRead(CdiFileID file_handle, void* buffer_ptr, uint32_t byte_count, uint32_t* bytes_read_ptr);
 
 /**
  * Writes a file.
@@ -692,7 +694,7 @@ bool CdiOsRead(CdiFileID file_handle, void* buffer_ptr, uint32_t byte_count, uin
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsWrite(CdiFileID file_handle, const void* data_ptr, uint32_t byte_count);
+CDI_INTERFACE bool CdiOsWrite(CdiFileID file_handle, const void* data_ptr, uint32_t byte_count);
 
 /**
  * Flushes write buffers for the specified file.
@@ -701,7 +703,7 @@ bool CdiOsWrite(CdiFileID file_handle, const void* data_ptr, uint32_t byte_count
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsFlush(CdiFileID file_handle);
+CDI_INTERFACE bool CdiOsFlush(CdiFileID file_handle);
 
 /**
  * Retrieves the current file position for the specified file.
@@ -711,7 +713,7 @@ bool CdiOsFlush(CdiFileID file_handle);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsFTell(CdiFileID file_handle, uint64_t* current_position_ptr);
+CDI_INTERFACE bool CdiOsFTell(CdiFileID file_handle, uint64_t* current_position_ptr);
 
 /**
  * Retrieves the current file position for the specified file.
@@ -722,7 +724,7 @@ bool CdiOsFTell(CdiFileID file_handle, uint64_t* current_position_ptr);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsFSeek(CdiFileID file_handle, int64_t offset, int position);
+CDI_INTERFACE bool CdiOsFSeek(CdiFileID file_handle, int64_t offset, int position);
 
 /**
  * Takes in a filepath and breaks it into its component directory and filename.
@@ -737,8 +739,8 @@ bool CdiOsFSeek(CdiFileID file_handle, int64_t offset, int position);
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsSplitPath(const char* filepath_str, char* filename_str, int filename_buf_size, char* directory_str,
-                    int directory_buf_size);
+CDI_INTERFACE bool CdiOsSplitPath(const char* filepath_str, char* filename_str, int filename_buf_size, char* directory_str,
+                                  int directory_buf_size);
 
 /**
  * Takes in a directory string and verifies that the directory exists and is writeable.
@@ -747,7 +749,7 @@ bool CdiOsSplitPath(const char* filepath_str, char* filename_str, int filename_b
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsIsPathWriteable(const char* directory_str);
+CDI_INTERFACE bool CdiOsIsPathWriteable(const char* directory_str);
 
 // -- Utilities - Strings, Sleep --
 
@@ -760,21 +762,21 @@ bool CdiOsIsPathWriteable(const char* directory_str);
  *
  * @return Number of characters copied.
  */
-int CdiOsStrCpy(char* dest_str, uint32_t max_str_len, const char* src_str);
+CDI_INTERFACE int CdiOsStrCpy(char* dest_str, uint32_t max_str_len, const char* src_str);
 
 /**
  * Block the current thread for the specified number of milliseconds.
  *
  * @param milliseconds Block thread for this much time.
  */
-void CdiOsSleep(uint32_t milliseconds);
+CDI_INTERFACE void CdiOsSleep(uint32_t milliseconds);
 
 /**
  * Block the current thread for microseconds.
  *
  * @param microseconds Block thread for this much time.
  */
-void CdiOsSleepMicroseconds(uint32_t microseconds);
+CDI_INTERFACE void CdiOsSleepMicroseconds(uint32_t microseconds);
 
 #if defined _WIN32
 #define CdiOsStrCaseCmp _stricmp
@@ -815,7 +817,7 @@ void CdiOsSleepMicroseconds(uint32_t microseconds);
  *
  * @return Microsecond timestamp.
  */
-uint64_t CdiOsGetMicroseconds(void);
+CDI_INTERFACE uint64_t CdiOsGetMicroseconds(void);
 
 /**
  * @brief Macro to get OS time in milliseconds that uses CdiOsGetMicroseconds().
@@ -836,14 +838,14 @@ uint64_t CdiOsGetMicroseconds(void);
  *
  * @param ret_time_ptr a pointer returned to a UTC timestamp in the format of a timespec structure as defined by time.h.
  */
-void CdiOsGetUtcTime(struct timespec* ret_time_ptr);
+CDI_INTERFACE void CdiOsGetUtcTime(struct timespec* ret_time_ptr);
 
 /**
  * Get current local time as "tm" structure.
  *
  * @param local_time_ret_ptr Pointer to returned local time.
  */
-void CdiOsGetLocalTime(struct tm* local_time_ret_ptr);
+CDI_INTERFACE void CdiOsGetLocalTime(struct tm* local_time_ret_ptr);
 
 /**
  * Get current local time as a formatted as ISO 8601.
@@ -853,7 +855,7 @@ void CdiOsGetLocalTime(struct tm* local_time_ret_ptr);
  *
  * @return char_count Returns the number of characters of the formatted string.
  */
-int CdiOsGetLocalTimeString(char* time_str, int max_string_len);
+CDI_INTERFACE int CdiOsGetLocalTimeString(char* time_str, int max_string_len);
 
 /**
  * Opens a unidirectional Internet Protocol User Datagram Protocol (IP/UDP) socket for communications. For a socket to
@@ -870,7 +872,7 @@ int CdiOsGetLocalTimeString(char* time_str, int max_string_len);
  *
  * @return true if the socket was successfully opened and is ready for communications, otherwise false.
  */
-bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* new_socket_ptr);
+CDI_INTERFACE bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* new_socket_ptr);
 
 /**
  * Gets the number of the port to which the specified socket is bound. This is useful for receive sockets opened with
@@ -882,7 +884,7 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
  *
  * @return true if the port number could be determined or false if a problem was encountered.
  */
-bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr);
+CDI_INTERFACE bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr);
 
 /**
  * Close a previously opened communications socket, freeing resources that were allocated for it including the local
@@ -892,7 +894,7 @@ bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr);
  *
  * @return true if the socket was closed cleanly, false if a problem was encountered trying to close it.
  */
-bool CdiOsSocketClose(CdiSocket socket_handle);
+CDI_INTERFACE bool CdiOsSocketClose(CdiSocket socket_handle);
 
 /**
  * Synchronously reads the next available datagram from the specified socket which must have been opened for receiving.
@@ -910,7 +912,7 @@ bool CdiOsSocketClose(CdiSocket socket_handle);
  * @return true if the function succeeded, false if it failed. Timing out is considered to be success but zero will have
  *         been written to byte_count_ptr to disambiguate a timeout condition from data being written into the buffer.
  */
-bool CdiOsSocketRead(CdiSocket socket_handle, void* buffer_ptr, int* byte_count_ptr);
+CDI_INTERFACE bool CdiOsSocketRead(CdiSocket socket_handle, void* buffer_ptr, int* byte_count_ptr);
 
 /**
  * Synchronously write a datagram to a communications socket which must have been opened for sending. The data is
@@ -927,7 +929,7 @@ bool CdiOsSocketRead(CdiSocket socket_handle, void* buffer_ptr, int* byte_count_
  * @return true if the datagram was successfully sent, false if not. Note that there is no guarantee that the datagram
  *         was actually received by the destination host.
  */
-bool CdiOsSocketWrite(CdiSocket socket_handle, struct iovec* iov, int iovcnt, int* byte_count_ptr);
+CDI_INTERFACE bool CdiOsSocketWrite(CdiSocket socket_handle, struct iovec* iov, int iovcnt, int* byte_count_ptr);
 
 /**
  * Set an environment variable for the currently running process. NOTE: Does not set the process's shell environment.
@@ -937,12 +939,12 @@ bool CdiOsSocketWrite(CdiSocket socket_handle, struct iovec* iov, int iovcnt, in
  *
  * @return true if successful, otherwise false.
  */
-bool CdiOsEnvironmentVariableSet(const char* name_str, const char* value_str);
+CDI_INTERFACE bool CdiOsEnvironmentVariableSet(const char* name_str, const char* value_str);
 
 /**
  * Shuts down OS specific resources used by the SDK.
  */
-void CdiOsShutdown(void);
+CDI_INTERFACE void CdiOsShutdown(void);
 
 #ifdef __cplusplus
 }

@@ -13,6 +13,7 @@
 #ifndef CDI_LOGGER_API_API_H__
 #define CDI_LOGGER_API_API_H__
 
+#include "cdi_utility_api.h"
 #include "cdi_log_api.h"
 #include "cdi_os_api.h"
 
@@ -131,7 +132,7 @@ extern "C" {
 /**
  * Initialize the logger. Must be called once before using any other functions in the logger.
  */
-bool CdiLoggerInitialize(void);
+CDI_INTERFACE bool CdiLoggerInitialize(void);
 
 /**
  * Create an instance of the logger.
@@ -141,7 +142,7 @@ bool CdiLoggerInitialize(void);
  *
  * @return true successfully initialized; false if not.
  */
-bool CdiLoggerCreate(CdiLogLevel default_log_level, CdiLoggerHandle* ret_logger_handle_ptr);
+CDI_INTERFACE bool CdiLoggerCreate(CdiLogLevel default_log_level, CdiLoggerHandle* ret_logger_handle_ptr);
 
 /**
  * Set the global log for the specified logger.
@@ -151,7 +152,7 @@ bool CdiLoggerCreate(CdiLogLevel default_log_level, CdiLoggerHandle* ret_logger_
  *
  * @return true if successful, false if not.
  */
-bool CdiLoggerSetGlobalLog(CdiLoggerHandle logger_handle, CdiLogHandle log_handle);
+CDI_INTERFACE bool CdiLoggerSetGlobalLog(CdiLoggerHandle logger_handle, CdiLogHandle log_handle);
 
 /**
  * Create a log using the specified log configuration data.
@@ -163,8 +164,8 @@ bool CdiLoggerSetGlobalLog(CdiLoggerHandle logger_handle, CdiLogHandle log_handl
  *
  * @return true if successful, false if not.
  */
-bool CdiLoggerCreateLog(CdiLoggerHandle logger_handle, CdiConnectionHandle con_handle,
-                        const CdiLogMethodData* log_method_data_ptr, CdiLogHandle* ret_log_handle_ptr);
+CDI_INTERFACE bool CdiLoggerCreateLog(CdiLoggerHandle logger_handle, CdiConnectionHandle con_handle,
+                                      const CdiLogMethodData* log_method_data_ptr, CdiLogHandle* ret_log_handle_ptr);
 
 /**
  * Create a file log.
@@ -175,7 +176,7 @@ bool CdiLoggerCreateLog(CdiLoggerHandle logger_handle, CdiConnectionHandle con_h
  *
  * @return  true successfully initialized; false if not.
  */
-bool CdiLoggerCreateFileLog(CdiLoggerHandle logger_handle, const char* filename_str, CdiLogHandle* ret_log_handle_ptr);
+CDI_INTERFACE bool CdiLoggerCreateFileLog(CdiLoggerHandle logger_handle, const char* filename_str, CdiLogHandle* ret_log_handle_ptr);
 
 /**
  * Function used to generate a formatted log line.
@@ -190,8 +191,8 @@ bool CdiLoggerCreateFileLog(CdiLoggerHandle logger_handle, const char* filename_
  * The remaining parameters contain a variable length list of arguments used by the format string to generate the log
  * message.
  */
-void CdiLogger(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_level,
-               const char* function_name_str, int line_number, const char* format_str, ...);
+CDI_INTERFACE void CdiLogger(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_level,
+                             const char* function_name_str, int line_number, const char* format_str, ...);
 
 /**
  * Function used to generate a formatted log line from logger callback data.
@@ -199,7 +200,7 @@ void CdiLogger(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_l
  * @param handle Log handle to write the message to. Must be using a kLogMethodStdout or kLogMethodFile log method.
  * @param cb_data_ptr Logger callback data used to generate the log message.
  */
-void CdiLoggerLogFromCallback(CdiLogHandle handle, const CdiLogMessageCbData* cb_data_ptr);
+CDI_INTERFACE void CdiLoggerLogFromCallback(CdiLogHandle handle, const CdiLogMessageCbData* cb_data_ptr);
 
 /**
  * Associate the specified log with the calling thread. Subsequent calls to non-global CdiLog functions by this thread
@@ -209,13 +210,13 @@ void CdiLoggerLogFromCallback(CdiLogHandle handle, const CdiLogMessageCbData* cb
  *
  * @return  true successfully initialized; false if not.
  */
-bool CdiLoggerThreadLogSet(CdiLogHandle handle);
+CDI_INTERFACE bool CdiLoggerThreadLogSet(CdiLogHandle handle);
 
 /**
  * Remove any association of the calling thread with a logger. Subsequent calls to non-global CdiLog functions by this
  * thread will write to the global logger (if one exists) or to stdout.
  */
-void CdiLoggerThreadLogUnset(void);
+CDI_INTERFACE void CdiLoggerThreadLogUnset(void);
 
 /**
  * Associate the specified log with the calling thread. Subsequent calls to non-global CdiLog functions by this thread
@@ -223,7 +224,7 @@ void CdiLoggerThreadLogUnset(void);
  *
  * @return  true successfully initialized; false if not.
  */
-CdiLogHandle CdiLoggerThreadLogGet(void);
+CDI_INTERFACE CdiLogHandle CdiLoggerThreadLogGet(void);
 
 /**
  * Begin a multiline log message, creating a buffer to hold the log message lines.
@@ -236,8 +237,8 @@ CdiLogHandle CdiLoggerThreadLogGet(void);
  * @param line_number Source code line number the log message is being generated from.
  * @param state_ptr Pointer to address where to write returned multiline state data.
  */
-void CdiLoggerMultilineBegin(CdiLogHandle log_handle, CdiLogComponent component, CdiLogLevel log_level,
-                             const char* function_name_str, int line_number, CdiLogMultilineState* state_ptr);
+CDI_INTERFACE void CdiLoggerMultilineBegin(CdiLogHandle log_handle, CdiLogComponent component, CdiLogLevel log_level,
+                                           const char* function_name_str, int line_number, CdiLogMultilineState* state_ptr);
 
 /**
  * Add a line to a multiline log message buffer.
@@ -247,7 +248,7 @@ void CdiLoggerMultilineBegin(CdiLogHandle log_handle, CdiLogComponent component,
  * The remaining parameters contain a variable length list of arguments used by the format string to generate the
  * console message.
  */
-void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str, ...);
+CDI_INTERFACE void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str, ...);
 
 /**
  * Return pointer to multiline log buffer. Marks the buffer as used, so CdiLoggerMultilineEnd() won't generate any
@@ -257,7 +258,7 @@ void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str,
  *
  * @return Pointer to log buffer.
  */
-char* CdiLoggerMultilineGetBuffer(CdiLogMultilineState* state_ptr);
+CDI_INTERFACE char* CdiLoggerMultilineGetBuffer(CdiLogMultilineState* state_ptr);
 
 /**
  * End the multiline lo message and write to the log as a single message. Resources used by the multiline log will be
@@ -265,12 +266,12 @@ char* CdiLoggerMultilineGetBuffer(CdiLogMultilineState* state_ptr);
  *
  * @param state_ptr Pointer to multiline state data created using CdiLoggerMultilineBegin().
  */
-void CdiLoggerMultilineEnd(CdiLogMultilineState* state_ptr);
+CDI_INTERFACE void CdiLoggerMultilineEnd(CdiLogMultilineState* state_ptr);
 
 /**
  * Flush all file logs.
  */
-void CdiLoggerFlushAllFileLogs(void);
+CDI_INTERFACE void CdiLoggerFlushAllFileLogs(void);
 
 /**
  * Determine if a specific log component and level is enabled for logging.
@@ -281,51 +282,51 @@ void CdiLoggerFlushAllFileLogs(void);
  *
  * @return True if enabled, otherwise false.
  */
-bool CdiLoggerIsEnabled(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_level);
+CDI_INTERFACE bool CdiLoggerIsEnabled(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_level);
 
 /**
  * @see CdiLogComponentEnable
  */
-CdiReturnStatus CdiLoggerComponentEnable(CdiLogHandle handle, CdiLogComponent component, bool enable);
+CDI_INTERFACE CdiReturnStatus CdiLoggerComponentEnable(CdiLogHandle handle, CdiLogComponent component, bool enable);
 
 /**
  * @see CdiLogComponentEnableGlobal
  */
-CdiReturnStatus CdiLoggerComponentEnableGlobal(CdiLogComponent component, bool enable);
+CDI_INTERFACE CdiReturnStatus CdiLoggerComponentEnableGlobal(CdiLogComponent component, bool enable);
 
 /**
  * @see CdiLogComponentIsEnabled
  */
-bool CdiLoggerComponentIsEnabled(CdiLogHandle handle, CdiLogComponent component);
+CDI_INTERFACE bool CdiLoggerComponentIsEnabled(CdiLogHandle handle, CdiLogComponent component);
 
 /**
  * @see CdiLogLevelSet
  */
-CdiReturnStatus CdiLoggerLevelSet(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel level);
+CDI_INTERFACE CdiReturnStatus CdiLoggerLevelSet(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel level);
 
 /**
  * @see CdiLogLevelSetGlobal
  */
-CdiReturnStatus CdiLoggerLevelSetGlobal(CdiLogComponent component, CdiLogLevel level);
+CDI_INTERFACE CdiReturnStatus CdiLoggerLevelSetGlobal(CdiLogComponent component, CdiLogLevel level);
 
 /**
  * @see CdiLogStderrEnable
  */
-CdiReturnStatus CdiLoggerStderrEnable(bool enable, CdiLogLevel level);
+CDI_INTERFACE CdiReturnStatus CdiLoggerStderrEnable(bool enable, CdiLogLevel level);
 
 /**
  * Closes a log file and destroys the resources used by the instance of the specified log.
  *
  * @param handle Log handle.
  */
-void CdiLoggerDestroyLog(CdiLogHandle handle);
+CDI_INTERFACE void CdiLoggerDestroyLog(CdiLogHandle handle);
 
 /**
  * Destroys the resources used by the instance of the specified logger.
  *
  * @param logger_handle Logger handle.
  */
-void CdiLoggerDestroyLogger(CdiLoggerHandle logger_handle);
+CDI_INTERFACE void CdiLoggerDestroyLogger(CdiLoggerHandle logger_handle);
 
 /**
  * Shutdown the logger. Must be called once before existing the application.
@@ -333,7 +334,7 @@ void CdiLoggerDestroyLogger(CdiLoggerHandle logger_handle);
  * @param force Use true to forcibly shutdown the logger closing any open files. Should only be used in abnormal
  *              shutdown conditions.
  */
-void CdiLoggerShutdown(bool force);
+CDI_INTERFACE void CdiLoggerShutdown(bool force);
 
 #ifdef __cplusplus
 }

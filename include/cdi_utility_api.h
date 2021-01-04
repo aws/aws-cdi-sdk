@@ -24,7 +24,7 @@
 //*********************************************************************************************************************
 
 /// Used to define API interface export for windows variant.
-#if defined(WIN32)
+#if defined(_WIN32)
 #define CDI_INTERFACE __declspec (dllexport)
 #else
 #define CDI_INTERFACE
@@ -140,7 +140,7 @@ CDI_INTERFACE int CdiUtilityKeyStringToEnum(EnumStringKeyTypes key_type, const c
  *
  * @return An RTP timestamp in sample_rate units. If sample_rate is 0 or ptp_timestamp_ptr is NULL 0 is returned.
  */
-uint32_t CdiUtilityPtpToRtp(const CdiPtpTimestamp* ptp_timestamp_ptr, uint32_t sample_rate);
+CDI_INTERFACE uint32_t CdiUtilityPtpToRtp(const CdiPtpTimestamp* ptp_timestamp_ptr, uint32_t sample_rate);
 
 /**
  * Convert the specified PTP timestamp into microseconds.
@@ -149,7 +149,7 @@ uint32_t CdiUtilityPtpToRtp(const CdiPtpTimestamp* ptp_timestamp_ptr, uint32_t s
  *
  * @return PTP timestamp in microseconds.
  */
-uint64_t CdiUtilityPtpTimestampToMicroseconds(const CdiPtpTimestamp* timestamp_ptr);
+CDI_INTERFACE uint64_t CdiUtilityPtpTimestampToMicroseconds(const CdiPtpTimestamp* timestamp_ptr);
 
 /**
  * Convenience function to return the human readable string associated with the given boolean value.
