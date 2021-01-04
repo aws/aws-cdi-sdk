@@ -23,6 +23,7 @@
 #include "cdi_core_api.h"
 #include "cdi_os_api.h"
 #include "singly_linked_list_api.h"
+#include "internal.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -860,6 +861,10 @@ void CdiLogger(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_l
                int line_number, const char* format_str, ...)
 {
     if (NULL == handle) {
+        handle = cdi_global_context.global_log_handle;
+    }
+
+    if (NULL == handle) {
         handle = stdout_log_handle;
     }
 
@@ -883,6 +888,10 @@ void CdiLogger(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_l
 void CdiLoggerMultilineBegin(CdiLogHandle log_handle, CdiLogComponent component, CdiLogLevel log_level,
                              const char* function_name_str, int line_number, CdiLogMultilineState* state_ptr)
 {
+    if (NULL == log_handle) {
+        log_handle = cdi_global_context.global_log_handle;
+    }
+
     if (NULL == log_handle) {
         log_handle = stdout_log_handle;
     }
