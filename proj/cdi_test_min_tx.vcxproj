@@ -80,6 +80,7 @@
       <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\src\test_common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Lib>
       <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdu.lib%(AdditionalDependencies)</AdditionalDependencies>
@@ -101,6 +102,7 @@
       <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\src\test_common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Lib>
       <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdu.lib%(AdditionalDependencies)</AdditionalDependencies>
@@ -122,6 +124,7 @@
       <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\src\test_common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Lib>
       <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib%(AdditionalDependencies)</AdditionalDependencies>
@@ -142,6 +145,7 @@
       <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\src\test_common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Lib>
       <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib%(AdditionalDependencies)</AdditionalDependencies>
