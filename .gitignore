@@ -7,17 +7,7 @@
 *.swp
 *.pyc
 .idea/
+/aws-cpp-sdk-cdi/out/
 
 #Visual Studio Ignores
-/proj/.vs
 /.vs
-*.tlog
-*.obj
-*.log
-*.pdb
-*.ilk
-*.exp
-*FileListAbsolute*
-*.idb
-*.user
-*.pyc

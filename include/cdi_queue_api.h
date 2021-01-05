@@ -77,8 +77,8 @@ extern "C" {
  *
  * @return true if successful, otherwise false is returned.
  */
-bool CdiQueueCreate(const char* name_str, uint32_t item_count, uint32_t grow_count, uint32_t max_grow_count,
-                    uint32_t item_byte_size, CdiQueueSignalMode signal_mode, CdiQueueHandle* ret_handle_ptr);
+CDI_INTERFACE bool CdiQueueCreate(const char* name_str, uint32_t item_count, uint32_t grow_count, uint32_t max_grow_count,
+                                  uint32_t item_byte_size, CdiQueueSignalMode signal_mode, CdiQueueHandle* ret_handle_ptr);
 
 /**
  * Pop an item from the queue buffer and copy to item_dest_ptr. If the queue is empty, false is returned.
@@ -90,7 +90,7 @@ bool CdiQueueCreate(const char* name_str, uint32_t item_count, uint32_t grow_cou
  *
  * @return true if successful, otherwise false (queue is empty).
  */
-bool CdiQueuePop(CdiQueueHandle handle, void* item_dest_ptr);
+CDI_INTERFACE bool CdiQueuePop(CdiQueueHandle handle, void* item_dest_ptr);
 
 /**
  * Pop an item from the queue buffer and copy to the address item_dest_ptr. If the queue is empty, wait until the
@@ -105,7 +105,7 @@ bool CdiQueuePop(CdiQueueHandle handle, void* item_dest_ptr);
  *
  * @return true if successful, otherwise false (queue is empty and timeout expired or signal got set).
  */
-bool CdiQueuePopWait(CdiQueueHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, void* item_dest_ptr);
+CDI_INTERFACE bool CdiQueuePopWait(CdiQueueHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, void* item_dest_ptr);
 
 /**
  * Pop an item from the queue buffer and copy to the address item_dest_ptr. If the queue is empty, wait until the
@@ -124,8 +124,8 @@ bool CdiQueuePopWait(CdiQueueHandle handle, int timeout_ms, CdiSignalType abort_
  *
  * @return true if successful, otherwise false (queue is empty and timeout expired or signal got set).
  */
-bool CdiQueuePopWaitMultiple(CdiQueueHandle handle, int timeout_ms, CdiSignalType* abort_wait_signal_array,
-                             int num_signals, uint32_t* ret_signal_index_ptr, void* item_dest_ptr);
+CDI_INTERFACE bool CdiQueuePopWaitMultiple(CdiQueueHandle handle, int timeout_ms, CdiSignalType* abort_wait_signal_array,
+                                           int num_signals, uint32_t* ret_signal_index_ptr, void* item_dest_ptr);
 
 /**
  * Push an item on the queue. If the queue is full, false is returned.
@@ -135,7 +135,7 @@ bool CdiQueuePopWaitMultiple(CdiQueueHandle handle, int timeout_ms, CdiSignalTyp
  *
  * @return true if successful, otherwise false (queue is full).
  */
-bool CdiQueuePush(CdiQueueHandle handle, const void* item_ptr);
+CDI_INTERFACE bool CdiQueuePush(CdiQueueHandle handle, const void* item_ptr);
 
 /**
  * Push an item on the queue. If the queue is full, wait until the specified timeout expires or the optional signal gets
@@ -148,7 +148,8 @@ bool CdiQueuePush(CdiQueueHandle handle, const void* item_ptr);
  *
  * @return true if successful, otherwise false (queue is full and timeout expired or signal got set).
  */
-bool CdiQueuePushWait(CdiQueueHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, const void* item_ptr);
+CDI_INTERFACE bool CdiQueuePushWait(CdiQueueHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, 
+                                    const void* item_ptr);
 
 /**
  * Push an item on the queue. If the queue is full, wait until the specified timeout expires or one of the signals in
@@ -165,8 +166,9 @@ bool CdiQueuePushWait(CdiQueueHandle handle, int timeout_ms, CdiSignalType abort
  *
  * @return true if successful, otherwise false (queue is empty and timeout expired or signal got set).
  */
-bool CdiQueuePushWaitMultiple(CdiQueueHandle handle, int timeout_ms, CdiSignalType* abort_wait_signal_array,
-                              int num_signals, uint32_t* ret_signal_index_ptr, const void* item_ptr);
+CDI_INTERFACE bool CdiQueuePushWaitMultiple(CdiQueueHandle handle, int timeout_ms, 
+                                            CdiSignalType* abort_wait_signal_array, int num_signals, 
+                                            uint32_t* ret_signal_index_ptr, const void* item_ptr);
 
 /**
  * Check if queue is empty.
@@ -175,7 +177,7 @@ bool CdiQueuePushWaitMultiple(CdiQueueHandle handle, int timeout_ms, CdiSignalTy
  *
  * @return Returns true if the queue is empty, otherwise false is returned.
  */
-bool CdiQueueIsEmpty(CdiQueueHandle handle);
+CDI_INTERFACE bool CdiQueueIsEmpty(CdiQueueHandle handle);
 
 /**
  * Drain all items in the queue. NOTE: The caller must ensure that other threads cannot use either of the CdiQueuePop()
@@ -183,7 +185,7 @@ bool CdiQueueIsEmpty(CdiQueueHandle handle);
  *
  * @param handle Queue handle.
  */
-void CdiQueueFlush(CdiQueueHandle handle);
+CDI_INTERFACE void CdiQueueFlush(CdiQueueHandle handle);
 
 /**
  * If kQueueSignalPopWait or kQueueSignalBoth was specified when the queue was created, this function returns the signal
@@ -192,7 +194,7 @@ void CdiQueueFlush(CdiQueueHandle handle);
  *
  * @param handle Queue handle.
  */
-CdiSignalType CdiQueueGetPopWaitSignal(CdiQueueHandle handle);
+CDI_INTERFACE CdiSignalType CdiQueueGetPopWaitSignal(CdiQueueHandle handle);
 
 /**
  * If kQueueSignalPushWait or kQueueSignalBoth was specified when the queue was created, this function returns the
@@ -201,14 +203,14 @@ CdiSignalType CdiQueueGetPopWaitSignal(CdiQueueHandle handle);
  *
  * @param handle Queue handle.
  */
-CdiSignalType CdiQueueGetPushWaitSignal(CdiQueueHandle handle);
+CDI_INTERFACE CdiSignalType CdiQueueGetPushWaitSignal(CdiQueueHandle handle);
 
 /**
  * Get name of the queue that was defined when it was created.
  *
  * @param handle Queue handle.
  */
-const char* CdiQueueGetName(CdiQueueHandle handle);
+CDI_INTERFACE const char* CdiQueueGetName(CdiQueueHandle handle);
 
 /**
  * @brief A structure of this type is passed as the parameter to CdiQueueCallback(). It contains the state of a
@@ -239,14 +241,14 @@ typedef void (*CdiQueueCallback)(const CdiQueueCbData* data_ptr);
  * @param handle Queue handle.
  * @param cb_ptr Pointer to callback function.
  */
-void CdiQueueDebugEnable(CdiQueueHandle handle, CdiQueueCallback cb_ptr);
+CDI_INTERFACE void CdiQueueDebugEnable(CdiQueueHandle handle, CdiQueueCallback cb_ptr);
 
 /**
  * Disable a previously enabled queue debug callback.
  *
  * @param handle Queue handle.
  */
-void CdiQueueDebugDisable(CdiQueueHandle handle);
+CDI_INTERFACE void CdiQueueDebugDisable(CdiQueueHandle handle);
 #endif //DEBUG
 
 /**
@@ -254,7 +256,7 @@ void CdiQueueDebugDisable(CdiQueueHandle handle);
  *
  * @param handle Queue handle.
  */
-void CdiQueueDestroy(CdiQueueHandle handle);
+CDI_INTERFACE void CdiQueueDestroy(CdiQueueHandle handle);
 
 #ifdef __cplusplus
 }

@@ -1,4 +1,6 @@
+# Visual Studio Ignores
+.vs
+Release
+Debug
 x64
-resource.h
-cdi_test.aps
-cdi_test.rc
+*.user

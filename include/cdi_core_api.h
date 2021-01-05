@@ -915,7 +915,7 @@ CDI_INTERFACE CdiReturnStatus CdiCoreShutdown(void);
  *
  * @param ret_time_ptr Address where to write the UTC timestamp in a timespec structure as defined by time.h.
  */
-void CdiCoreGetUtcTime(struct timespec* ret_time_ptr);
+CDI_INTERFACE void CdiCoreGetUtcTime(struct timespec* ret_time_ptr);
 
 /**
  * @brief Get the current TAI time as a PTP timestamp.
@@ -927,21 +927,21 @@ void CdiCoreGetUtcTime(struct timespec* ret_time_ptr);
  * @param ret_ptp_time_ptr Pointer to CdiPtpTimestamp to return the current PtpTimestamp to. This may be NULL.
  * @return The same value that is written to the location pointed to by ret_ptp_time_ptr.
  */
-CdiPtpTimestamp CdiCoreGetPtpTimestamp(CdiPtpTimestamp* ret_ptp_time_ptr);
+CDI_INTERFACE CdiPtpTimestamp CdiCoreGetPtpTimestamp(CdiPtpTimestamp* ret_ptp_time_ptr);
 
 /**
  * Get the current synced AWS network UTC time in microseconds. It uses CdiCoreGetUtcTime().
  *
  * @return Current UTC time in microseconds.
  */
-uint64_t CdiCoreGetUtcTimeMicroseconds(void);
+CDI_INTERFACE uint64_t CdiCoreGetUtcTimeMicroseconds(void);
 
 /**
  * Get the current TAI time in microseconds.
  *
  * @return Current TAI time in microseconds.
  */
-uint64_t CdiCoreGetTaiTimeMicroseconds();
+CDI_INTERFACE uint64_t CdiCoreGetTaiTimeMicroseconds();
 
 /**
  * Returns a short string that briefly describes the meaning of an CDI status code.
@@ -950,7 +950,7 @@ uint64_t CdiCoreGetTaiTimeMicroseconds();
  *
  * @return const char* A character array which describes the requested code.
  */
-const char* CdiCoreStatusToString(CdiReturnStatus status);
+CDI_INTERFACE const char* CdiCoreStatusToString(CdiReturnStatus status);
 
 #ifdef __cplusplus
 }

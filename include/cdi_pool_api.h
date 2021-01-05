@@ -83,6 +83,8 @@
 #include <stdbool.h>
 #include <inttypes.h>
 
+#include "cdi_utility_api.h"
+
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
@@ -142,7 +144,7 @@ extern "C" {
  *
  * @return Size of buffer in bytes needed to create pool,
  */
-uint32_t CdiPoolGetSizeNeeded(uint32_t item_count, uint32_t item_byte_size);
+CDI_INTERFACE uint32_t CdiPoolGetSizeNeeded(uint32_t item_count, uint32_t item_byte_size);
 
 /**
  * Create a new memory pool. Memory is allocated by this function.
@@ -158,8 +160,8 @@ uint32_t CdiPoolGetSizeNeeded(uint32_t item_count, uint32_t item_byte_size);
  *
  * @return true if successful, otherwise false (not enough memory).
  */
-bool CdiPoolCreate(const char* name_str, uint32_t item_count, uint32_t grow_count, uint32_t max_grow_count,
-                   uint32_t item_byte_size, bool thread_safe, CdiPoolHandle* ret_handle_ptr);
+CDI_INTERFACE bool CdiPoolCreate(const char* name_str, uint32_t item_count, uint32_t grow_count, uint32_t max_grow_count,
+                                 uint32_t item_byte_size, bool thread_safe, CdiPoolHandle* ret_handle_ptr);
 
 /**
  * Create a new memory pool and initialize each item in it using the provided callback function. Memory is allocated by
@@ -181,9 +183,9 @@ bool CdiPoolCreate(const char* name_str, uint32_t item_count, uint32_t grow_coun
  *
  * @return true if successful, otherwise false (not enough memory).
  */
-bool CdiPoolCreateAndInitItems(const char* name_str, uint32_t item_count, uint32_t grow_count, uint32_t max_grow_count,
-                               uint32_t item_byte_size, bool thread_safe, CdiPoolHandle* ret_handle_ptr,
-                               CdiPoolItemOperatorFunction init_fn, void* init_context_ptr);
+CDI_INTERFACE bool CdiPoolCreateAndInitItems(const char* name_str, uint32_t item_count, uint32_t grow_count, uint32_t max_grow_count,
+                                             uint32_t item_byte_size, bool thread_safe, CdiPoolHandle* ret_handle_ptr,
+                                             CdiPoolItemOperatorFunction init_fn, void* init_context_ptr);
 
 /**
  * Create a new memory pool from a user-provided buffer and initialize each item in it using the provided callback
@@ -209,9 +211,9 @@ bool CdiPoolCreateAndInitItems(const char* name_str, uint32_t item_count, uint32
  *  number of bytes needed in order to create the pool. If true is returned, the value returned in
  *  buffer_byte_size_needed will be the number of bytes actually used for the pool.
  */
-bool CdiPoolCreateUsingExistingBuffer(const char* name_str, uint32_t item_count, uint32_t item_byte_size,
-                                      bool thread_safe, void* buffer_ptr, uint32_t buffer_byte_size,
-                                      uint32_t* buffer_byte_size_needed_ptr, CdiPoolHandle* ret_handle_ptr);
+CDI_INTERFACE bool CdiPoolCreateUsingExistingBuffer(const char* name_str, uint32_t item_count, uint32_t item_byte_size,
+                                                    bool thread_safe, void* buffer_ptr, uint32_t buffer_byte_size,
+                                                    uint32_t* buffer_byte_size_needed_ptr, CdiPoolHandle* ret_handle_ptr);
 
 /**
  * Create a new memory pool from a user-provided buffer. Some additional memory is required for each item in the pool to
@@ -241,10 +243,10 @@ bool CdiPoolCreateUsingExistingBuffer(const char* name_str, uint32_t item_count,
  *  number of bytes needed in order to create the pool. If true is returned, the value returned in
  *  buffer_byte_size_needed will be the number of bytes actually used for the pool.
  */
-bool CdiPoolCreateUsingExistingBufferAndInitItems(const char* name_str, uint32_t item_count, uint32_t item_byte_size,
-                                                  bool thread_safe, void* buffer_ptr, uint32_t buffer_byte_size,
-                                                  uint32_t* buffer_byte_size_needed_ptr, CdiPoolHandle* ret_handle_ptr,
-                                                  CdiPoolItemOperatorFunction init_fn, void* init_context_ptr);
+CDI_INTERFACE bool CdiPoolCreateUsingExistingBufferAndInitItems(const char* name_str, uint32_t item_count, uint32_t item_byte_size,
+                                                                bool thread_safe, void* buffer_ptr, uint32_t buffer_byte_size,
+                                                                uint32_t* buffer_byte_size_needed_ptr, CdiPoolHandle* ret_handle_ptr,
+                                                                CdiPoolItemOperatorFunction init_fn, void* init_context_ptr);
 
 /**
  * Get a pointer to the head of the allocated buffer list. If the list is empty, NULL will be written to ret_item_ptr
@@ -258,7 +260,7 @@ bool CdiPoolCreateUsingExistingBufferAndInitItems(const char* name_str, uint32_t
  *
  * @return true if successful, otherwise false (allocated buffer list is empty).
  */
-bool CdiPoolPeekInUse(CdiPoolHandle handle, void** ret_item_ptr);
+CDI_INTERFACE bool CdiPoolPeekInUse(CdiPoolHandle handle, void** ret_item_ptr);
 
 /**
  * Get a pointer to an available buffer in the pool. If not enough memory is available,
@@ -269,7 +271,7 @@ bool CdiPoolPeekInUse(CdiPoolHandle handle, void** ret_item_ptr);
  *
  * @return true if successful, otherwise false (no free buffers).
  */
-bool CdiPoolGet(CdiPoolHandle handle, void** ret_item_ptr);
+CDI_INTERFACE bool CdiPoolGet(CdiPoolHandle handle, void** ret_item_ptr);
 
 #ifdef USE_MEMORY_POOL_APPENDED_LISTS
 /**
@@ -283,7 +285,7 @@ bool CdiPoolGet(CdiPoolHandle handle, void** ret_item_ptr);
  *
  * @return true if successful, otherwise false (no free buffers).
  */
-bool CdiPoolGetAndAppend(CdiPoolHandle handle, void* existing_item_ptr, void** ret_item_ptr);
+CDI_INTERFACE bool CdiPoolGetAndAppend(CdiPoolHandle handle, void* existing_item_ptr, void** ret_item_ptr);
 #endif
 
 /**
@@ -292,14 +294,14 @@ bool CdiPoolGetAndAppend(CdiPoolHandle handle, void* existing_item_ptr, void** r
  * @param handle Memory pool handle.
  * @param item_ptr Pointer to buffer to put back.
  */
-void CdiPoolPut(CdiPoolHandle handle, const void* item_ptr);
+CDI_INTERFACE void CdiPoolPut(CdiPoolHandle handle, const void* item_ptr);
 
 /**
  * Put all the used buffers back into the pool.
  *
  * @param handle Memory pool handle.
  */
-void CdiPoolPutAll(CdiPoolHandle handle);
+CDI_INTERFACE void CdiPoolPutAll(CdiPoolHandle handle);
 
 /**
  * Get an array of pointers to available buffers in the pool.
@@ -310,7 +312,7 @@ void CdiPoolPutAll(CdiPoolHandle handle);
  *
  * @return true if successful, otherwise false (not enough free buffers).
  */
-bool CdiPoolGetBulk(CdiPoolHandle handle, uint32_t item_count, void** ret_item_array);
+CDI_INTERFACE bool CdiPoolGetBulk(CdiPoolHandle handle, uint32_t item_count, void** ret_item_array);
 
 /**
  * Put an array of buffers back into the pool.
@@ -321,7 +323,7 @@ bool CdiPoolGetBulk(CdiPoolHandle handle, uint32_t item_count, void** ret_item_a
  *
  * @return true if successful, otherwise false.
  */
-bool CdiPoolPutBulk(CdiPoolHandle handle, uint32_t item_count, const void* item_array);
+CDI_INTERFACE bool CdiPoolPutBulk(CdiPoolHandle handle, uint32_t item_count, const void* item_array);
 
 /**
  * Get name of pool that was defined when pool was created.
@@ -330,7 +332,7 @@ bool CdiPoolPutBulk(CdiPoolHandle handle, uint32_t item_count, const void* item_
  *
  * @return Pointer to NULL terminated name of the pool.
  */
-const char* CdiPoolGetName(CdiPoolHandle handle);
+CDI_INTERFACE const char* CdiPoolGetName(CdiPoolHandle handle);
 
 /**
  * Get byte size of buffer for a single pool item.
@@ -339,7 +341,7 @@ const char* CdiPoolGetName(CdiPoolHandle handle);
  *
  * @return Byte size of the buffer.
  */
-uint32_t CdiPoolGetItemSize(CdiPoolHandle handle);
+CDI_INTERFACE uint32_t CdiPoolGetItemSize(CdiPoolHandle handle);
 
 /**
  * Get the number of free items currently available in the pool.
@@ -348,7 +350,7 @@ uint32_t CdiPoolGetItemSize(CdiPoolHandle handle);
  *
  * @return Number of free items.
  */
-int CdiPoolGetFreeItemCount(CdiPoolHandle handle);
+CDI_INTERFACE int CdiPoolGetFreeItemCount(CdiPoolHandle handle);
 
 /**
  * Call a function for each item in the pool. If any items are allocated from the pool when this function is called, no
@@ -362,7 +364,7 @@ int CdiPoolGetFreeItemCount(CdiPoolHandle handle);
  * @return false if any items are currently allocated from the pool or if operator_function returned false for at least
  *         one item in the pool, otherwise true.
  */
-bool CdiPoolForEachItem(CdiPoolHandle handle, CdiPoolItemOperatorFunction operator_function, const void* context_ptr);
+CDI_INTERFACE bool CdiPoolForEachItem(CdiPoolHandle handle, CdiPoolItemOperatorFunction operator_function, const void* context_ptr);
 
 #ifdef DEBUG
 /**
@@ -372,14 +374,14 @@ bool CdiPoolForEachItem(CdiPoolHandle handle, CdiPoolItemOperatorFunction operat
  * @param handle pool handle.
  * @param cb_ptr Pointer to callback function.
  */
-void CdiPoolDebugEnable(CdiPoolHandle handle, CdiPoolCallback cb_ptr);
+CDI_INTERFACE void CdiPoolDebugEnable(CdiPoolHandle handle, CdiPoolCallback cb_ptr);
 
 /**
  * Disable a previously enabled pool debug callback.
  *
  * @param handle pool handle.
  */
-void CdiPoolDebugDisable(CdiPoolHandle handle);
+CDI_INTERFACE void CdiPoolDebugDisable(CdiPoolHandle handle);
 #endif //DEBUG
 
 /**
@@ -387,7 +389,7 @@ void CdiPoolDebugDisable(CdiPoolHandle handle);
  *
  * @param handle Memory pool handle.
  */
-void CdiPoolDestroy(CdiPoolHandle handle);
+CDI_INTERFACE void CdiPoolDestroy(CdiPoolHandle handle);
 
 #ifdef __cplusplus
 }

@@ -270,7 +270,8 @@ CDI_INTERFACE const EnumStringKey* CdiAvmKeyGetArray(CdiAvmBaselineEnumStringKey
  *
  * @return true if the conversion was successful, false if a failure was encountered.
  */
-bool CdiAvmParseBaselineVersionString(const char* version_str, CdiAvmBaselineProfileVersion* ret_version_ptr);
+CDI_INTERFACE bool CdiAvmParseBaselineVersionString(const char* version_str, 
+                                                    CdiAvmBaselineProfileVersion* ret_version_ptr);
 
 #ifdef __cplusplus
 }

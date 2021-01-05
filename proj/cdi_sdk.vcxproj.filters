@@ -30,9 +30,6 @@
     <ClInclude Include="..\src\common\include\list_api.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\common\include\logger_api.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\cdi_os_api.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -90,9 +87,6 @@
     <ClInclude Include="..\src\cdi\internal_utility.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\src\common\include\queue_api.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\src\cdi\statistics.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -106,6 +100,27 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\cdi\adapter_control_interface.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cdi_log_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cdi_utility_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cdi_baseline_profile_01_00_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cdi_baseline_profile_02_00_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cdi_log_enums.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cdi_logger_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cdi_queue_api.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
