@@ -85,8 +85,9 @@ typedef void (*CdiFifoCallback)(const CdiFifoCbData* data_ptr);
  *
  * @return true if successful, otherwise false (not enough memory to allocate the FIFO).
  */
-CDI_INTERFACE bool CdiFifoCreate(const char* name_str, int item_count, int item_byte_size, CdiFifoFullCallback full_cb_ptr,
-                                 CdiUserCbParameter full_user_cb_param, CdiFifoHandle* ret_handle_ptr);
+CDI_INTERFACE bool CdiFifoCreate(const char* name_str, int item_count, int item_byte_size, 
+                                 CdiFifoFullCallback full_cb_ptr, CdiUserCbParameter full_user_cb_param, 
+                                 CdiFifoHandle* ret_handle_ptr);
 
 /**
  * Read an item from the FIFO buffer and copy to item_dest_ptr.
@@ -99,7 +100,8 @@ CDI_INTERFACE bool CdiFifoCreate(const char* name_str, int item_count, int item_
  *
  * @return true if successful, otherwise false (FIFO is empty).
  */
-CDI_INTERFACE bool CdiFifoRead(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, void* item_dest_ptr);
+CDI_INTERFACE bool CdiFifoRead(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, 
+                               void* item_dest_ptr);
 
 /**
  * Flush all entries from the FIFO.
@@ -118,7 +120,8 @@ CDI_INTERFACE void CdiFifoFlush(CdiFifoHandle handle);
  *
  * @return true if successful, otherwise false (FIFO is full).
  */
-CDI_INTERFACE bool CdiFifoWrite(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, const void* item_ptr);
+CDI_INTERFACE bool CdiFifoWrite(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, 
+                                const void* item_ptr);
 
 /**
  * Get name of FIFO that was defined when FIFO was created.

@@ -176,7 +176,8 @@ CDI_INTERFACE bool CdiLoggerCreateLog(CdiLoggerHandle logger_handle, CdiConnecti
  *
  * @return  true successfully initialized; false if not.
  */
-CDI_INTERFACE bool CdiLoggerCreateFileLog(CdiLoggerHandle logger_handle, const char* filename_str, CdiLogHandle* ret_log_handle_ptr);
+CDI_INTERFACE bool CdiLoggerCreateFileLog(CdiLoggerHandle logger_handle, const char* filename_str, 
+                                          CdiLogHandle* ret_log_handle_ptr);
 
 /**
  * Function used to generate a formatted log line.
@@ -238,7 +239,8 @@ CDI_INTERFACE CdiLogHandle CdiLoggerThreadLogGet(void);
  * @param state_ptr Pointer to address where to write returned multiline state data.
  */
 CDI_INTERFACE void CdiLoggerMultilineBegin(CdiLogHandle log_handle, CdiLogComponent component, CdiLogLevel log_level,
-                                           const char* function_name_str, int line_number, CdiLogMultilineState* state_ptr);
+                                           const char* function_name_str, int line_number, 
+                                           CdiLogMultilineState* state_ptr);
 
 /**
  * Add a line to a multiline log message buffer.

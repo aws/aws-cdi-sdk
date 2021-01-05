@@ -338,8 +338,9 @@ CDI_INTERFACE  bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction 
  *
  * @return true if successful, otherwise false.
  */
-CDI_INTERFACE bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr, const char* thread_name_str,
-                                           void* thread_func_arg_ptr, CdiSignalType start_signal, int cpu_affinity);
+CDI_INTERFACE bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr, 
+                                           const char* thread_name_str, void* thread_func_arg_ptr, 
+                                           CdiSignalType start_signal, int cpu_affinity);
 
 /**
  * Creates a thread. Note that thread pinning is inherited, so the launched thread will inherit the affinity of its
@@ -354,7 +355,7 @@ CDI_INTERFACE bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThread
  * @return true if successful, otherwise false.
  */
 static inline bool CdiOsThreadCreate(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr,
-                                                   const char* thread_name_str, void* thread_func_arg_ptr, CdiSignalType start_signal)
+                                     const char* thread_name_str, void* thread_func_arg_ptr, CdiSignalType start_signal)
 {
     return CdiOsThreadCreatePinned(thread_func, thread_id_out_ptr, thread_name_str, thread_func_arg_ptr, start_signal,
                                    -1);
@@ -595,8 +596,8 @@ CDI_INTERFACE bool CdiOsSignalWait(CdiSignalType signal_handle, uint32_t timeout
  *
  * @return true if successful, otherwise false.
  */
-CDI_INTERFACE bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wait_all, uint32_t timeout_in_ms,
-                                    uint32_t* ret_signal_index_ptr);
+CDI_INTERFACE bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wait_all, 
+                                    uint32_t timeout_in_ms, uint32_t* ret_signal_index_ptr);
 
 // -- Memory --
 

@@ -148,7 +148,8 @@ CDI_INTERFACE bool CdiQueuePush(CdiQueueHandle handle, const void* item_ptr);
  *
  * @return true if successful, otherwise false (queue is full and timeout expired or signal got set).
  */
-CDI_INTERFACE bool CdiQueuePushWait(CdiQueueHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, const void* item_ptr);
+CDI_INTERFACE bool CdiQueuePushWait(CdiQueueHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, 
+                                    const void* item_ptr);
 
 /**
  * Push an item on the queue. If the queue is full, wait until the specified timeout expires or one of the signals in
@@ -165,8 +166,9 @@ CDI_INTERFACE bool CdiQueuePushWait(CdiQueueHandle handle, int timeout_ms, CdiSi
  *
  * @return true if successful, otherwise false (queue is empty and timeout expired or signal got set).
  */
-CDI_INTERFACE bool CdiQueuePushWaitMultiple(CdiQueueHandle handle, int timeout_ms, CdiSignalType* abort_wait_signal_array,
-                                            int num_signals, uint32_t* ret_signal_index_ptr, const void* item_ptr);
+CDI_INTERFACE bool CdiQueuePushWaitMultiple(CdiQueueHandle handle, int timeout_ms, 
+                                            CdiSignalType* abort_wait_signal_array, int num_signals, 
+                                            uint32_t* ret_signal_index_ptr, const void* item_ptr);
 
 /**
  * Check if queue is empty.
