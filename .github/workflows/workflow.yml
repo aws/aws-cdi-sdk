@@ -20,14 +20,14 @@ jobs:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         SOURCE: 's3://cdi-sdk-github-traffic/clones.csv'
-        DEST: 'traffic'
+        DEST: 'traffic/clones.csv'
 
     - uses: prewk/s3-cp-action@master
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         SOURCE: 's3://cdi-sdk-github-traffic/views.csv'
-        DEST: 'traffic'
+        DEST: 'traffic/views.csv'
 
     # Calculates traffic and clones and stores in CSV file
     - name: Repository Traffic
