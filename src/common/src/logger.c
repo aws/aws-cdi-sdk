@@ -41,7 +41,6 @@ typedef struct CdiLoggerState CdiLoggerState;
  * @brief Structure used to hold state data for a single logger.
  */
 struct CdiLoggerState {
-    CdiLogState* global_log_ptr;   ///< Used to hold a global logger.
     CdiLogLevel default_log_level; ///< Default log level.
 };
 
@@ -146,6 +145,25 @@ static int time_string_length = -1;
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
+
+/**
+ * Get the log handle to use. If the specified handle is NULL, check the global handle. If that handle is also NULL then
+ * default to using the stdout log handle.
+ *
+ * @param handle Current Log handle.
+ *
+ * @return Log handle to use.
+ */
+static CdiLogHandle GetLogHandleToUse(CdiLogHandle handle)
+{
+    if (NULL == handle) {
+        handle = CdiLogGlobalGet();
+    }
+    if (NULL == handle) {
+        handle = stdout_log_handle;
+    }
+    return handle;
+}
 
 /**
  * Allocate memory for a log buffer. If the pointer to the buffer is currently NULL, a new buffer is created.
@@ -536,10 +554,7 @@ static int WriteLineToBuffer(bool is_stdout, char* dest_log_buffer_str, int dest
 static int LogToBuffer(CdiLogHandle handle, const char* function_name_str, int line_number, const char* format_str,
                        va_list vars, char* dest_log_msg_buffer_str)
 {
-    if (NULL == handle) {
-        // No log available, so just use the stdout handle.
-        handle = stdout_log_handle;
-    }
+    handle = GetLogHandleToUse(handle);
 
     *dest_log_msg_buffer_str = '\0';
     int char_count = 0;
@@ -843,25 +858,10 @@ bool CdiLoggerCreateFileLog(CdiLoggerHandle logger_handle, const char* filename_
     return CdiLoggerCreateLog(logger_handle, NULL, &log_method_data, ret_log_handle_ptr);
 }
 
-bool CdiLoggerSetGlobalLog(CdiLoggerHandle logger_handle, CdiLogHandle log_handle)
-{
-    bool ret = true;
-
-    if (NULL == logger_handle) {
-        ret = false;
-    } else {
-        logger_handle->global_log_ptr = log_handle;
-    }
-
-    return ret;
-}
-
 void CdiLogger(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_level, const char* function_name_str,
                int line_number, const char* format_str, ...)
 {
-    if (NULL == handle) {
-        handle = stdout_log_handle;
-    }
+    handle = GetLogHandleToUse(handle);
 
     // Check if logging is enabled.
     if (CdiLoggerIsEnabled(handle, component, log_level)) {
@@ -880,19 +880,17 @@ void CdiLogger(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_l
     }
 }
 
-void CdiLoggerMultilineBegin(CdiLogHandle log_handle, CdiLogComponent component, CdiLogLevel log_level,
+void CdiLoggerMultilineBegin(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_level,
                              const char* function_name_str, int line_number, CdiLogMultilineState* state_ptr)
 {
-    if (NULL == log_handle) {
-        log_handle = stdout_log_handle;
-    }
+    handle = GetLogHandleToUse(handle);
 
     memset(state_ptr, 0, sizeof(*state_ptr)); // Clear all the state data
 
     // Check if logging is enabled.
-    if (CdiLoggerIsEnabled(log_handle, component, log_level)) {
+    if (CdiLoggerIsEnabled(handle, component, log_level)) {
         state_ptr->logging_enabled = true;
-        state_ptr->log_handle = log_handle;
+        state_ptr->log_handle = handle;
         state_ptr->component = component;
         state_ptr->log_level = log_level;
 
@@ -979,11 +977,11 @@ void CdiLoggerMultilineEnd(CdiLogMultilineState* state_ptr)
         }
     }
 
-    // Put entry back into free list.
-    LogBufferPut(state_ptr->buffer_state_ptr);
     CdiOsMemFree(state_ptr->buffer_state_ptr->buffer_ptr);
     state_ptr->buffer_state_ptr->buffer_ptr = NULL;
     state_ptr->buffer_state_ptr->buffer_size = 0;
+    // Put entry back into the free list.
+    LogBufferPut(state_ptr->buffer_state_ptr);
 }
 
 void CdiLoggerLogFromCallback(CdiLogHandle handle, const CdiLogMessageCbData* cb_data_ptr)
@@ -1044,9 +1042,7 @@ bool CdiLoggerIsEnabled(CdiLogHandle handle, CdiLogComponent component, CdiLogLe
         return false;
     }
 
-    if (NULL == handle) {
-        handle = stdout_log_handle;
-    }
+    handle = GetLogHandleToUse(handle);
 
     if (NULL == handle) {
         return false; // Even stdout logger doesn't exist, so cannot use it either.
@@ -1065,9 +1061,7 @@ CdiReturnStatus CdiLoggerComponentEnable(CdiLogHandle handle, CdiLogComponent co
         return kCdiStatusInvalidParameter;
     }
 
-    if (NULL == handle) {
-        handle = stdout_log_handle;
-    }
+    handle = GetLogHandleToUse(handle);
 
     handle->component_state_array[component].log_enable = enable;
 
@@ -1080,9 +1074,7 @@ bool CdiLoggerComponentIsEnabled(CdiLogHandle handle, CdiLogComponent component)
         return false;
     }
 
-    if (NULL == handle) {
-        handle = stdout_log_handle;
-    }
+    handle = GetLogHandleToUse(handle);
 
     return handle->component_state_array[component].log_enable;
 }
@@ -1093,9 +1085,7 @@ CdiReturnStatus CdiLoggerLevelSet(CdiLogHandle handle, CdiLogComponent component
         return kCdiStatusInvalidParameter;
     }
 
-    if (NULL == handle) {
-        handle = stdout_log_handle;
-    }
+    handle = GetLogHandleToUse(handle);
 
     handle->component_state_array[component].log_level = level;
 
@@ -1169,11 +1159,6 @@ void CdiLoggerDestroyLog(CdiLogHandle handle)
                 }
             }
 
-            // If this is the global log, then set the global log to NULL.
-            if (handle->logger_state_ptr && handle == handle->logger_state_ptr->global_log_ptr) {
-                handle->logger_state_ptr->global_log_ptr = NULL;
-            }
-
             // Now, free the memory depending on type of log. Nothing special to do for kLogMethodStdout.
             if (kLogMethodCallback == handle->log_method) {
                 CdiOsMemFree(handle->callback_data_ptr);
@@ -1193,7 +1178,6 @@ void CdiLoggerDestroyLog(CdiLogHandle handle)
 void CdiLoggerDestroyLogger(CdiLoggerHandle logger_handle)
 {
     if (logger_handle) {
-        assert(NULL == logger_handle->global_log_ptr);
         CdiOsMemFree(logger_handle);
     }
 }

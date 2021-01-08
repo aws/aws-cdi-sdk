@@ -72,7 +72,7 @@
 #define CDI_SDK_MAJOR_VERSION       0
 
 /// @brief CDI minor version.
-#define CDI_SDK_MINOR_VERSION       1
+#define CDI_SDK_MINOR_VERSION       2
 
 /// @brief CDI protcol version.
 #define CDI_PROTOCOL_VERSION             1
@@ -409,9 +409,24 @@ typedef enum {
     /// @brief This adapter type is the typical choice for high throughput, reliable delivery of data. In order to use
     /// it, the host must meet a number of requirements documented elsewhere.
     kCdiAdapterTypeEfa,
-
-    /// @brief This adapter type is mainly useful for testing. It does not provide the same level of throughput as EFA
-    /// does but it does not require any special type of EC2 instance.
+    /**
+     * @brief This adapter type has significant performance limitations and is mainly useful for testing since there
+     * are no special instances required for using applications with the SOCKET adapter.
+     *
+     * This adapter is implemented using kernel UDP sockets. UDP sockets do not provide the reliable delivery of 
+     * messages, or datagrams, that EFA provides. Additionally since this uses the kernel UDP socket instead of a polled
+     * mode network driver the throughput is significantly constrained relative to EFA. Furthermore, the SOCKET adapter
+     * does not use the same out-of-band connection management that is used by the EFA. Without the out-of-band
+     * connection management the transmitting side does not have visibility into whether the receiving side is present
+     * and receiving data.
+     *
+     * Due to these differences the successful use of the SOCKET adapter requires several special considerations:
+     *  1. Keep the bandwidth utilization low by using a combination of small payloads and low frame rates.
+     *  2. Ensure that the receive side is started before the transmitting side.
+     *  3. Use the local interface, which should work more reliably than a physical network interface.
+     *  4. If the above is not adequate for testing purposes consider tuning the kernel to increase network buffer
+     *     sizes.
+     */
     kCdiAdapterTypeSocket,
 
     /// @brief This adapter type is mainly useful for testing. This is similar to kCdiAdapterTypeSocket except that it
@@ -432,6 +447,7 @@ typedef struct {
     /// used. NOTE: The value should be at least twice the total size of the maximum payload size of each transmit
     /// connection that will be created using the Cdi...TxCreate() API functions. This allows the application to setup
     /// data for a payload while a previous payload is being transmitted.
+    /// NOTE: This value must be a multiple of HUGE_PAGES_BYTE_SIZE.
     uint64_t tx_buffer_size_bytes;
 
     /// @brief Returned pointer to start of the allocated transmit buffer. Size is specified using

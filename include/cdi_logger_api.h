@@ -145,16 +145,6 @@ CDI_INTERFACE bool CdiLoggerInitialize(void);
 CDI_INTERFACE bool CdiLoggerCreate(CdiLogLevel default_log_level, CdiLoggerHandle* ret_logger_handle_ptr);
 
 /**
- * Set the global log for the specified logger.
- *
- * @param logger_handle Handle of logger.
- * @param log_handle Handle of log to set as the global log.
- *
- * @return true if successful, false if not.
- */
-CDI_INTERFACE bool CdiLoggerSetGlobalLog(CdiLoggerHandle logger_handle, CdiLogHandle log_handle);
-
-/**
  * Create a log using the specified log configuration data.
  *
  * @param logger_handle Handle of logger to create log in.
@@ -176,7 +166,7 @@ CDI_INTERFACE bool CdiLoggerCreateLog(CdiLoggerHandle logger_handle, CdiConnecti
  *
  * @return  true successfully initialized; false if not.
  */
-CDI_INTERFACE bool CdiLoggerCreateFileLog(CdiLoggerHandle logger_handle, const char* filename_str, 
+CDI_INTERFACE bool CdiLoggerCreateFileLog(CdiLoggerHandle logger_handle, const char* filename_str,
                                           CdiLogHandle* ret_log_handle_ptr);
 
 /**
@@ -230,7 +220,7 @@ CDI_INTERFACE CdiLogHandle CdiLoggerThreadLogGet(void);
 /**
  * Begin a multiline log message, creating a buffer to hold the log message lines.
  *
- * @param log_handle Log handle.
+ * @param handle Log handle.
  * @param component Component that is generating this message.
  * @param log_level Level of logging for this message.
  * @param function_name_str Pointer to name of function the log line is being generated from. If NULL, function name
@@ -238,8 +228,8 @@ CDI_INTERFACE CdiLogHandle CdiLoggerThreadLogGet(void);
  * @param line_number Source code line number the log message is being generated from.
  * @param state_ptr Pointer to address where to write returned multiline state data.
  */
-CDI_INTERFACE void CdiLoggerMultilineBegin(CdiLogHandle log_handle, CdiLogComponent component, CdiLogLevel log_level,
-                                           const char* function_name_str, int line_number, 
+CDI_INTERFACE void CdiLoggerMultilineBegin(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_level,
+                                           const char* function_name_str, int line_number,
                                            CdiLogMultilineState* state_ptr);
 
 /**

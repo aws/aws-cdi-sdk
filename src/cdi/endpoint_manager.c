@@ -872,8 +872,10 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
     if (kCdiStatusOk == rs) {
         endpoint_ptr = &internal_endpoint_ptr->cdi_endpoint;
 
+        // Multiple threads may use the CdiCoreRxFreeBuffer() API, which pushes items onto this queue. So, we want to
+        // enable thread-safe writes when creating it by using kQueueMultipleWritersFlag.
         if (!CdiQueueCreate("RxFreeBuffer CdiSgList Queue", MAX_PAYLOADS_PER_CONNECTION, FIXED_QUEUE_SIZE,
-                            FIXED_QUEUE_SIZE, sizeof(CdiSgList), kQueueSignalNone,
+                            FIXED_QUEUE_SIZE, sizeof(CdiSgList), kQueueSignalNone | kQueueMultipleWritersFlag,
                             &endpoint_ptr->rx_state.free_buffer_queue_handle)) {
             rs = kCdiStatusAllocationFailed;
         }

@@ -76,13 +76,17 @@ CdiReturnStatus CdiLogLevelSet(CdiConnectionHandle handle, CdiLogComponent compo
     return CdiLoggerLevelSet(log_handle, component, level);
 }
 
-CDI_INTERFACE CdiReturnStatus CdiLogLevelSetGlobal(CdiLogComponent component, CdiLogLevel level)
+CdiReturnStatus CdiLogLevelSetGlobal(CdiLogComponent component, CdiLogLevel level)
 {
     return CdiLoggerLevelSetGlobal(component, level);
 }
 
-CDI_INTERFACE CdiReturnStatus CdiLogStderrEnable(bool enable, CdiLogLevel level)
+CdiReturnStatus CdiLogStderrEnable(bool enable, CdiLogLevel level)
 {
     return CdiLoggerStderrEnable(enable, level);
 }
 
+CdiLogHandle CdiLogGlobalGet(void)
+{
+    return CdiLogGlobalGetInternal();
+}

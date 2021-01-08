@@ -396,9 +396,12 @@ int main(int argc, const char** argv)
     //-----------------------------------------------------------------------------------------------------------------
     CdiAdapterHandle adapter_handle = NULL;
     if (kCdiStatusOk == rs) {
+        // Round-up buffer size to a multiple of HUGE_PAGES_BYTE_SIZE.
+        int tx_buffer_size_bytes = ((con_info.test_settings.payload_size + HUGE_PAGES_BYTE_SIZE-1) /
+                                   HUGE_PAGES_BYTE_SIZE) * HUGE_PAGES_BYTE_SIZE;
         CdiAdapterData adapter_data = {
             .adapter_ip_addr_str = con_info.test_settings.local_adapter_ip_str,
-            .tx_buffer_size_bytes = con_info.test_settings.payload_size,
+            .tx_buffer_size_bytes = tx_buffer_size_bytes,
             .adapter_type = kCdiAdapterTypeEfa // Use EFA adapter.
         };
         rs = CdiCoreNetworkAdapterInitialize(&adapter_data, &adapter_handle);

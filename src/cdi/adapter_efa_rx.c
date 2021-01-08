@@ -162,7 +162,10 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
 
     // Huge pages are not guaranteed to be aligned at all. Add enough padding to be able to shift the starting address
     // to an aligned location.
-    const int allocated_size = aligned_packet_size * packet_count + packet_buffer_alignment;
+    int allocated_size = aligned_packet_size * packet_count + packet_buffer_alignment;
+
+    // Round up to next even-multiple of hugepages byte size.
+    allocated_size = ((allocated_size + HUGE_PAGES_BYTE_SIZE-1) / HUGE_PAGES_BYTE_SIZE) * HUGE_PAGES_BYTE_SIZE;
 
     uint8_t* allocated_ptr = CdiOsMemAllocHugePage(allocated_size);
     if (NULL == allocated_ptr) {
@@ -205,7 +208,11 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
         endpoint_state_ptr->rx_state.allocated_buffer_size = allocated_size;
     } else {
         if (NULL != allocated_ptr) {
-            CdiOsMemFreeHugePage(allocated_ptr, allocated_size);
+            if (endpoint_state_ptr->rx_state.allocated_buffer_was_from_heap) {
+                CdiOsMemFree(allocated_ptr);
+            } else {
+                CdiOsMemFreeHugePage(allocated_ptr, allocated_size);
+            }
         }
     }
 

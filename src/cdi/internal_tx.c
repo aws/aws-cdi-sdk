@@ -483,7 +483,8 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
         // data management.
         if (!CdiQueueCreate("TxPayloadState queue Pointer", max_tx_payloads-1,
                             FIXED_QUEUE_SIZE, FIXED_QUEUE_SIZE, sizeof(TxPayloadState*),
-                            kQueueSignalPopWait | kQueueMultipleWriters, // Can use wait signal for pops (reads), thread safe for multiple writers
+                            kQueueSignalPopWait | kQueueMultipleWritersFlag, // Can use wait signal for pops (reads),
+                                                                             // thread safe for multiple writers.
                             &con_state_ptr->tx_state.payload_queue_handle)) {
             rs = kCdiStatusNotEnoughMemory;
         }

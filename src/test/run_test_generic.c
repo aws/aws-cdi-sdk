@@ -447,6 +447,9 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
     // Register the adapter.
     if (!got_error) {
         CDI_LOG_THREAD(kLogInfo, "Registering an adapter.");
+        // Round-up total size to a multiple of HUGE_PAGES_BYTE_SIZE.
+        total_tx_payload_bytes = ((total_tx_payload_bytes + HUGE_PAGES_BYTE_SIZE-1) / HUGE_PAGES_BYTE_SIZE) *
+                                  HUGE_PAGES_BYTE_SIZE;
         adapter_data_ptr->tx_buffer_size_bytes = total_tx_payload_bytes;
         got_error = (kCdiStatusOk != CdiCoreNetworkAdapterInitialize(adapter_data_ptr, &adapter_handle));
     }

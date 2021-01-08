@@ -907,12 +907,19 @@ void CdiOsMemFree(void* mem_ptr)
     free(mem_ptr);
 }
 
+
 void* CdiOsMemAllocHugePage(int32_t mem_size)
 {
-	void* mem_ptr = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
-    if (mem_ptr == MAP_FAILED) {
-        ERROR_MESSAGE("mmap failed. Try adding \"vm.nr_hugepages = 1024\" to /etc/sysctl.conf. Then \"sudo sysctl -p\"");
-        mem_ptr = NULL;
+    void* mem_ptr = NULL;
+
+    if (mem_size != ((mem_size / HUGE_PAGES_BYTE_SIZE) * HUGE_PAGES_BYTE_SIZE)) {
+        ERROR_MESSAGE("Failed to allocate hugepages. Size must be a multiple of [%d] bytes.", HUGE_PAGES_BYTE_SIZE);
+    } else {
+        mem_ptr = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+        if (mem_ptr == MAP_FAILED) {
+            ERROR_MESSAGE("mmap failed. Try adding \"vm.nr_hugepages = 1024\" to /etc/sysctl.conf. Then \"sudo sysctl -p\"");
+            mem_ptr = NULL;
+        }
     }
 
     return mem_ptr;
@@ -920,7 +927,9 @@ void* CdiOsMemAllocHugePage(int32_t mem_size)
 
 void CdiOsMemFreeHugePage(void* mem_ptr, int mem_size)
 {
-	munmap(mem_ptr, mem_size);
+    if (-1 == munmap(mem_ptr, mem_size)) {
+        ERROR_MESSAGE("munmap failed. errno[%d]", errno);
+    }
 }
 
 // -- File --
