@@ -29,6 +29,8 @@ What's New
 Bug Fixes
 ------------
 
+* Fixed a problem in RxPollFreeBuffer() that could lead to an assert (segfault in debug build) in CdiListRemove() when
+  trying to remove an entry from an empty list.
 * Fixed a Rx adapter buffer memory leak when using the CdiCoreRxFreeBuffer() API from multiple threads.
 * Fixed a seg-fault when using the CdiLoggerMultilineEnd() API from multiple threads.
 * Fixed a seg-fault in the Windows variant when logging to stdout and stdout did not exist. The global logger created
