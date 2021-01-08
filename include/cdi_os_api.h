@@ -154,6 +154,9 @@
     }
     #define CdiOsStaticMutexUnlock(x) (ReleaseMutex(x) == 0)
 
+    // Huge pages not implemented in windows, so just use 1 byte for size.
+    #define HUGE_PAGES_BYTE_SIZE    (1)
+
 #elif defined _LINUX
     #define CDI_STDIN  stdin   ///< Definition of OS agnostic standard input stream.
     #define CDI_STDOUT stdout  ///< Definition of OS agnostic standard output stream.
@@ -267,6 +270,11 @@
     #define CdiOsStaticMutexLock(x)         pthread_mutex_lock(&(x))
     /// @brief Unlock a statically generated mutex.
     #define CdiOsStaticMutexUnlock(x)       pthread_mutex_unlock(&(x))
+
+    /// @brief Size of huge pages. Memory must be a multiple of this size when using the CdiOsMemAllocHugePage() and
+    /// CdiOsMemFreeHugePage() APIs.
+    /// NOTE: Must match the "Hugepagesize" setting in /proc/meminfo.
+    #define HUGE_PAGES_BYTE_SIZE    (2 * 1024 * 1024)
 #endif // _LINUX
 
 #define MAX_THREAD_NAME     (50)         ///< Maximum thread name size.
@@ -324,7 +332,7 @@ CDI_INTERFACE void CdiOsUseLogger(void);
  *
  * @return true on success, false if there isn't enough storage to hold the signal or if there was an error.
  */
-CDI_INTERFACE  bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr);
+CDI_INTERFACE bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr);
 
 /**
  * Creates a thread which can optionally be pinned to a specific CPU.
@@ -338,8 +346,8 @@ CDI_INTERFACE  bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction 
  *
  * @return true if successful, otherwise false.
  */
-CDI_INTERFACE bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr, 
-                                           const char* thread_name_str, void* thread_func_arg_ptr, 
+CDI_INTERFACE bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr,
+                                           const char* thread_name_str, void* thread_func_arg_ptr,
                                            CdiSignalType start_signal, int cpu_affinity);
 
 /**
@@ -596,7 +604,7 @@ CDI_INTERFACE bool CdiOsSignalWait(CdiSignalType signal_handle, uint32_t timeout
  *
  * @return true if successful, otherwise false.
  */
-CDI_INTERFACE bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wait_all, 
+CDI_INTERFACE bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wait_all,
                                     uint32_t timeout_in_ms, uint32_t* ret_signal_index_ptr);
 
 // -- Memory --
@@ -629,7 +637,8 @@ CDI_INTERFACE void CdiOsMemFree(void* mem_ptr);
 /**
  * Allocates a block of huge page memory and returns a pointer to the start of the block.
  *
- * @param mem_size Number of bytes to allocate.
+ * @param mem_size Number of bytes to allocate. Size must be a multiple of HUGE_PAGES_BYTE_SIZE. If not, NULL is
+ * returned.
  *
  * @return Pointer to the allocated memory block. If unable to allocate the memory block, NULL is returned.
  */
@@ -740,8 +749,8 @@ CDI_INTERFACE bool CdiOsFSeek(CdiFileID file_handle, int64_t offset, int positio
  *
  * @return true if successful, otherwise false.
  */
-CDI_INTERFACE bool CdiOsSplitPath(const char* filepath_str, char* filename_str, int filename_buf_size, char* directory_str,
-                                  int directory_buf_size);
+CDI_INTERFACE bool CdiOsSplitPath(const char* filepath_str, char* filename_str, int filename_buf_size,
+                                  char* directory_str, int directory_buf_size);
 
 /**
  * Takes in a directory string and verifies that the directory exists and is writeable.

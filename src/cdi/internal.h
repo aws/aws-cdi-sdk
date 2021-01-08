@@ -339,4 +339,11 @@ void DeviceGidToString(const char* device_gid_ptr, int gid_length, char* dest_bu
  */
 void SdkThreadJoin(CdiThreadID thread_id, CdiSignalType shutdown_signal);
 
+/**
+ * Get the handle to the global log set by the CdiGlobalInitialization() function.
+ *
+ * @return Handle of global log. If the CdiGlobalInitialization() function has not been used, NULL is returned.
+ */
+CdiLogHandle CdiLogGlobalGetInternal(void);
+
 #endif  // CDI_INTERNAL_H__

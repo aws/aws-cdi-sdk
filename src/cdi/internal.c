@@ -244,7 +244,7 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
 
         // If a namespace string is not provided for cloudwatch use the CDI SDK default namespace string.
         if (!cloudwatch_config_ptr->namespace_str || ('\0' == cloudwatch_config_ptr->namespace_str[0])) {
-            SDK_LOG_GLOBAL(kLogInfo, "CloudWatch namespace string not provided. Using default [%s].", 
+            SDK_LOG_GLOBAL(kLogInfo, "CloudWatch namespace string not provided. Using default [%s].",
                            CLOUDWATCH_DEFAULT_NAMESPACE_STRING);
             cleaned_cloudwatch_config.namespace_str = CLOUDWATCH_DEFAULT_NAMESPACE_STRING;
         } else {
@@ -821,4 +821,9 @@ void SdkThreadJoin(CdiThreadID thread_id, CdiSignalType shutdown_signal)
     if (thread_id) {
         CdiOsThreadJoin(thread_id, CDI_INFINITE, NULL);
     }
+}
+
+CdiLogHandle CdiLogGlobalGetInternal(void)
+{
+    return cdi_global_context.global_log_handle;
 }

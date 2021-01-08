@@ -332,6 +332,9 @@ $(aws_h) $(libaws) : $(cdi_sdk_src) | $(build_dir.libaws)
 	           -DCMAKE_INSTALL_PREFIX=$(build_dir) $(AWS_SDK_ABS) \
 	    && make -j $$(nproc) \
 	    && make install
+ifneq ($(aws_h),)
+		$(Q)touch $(aws_h)
+endif
 
 # Define a dependency to cause the AWS SDK to get built prior to trying to compile cw_metrics.cpp.
 $(build_dir.obj)/cloudwatch_sdk_metrics.o : $(aws_h)

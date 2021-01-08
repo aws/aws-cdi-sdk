@@ -103,7 +103,7 @@ int CdiCoreGather(const CdiSgList* sgl_ptr, int offset, void* dest_data, int byt
     return CdiGatherInternal(sgl_ptr, offset, dest_data, byte_count);
 }
 
-CDI_INTERFACE CdiReturnStatus CdiCoreStatsReconfigure(CdiConnectionHandle handle, const CdiStatsConfigData* config_ptr)
+CdiReturnStatus CdiCoreStatsReconfigure(CdiConnectionHandle handle, const CdiStatsConfigData* config_ptr)
 {
     if (!IsValidConnectionHandle(handle)) {
         return kCdiStatusInvalidHandle;

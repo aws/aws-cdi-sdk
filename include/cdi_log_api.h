@@ -20,8 +20,8 @@
  * @section Log_arch CDI-LOG Architecture
  */
 
-#include "cdi_log_enums.h"
 #include "cdi_core_api.h"
+#include "cdi_log_enums.h"
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -39,6 +39,8 @@ typedef struct CdiLogMessageCbData CdiLogMessageCbData;
 typedef void (*CdiLogMessageCallback)(const CdiLogMessageCbData* cb_data_ptr);
 /// @brief Forward declaration to create pointer to connection when used.
 typedef struct CdiConnectionState* CdiConnectionHandle;
+/// @brief Forward declaration to create pointer to log handle.
+typedef struct CdiLogState* CdiLogHandle;
 
 /// @brief Forward declaration to create pointer to callback data when used.
 typedef struct CdiLogCallbackData CdiLogCallbackData;
@@ -193,6 +195,13 @@ CDI_INTERFACE CdiReturnStatus CdiLogLevelSetGlobal(CdiLogComponent component, Cd
  * @return A value from the CdiReturnStatus enumeration.
  */
 CDI_INTERFACE CdiReturnStatus CdiLogStderrEnable(bool enable, CdiLogLevel level);
+
+/**
+ * Get the handle to the global log set by the CdiCoreInitialize() API.
+ *
+ * @return Handle of global log. If the CdiCoreInitialize() API has not been used, NULL is returned.
+ */
+CDI_INTERFACE CdiLogHandle CdiLogGlobalGet(void);
 
 #ifdef __cplusplus
 }

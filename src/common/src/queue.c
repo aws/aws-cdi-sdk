@@ -320,7 +320,7 @@ bool CdiQueueCreate(const char* name_str, uint32_t item_count, uint32_t grow_cou
         ret = CdiOsSignalCreate(&state_ptr->wake_push_waiters_signal);
     }
 
-    if (ret && ((kQueueMultipleWriters & signal_mode) != 0)) {
+    if (ret && ((kQueueMultipleWritersFlag & signal_mode) != 0)) {
         ret = CdiOsCritSectionCreate(&state_ptr->multiple_writer_cs);
     }
 

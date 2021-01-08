@@ -5,6 +5,39 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
+CDI (Cloud Digital Interface) SDK Version 2.0.2 - 01/08/2021
+---------------------------------------------------------------------------
+
+What's New
+------------
+
+* Added initial version of the SDK coding style guide. See CODE_STYLE_GUIDE.md.
+* Replaced CdiLoggerSetGlobalLog() API with new CdiLogGlobalGet() API, which returns the global log handle created
+  via CdiCoreInitialize() API. The deprecated API did not serve any functional purpose.
+* Added Windows targets for generating DLLs for the CDI-AWS SDK library. See use of Debug_DLL and Release_DLL in the
+  Visual Studio solution and project files. Details at: https://github.com/aws/aws-cdi-sdk/pull/26
+* Added use of the CDI_INTERFACE define to APIs that were not previously using it. Only affects the new Windows DLL
+  targets.
+* When using CdiOsMemAllocHugePage() API on Linux, the size of bytes allocated must be a multiple of
+  HUGE_PAGES_BYTE_SIZE. See definition in cdi_os_api.h. If not, the memory will not be freed when using the
+  CdiOsMemFreeHugePage() API.
+* Renamed the queue type kQueueMultipleWriters to kQueueMultipleWritersFlag to clarify that the value is a flag,
+  not an OS signal type. See include/cdi_queue_api.h.
+* Added defines to uniquely identify the CDI transport protocol used by the SDK. See the CDI_PROTOCOL_VERSION,
+  CDI_PROTOCOL_MAJOR_VERSION and CDI_PROTOCOL_MINOR_VERSION in include/cdi_core_api.h.
+
+Bug Fixes
+------------
+
+* Fixed a problem in RxPollFreeBuffer() that could lead to an assert (segfault in debug build) in CdiListRemove() when
+  trying to remove an entry from an empty list.
+* Fixed a Rx adapter buffer memory leak when using the CdiCoreRxFreeBuffer() API from multiple threads.
+* Fixed a seg-fault when using the CdiLoggerMultilineEnd() API from multiple threads.
+* Fixed a seg-fault in the Windows variant when logging to stdout and stdout did not exist. The global logger created
+  via CdiCoreInitialize() API is now used instead of stdout. Details at: https://github.com/aws/aws-cdi-sdk/pull/25
+* Fixed problem with Linux Makefile that could cause the AWS-SDK to always partially re-build on Linux.
+
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 2.0.0 - 12/14/2020
 ---------------------------------------------------------------------------
 

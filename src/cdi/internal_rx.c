@@ -1175,10 +1175,7 @@ bool RxPollFreeBuffer(void* param_ptr, CdiSgList* ret_packet_buffer_sgl_ptr)
         // Walk through all the entries in the queue, so we can free them all at once.
         CdiSgList sgl_payload;
         while (CdiQueuePop(handle->rx_state.free_buffer_queue_handle, (void*)&sgl_payload)) {
-            // Free payload level resources.
             CdiMemoryState* memory_state_ptr = (CdiMemoryState*)sgl_payload.internal_data_ptr;
-            FreePayloadBuffer(&sgl_payload);
-
             if (memory_state_ptr->endpoint_packet_buffer_sgl.sgl_head_ptr) {
                 // Append the endpoint packet SGL to the list that will be returned.
                 SglMoveEntries(&sgl_packets, &memory_state_ptr->endpoint_packet_buffer_sgl);
@@ -1186,6 +1183,9 @@ bool RxPollFreeBuffer(void* param_ptr, CdiSgList* ret_packet_buffer_sgl_ptr)
             }
             CdiPoolPut(handle->connection_state_ptr->rx_state.rx_payload_state_pool_handle,
                        memory_state_ptr->payload_state_ptr);
+
+            // Now safe to free payload resources and memory_state_ptr.
+            FreePayloadBuffer(&sgl_payload);
         }
 
         if (ret) {
