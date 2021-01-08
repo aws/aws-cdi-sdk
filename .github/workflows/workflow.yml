@@ -19,14 +19,14 @@ jobs:
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        SOURCE: 's3://cdi-github-traffic/clones.csv'
+        SOURCE: 's3://${{ secrets.AWS_S3_GITHUB_TRAFFIC }}/clones.csv'
         DEST: 'traffic/clones.csv'
 
     - uses: prewk/s3-cp-action@master
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        SOURCE: 's3://cdi-github-traffic/views.csv'
+        SOURCE: 's3://${{ secrets.AWS_S3_GITHUB_TRAFFIC }}/views.csv'
         DEST: 'traffic/views.csv'
 
     # Calculates traffic and clones and stores in CSV file
@@ -41,18 +41,18 @@ jobs:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         SOURCE: 'traffic/clones.csv'
-        DEST: 's3://cdi-github-traffic/clones.csv'
+        DEST: 's3://${{ secrets.AWS_S3_GITHUB_TRAFFIC }}/clones.csv'
 
     - uses: prewk/s3-cp-action@master
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         SOURCE: 'traffic/views.csv'
-        DEST: 's3://cdi-github-traffic/views.csv'
+        DEST: 's3://${{ secrets.AWS_S3_GITHUB_TRAFFIC }}/views.csv'
 
     - uses: prewk/s3-cp-action@master
       env:
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         SOURCE: 'traffic/plots.png'
-        DEST: 's3://cdi-github-traffic/plots.png'
+        DEST: 's3://${{ secrets.AWS_S3_GITHUB_TRAFFIC }}/plots.png'
