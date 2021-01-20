@@ -192,7 +192,7 @@ CXXFLAGS += $(COMMON_COMPILER_FLAG_ADDITIONS) --std=c++11
 # The only libraries needed here are those that present new dependencies beyond what libcdisdk.so already requires.
 # An rpath is specified so cdi_test can find libcdisdk.so.2 in the same directory as cdi_test or in a sibling directory
 # named lib.
-LDFLAGS += -L$(build_dir.lib) -lcdisdk -lfabric $(EXTRA_LD_LIBS) -lncurses -lm $(aws_sdk_library_flags) \
+CDI_LDFLAGS = $(LDFLAGS) -L$(build_dir.lib) -lcdisdk -lfabric $(EXTRA_LD_LIBS) -lncurses -lm $(aws_sdk_library_flags) \
 	   -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib
 
 # docs go into the build directory but are not specific to release/debug
@@ -232,7 +232,7 @@ ifeq ($(require_aws_sdk),yes)
 
                 # add necessary flags for compiler and linker
                 CXXFLAGS += -I$(build_dir)/include
-                LDFLAGS += -laws-checksums -laws-c-event-stream
+                CDI_LDFLAGS += -laws-checksums -laws-c-event-stream
 
                 aws_sdk_library_flags = -L$(build_dir.lib) -L$(build_dir.lib)64 -laws-cpp-sdk-cdi -laws-cpp-sdk-core \
                                         -laws-cpp-sdk-monitoring -lstdc++
@@ -330,8 +330,11 @@ $(aws_h) $(libaws) : $(cdi_sdk_src) | $(build_dir.libaws)
 	$(Q)cd $(build_dir.libaws) \
 	    && cmake -j $$(nproc) -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_ONLY="monitoring;cdi" \
 	           -DCMAKE_INSTALL_PREFIX=$(build_dir) $(AWS_SDK_ABS) \
-	    && make -j $$(nproc) \
-	    && make install
+                   -DCMAKE_VERBOSE_MAKEFILE=TRUE \
+                   -DAUTORUN_UNIT_TESTS=FALSE \
+                   -DENABLE_TESTING=FALSE \
+	    && $(MAKE) -j $$(nproc) V=$(V) \
+	    && $(MAKE) install V=$(V)
 ifneq ($(aws_h),)
 		$(Q)touch $(aws_h)
 endif
@@ -360,15 +363,15 @@ $(build_dir.obj)/%.o : %.cpp | $(build_dir.obj)
 test : $(test_program) $(test_program_min_tx) $(test_program_min_rx)
 $(test_program) : $(objs.test) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
-	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test) $(LDFLAGS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test) $(CDI_LDFLAGS)
 
 $(test_program_min_tx) : $(objs.test_min_tx) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
-	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_min_tx) $(LDFLAGS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_min_tx) $(CDI_LDFLAGS)
 
 $(test_program_min_rx) : $(objs.test_min_rx) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
-	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_min_rx) $(LDFLAGS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_min_rx) $(CDI_LDFLAGS)
 
 # how to build the docs
 docs_dir.docs := $(build_dir.doc)/all
