@@ -119,8 +119,8 @@ typedef struct {
     /// @brief For Tx connection, the payload user callback parameter that was provided in CdiCoreTxPayloadConfig.
     CdiUserCbParameter tx_payload_user_cb_param;
 
-    /// @brief For Tx connection, payload state data that needs to be freed.
-    TxPayloadState* tx_payload_state_ptr;
+    /// @brief For Tx connection, Tx payload source SGL that needs to be freed.
+    CdiSgList tx_source_sgl;
 
     /// @brief Pointer to error message string. It uses a pool, so must be freed after the user-registered callback
     /// function has been invoked.
@@ -288,6 +288,11 @@ typedef struct {
     /// @brief List of AppPayloadCallbackData structures order by PTP (lowest PTP value first). NOTE: This list is only
     /// used if Rx payload buffering is enabled for the connection (@see CdiRxConfigData.buffer_delay_ms).
     CdiList ptp_ordered_payload_list;
+
+    /// @brief This is true if the first payload has been received after a connection has been established. This is set
+    /// to false whenever a connection is changed and remains false until a payload is received after the connection has
+    /// been restablished.
+    bool received_first_payload; 
 } RxConState;
 
 /**
@@ -303,7 +308,6 @@ typedef struct {
  * internally by the RxPacketReceive() API and not used elsewhere.
  */
 typedef struct {
-    uint8_t payload_index;               ///< The index of the next expected payload's entry in payload_state.
     /// @brief The number of the expected payload number for the beginning of the payload buffer window.
     /// Sized to match payload_num from CDI header packet #0.
     uint8_t payload_num_window_min;

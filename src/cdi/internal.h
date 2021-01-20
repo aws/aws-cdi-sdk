@@ -36,6 +36,8 @@
  * Function to check if a Tx is valid.
  *
  * @param handle Pointer to Tx being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
  */
 static inline bool IsValidTxHandle(const CdiConnectionHandle handle)
 {
@@ -47,6 +49,8 @@ static inline bool IsValidTxHandle(const CdiConnectionHandle handle)
  * Function to check if an Rx is valid.
  *
  * @param handle Pointer to Rx being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
  */
 static inline bool IsValidRxHandle(const CdiConnectionHandle handle)
 {
@@ -58,6 +62,8 @@ static inline bool IsValidRxHandle(const CdiConnectionHandle handle)
  * Function to check if a connection is valid.
  *
  * @param handle Pointer to connection being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
  */
 static inline bool IsValidConnectionHandle(const CdiConnectionHandle handle)
 {
@@ -69,6 +75,8 @@ static inline bool IsValidConnectionHandle(const CdiConnectionHandle handle)
  * Function to check if a memory handle is valid.
  *
  * @param handle Pointer to memory handle being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
  */
 static inline bool IsValidMemoryHandle(const CdiMemoryHandle handle)
 {

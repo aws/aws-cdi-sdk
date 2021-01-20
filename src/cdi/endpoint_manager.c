@@ -737,6 +737,12 @@ void EndpointManagerConnectionStateChange(CdiEndpointHandle handle, CdiConnectio
             }
             CdiOsCritSectionRelease(mgr_ptr->endpoint_list_lock);
         }
+
+        // On connection change for a receiver clear the flag indicating that a payload has been received.
+        if (kHandleTypeRx == endpoint_ptr->connection_state_ptr->handle_type) {
+            endpoint_ptr->connection_state_ptr->rx_state.received_first_payload = false;
+        }
+
         // Set connection state for the adapter's connection (all endpoints related to the connection must be connected,
         // otherwise it is not considered connected).
         adapter_endpoint_ptr->adapter_con_state_ptr->connection_status_code = status_code;

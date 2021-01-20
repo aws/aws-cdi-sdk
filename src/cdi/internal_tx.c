@@ -312,11 +312,9 @@ static THREAD TxPayloadThread(void* ptr)
                     // Pool is empty; suspend processing the payload for now, retry after resources are freed.
                     keep_going = false;
                 } else {
-
 #ifdef DEBUG_TX_PACKET_SGL_ENTRIES
                     DebugTxPacketSglEntries(work_request_ptr);
 #endif
-
                     // Fill in the work request with the specifics of the packet.
                     work_request_ptr->payload_state_ptr = payload_state_ptr;
                     work_request_ptr->payload_num = payload_state_ptr->payload_packet_state.payload_num;
@@ -609,11 +607,11 @@ static CdiEndpointState* FindEndpoint(EndpointManagerHandle handle, int stream_i
 }
 
 /**
- * Payload transfer has completed either successfully or in error. Update stats and queue payload message to
- * application.
+ * Payload transfer has completed either successfully or in error. Update stats and queue a payload message to
+ * the application.
  *
  * @param endpoint_ptr Pointer to endpoint state data.
- * @param payload_state_ptr Pointer to payload state data.
+ * @param payload_state_ptr Pointer to payload state data. The pointer is no longer valid after function returns.
  */
 static void PayloadTransferComplete(CdiEndpointState* endpoint_ptr, TxPayloadState* payload_state_ptr)
 {
@@ -624,11 +622,39 @@ static void PayloadTransferComplete(CdiEndpointState* endpoint_ptr, TxPayloadSta
         payload_state_ptr->start_time, payload_state_ptr->max_latency_microsecs,
         payload_state_ptr->data_bytes_transferred);
 
-    // Post message to notify application that payload transfer had an error.
+    // Copy the payload's source SGL to the callback data, so we can free the SGL entries in AppCallbackPayloadThread()
+    // to reduce the amount of work required here by the Tx Poll() thread. This also allows the payload_state_ptr to
+    // be freed in this function, since it is no longer needed.
+    payload_state_ptr->app_payload_cb_data.tx_source_sgl = payload_state_ptr->source_sgl;
+
+    // Post message to notify application that payload transfer has completed.
     if (!CdiQueuePush(con_state_ptr->app_payload_message_queue_handle, &payload_state_ptr->app_payload_cb_data)) {
         CDI_LOG_THREAD(kLogError, "Queue[%s] full, push failed.",
                         CdiQueueGetName(con_state_ptr->app_payload_message_queue_handle));
     }
+
+    // Done with payload state data, so free it.
+    CdiPoolPut(con_state_ptr->tx_state.payload_state_pool_handle, payload_state_ptr);
+}
+
+/**
+ * Flush a payload that did not complete transferring. This will set the payload's status and queue a payload message
+ * to the application.
+ *
+ * @param endpoint_ptr Pointer to endpoint state data.
+ * @param payload_state_ptr Pointer to payload state data. The pointer is not longer valid after function returns.
+ */
+static void FlushFailedPayload(CdiEndpointState* endpoint_ptr, TxPayloadState* payload_state_ptr)
+{
+    if (kCdiStatusOk == payload_state_ptr->app_payload_cb_data.payload_status_code) {
+        payload_state_ptr->app_payload_cb_data.payload_status_code = kCdiStatusSendFailed;
+    }
+
+    // Clear this list. It will be cleared by TxPayloadThreadFlushResources(). See packet_sgl_entry_pool_handle pool.
+    CdiSinglyLinkedListInit(&payload_state_ptr->completed_packets_list);
+
+    // Queue message to the application.
+    PayloadTransferComplete(endpoint_ptr, payload_state_ptr);
 }
 
 //*********************************************************************************************************************
@@ -694,9 +720,6 @@ CdiReturnStatus TxPayloadInternal(CdiConnectionHandle con_handle, const CdiCoreT
         rs = kCdiStatusQueueFull;
     } else {
         memset((void*)payload_state_ptr, 0, sizeof(TxPayloadState));
-
-        // Save the pointer so it can be used later to return it to the pool.
-        payload_state_ptr->app_payload_cb_data.tx_payload_state_ptr = payload_state_ptr;
 
         payload_state_ptr->app_payload_cb_data.core_extra_data = core_payload_config_ptr->core_extra_data;
         payload_state_ptr->app_payload_cb_data.tx_payload_user_cb_param = core_payload_config_ptr->user_cb_param;
@@ -764,18 +787,26 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
     CdiConnectionState* con_state_ptr = (CdiConnectionState*)endpoint_ptr->connection_state_ptr;
     CdiQueueFlush(con_state_ptr->tx_state.payload_queue_handle);
 
+    // Process items in the work request completion queue. This will drain the queue and free associated resources
+    // (ie. work_request_pool_handle) before we manually remove resources below. PayloadTransferComplete() has already
+    // been called for all items in this queue (so don't call it again here).
+    ProcessWorkRequestCompletionQueue(con_state_ptr);
+
     // Walk through the work request pool and free associated resources.
     // NOTE: All the pools used in this function are not thread-safe, so must ensure that only one thread is accessing
     // them at a time.
     TxPayloadState* payload_state_ptr = NULL;
     TxPacketWorkRequest* work_request_ptr = NULL;
     while (CdiPoolPeekInUse(con_state_ptr->tx_state.work_request_pool_handle, (void**)&work_request_ptr)) {
+        // NOTE: PayloadTransferComplete() called from FlushFailedPayload() frees the payload pointer, so only call
+        // FlushFailedPayload() after walking to the end of the list of work requests related to it.
         if (payload_state_ptr != work_request_ptr->payload_state_ptr) {
-            payload_state_ptr = work_request_ptr->payload_state_ptr;
-            PayloadTransferComplete(endpoint_ptr, payload_state_ptr);
-            // Clear this list, since the logic below has freed all the SGL entries in it that are stored in the
-            // packet_sgl_entry_pool_handle pool.
-            CdiSinglyLinkedListInit(&payload_state_ptr->completed_packets_list);
+            if (NULL == payload_state_ptr) {
+                payload_state_ptr = work_request_ptr->payload_state_ptr;
+            } else {
+                FlushFailedPayload(endpoint_ptr, payload_state_ptr); // Frees the payload pointer
+                payload_state_ptr = NULL; // No longer valid, so clear it.
+            }
         }
 
         // Free all packet SGL entries related to this work request. This will free all entries that have been
@@ -788,6 +819,13 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
 
         // Put back work request into the pool.
         CdiPoolPut(con_state_ptr->tx_state.work_request_pool_handle, work_request_ptr);
+        work_request_ptr = NULL; // No longer valid, so clear it.
+    }
+
+    // Flush last payload if value exists.
+    if (payload_state_ptr) {
+        FlushFailedPayload(endpoint_ptr, payload_state_ptr);
+        payload_state_ptr = NULL; // No longer valid, so clear it.
     }
 
     CdiPoolPutAll(con_state_ptr->tx_state.work_request_pool_handle);
@@ -882,12 +920,11 @@ void TxPacketWorkRequestComplete(void* param_ptr, Packet* packet_ptr)
             CdiSinglyLinkedListPushTail(&payload_state_ptr->completed_packets_list,
                                         (void*)&work_request_ptr->packet.list_entry);
 
-            if (payload_state_ptr->data_bytes_transferred >=
-                payload_state_ptr->source_sgl.total_data_size) {
-                // Payload transfer complete. Set to call the user registered Tx callback function. Check payload type
-                // (application or keep alive).
-                // Payload type is application. Update stats.
-                PayloadTransferComplete(endpoint_ptr, payload_state_ptr);
+            if (payload_state_ptr->data_bytes_transferred >= payload_state_ptr->source_sgl.total_data_size) {
+                // Payload transfer complete.
+                // Pointer is freed below in PayloadTransferComplete(). Clear it now so it cannot be accidentally used
+                // later.
+                work_request_ptr->payload_state_ptr = NULL;
 
                 // Put list of work requests in queue so TxPayloadThread() can free the allocated resources.
                 if (!CdiQueuePush(con_state_ptr->tx_state.work_req_comp_queue_handle,
@@ -895,6 +932,11 @@ void TxPacketWorkRequestComplete(void* param_ptr, Packet* packet_ptr)
                     CDI_LOG_THREAD(kLogError, "Queue[%s] full, push failed.",
                                    CdiQueueGetName(con_state_ptr->tx_state.work_req_comp_queue_handle));
                 }
+                work_request_ptr = NULL; // Pointer may no longer be valid, so clear it now.
+
+                // Updates stats and puts message in queue to call the user registered Tx callback function.
+                PayloadTransferComplete(endpoint_ptr, payload_state_ptr);
+                payload_state_ptr = NULL; // Pointer is no longer valid.
             }
         }
     }

@@ -77,16 +77,15 @@ static THREAD AppCallbackPayloadThread(void* ptr)
             } else {
                 // Invoke application payload callback function.
                 if (con_state_ptr->handle_type == kHandleTypeTx) {
-                    // Tx connection. All packets in the payload have been acknowledged as being received by the receiver.
-                    // Put the Tx payload entries and payload state data back in the pool.
-                    CdiSglEntry* entry_ptr = app_cb_data.tx_payload_state_ptr->source_sgl.sgl_head_ptr;
+                    // Tx connection. All packets in the payload have been acknowledged as being received by the
+                    // receiver. Put the Tx payload entries and payload state data back in the pool. We do this here on
+                    // this thread to reduce the amount of work on the Tx Poll() thread.
+                    CdiSglEntry* entry_ptr = app_cb_data.tx_source_sgl.sgl_head_ptr;
                     while (entry_ptr) {
                         CdiSglEntry* next_ptr = entry_ptr->next_ptr; // Save next entry, since Put() will free its memory.
                         CdiPoolPut(con_state_ptr->tx_state.payload_sgl_entry_pool_handle, entry_ptr);
                         entry_ptr = next_ptr;
                     }
-                    CdiPoolPut(con_state_ptr->tx_state.payload_state_pool_handle, app_cb_data.tx_payload_state_ptr);
-                    app_cb_data.tx_payload_state_ptr = NULL;
                     // Notify the application.
                     TxInvokeAppPayloadCallback(con_state_ptr, &app_cb_data);
                 } else {

@@ -176,11 +176,11 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
 
 #ifdef DEBUG_PACKET_SEQUENCES
         CdiCDIPacketCommonHeader* common_hdr_ptr =
-            (CdiCDIPacketCommonHeader*)packet_ack_state_ptr->packet_sgl.sgl_head_ptr->address_ptr;
+            (CdiCDIPacketCommonHeader*)packet_ptr->sg_list.sgl_head_ptr->address_ptr;
         CDI_LOG_THREAD(kLogInfo, "CQ T[%d] P[%d] S[%d]%s",
                         common_hdr_ptr->payload_type, common_hdr_ptr->payload_num,
                         common_hdr_ptr->packet_sequence_num,
-                        (kAdapterPacketStatusOk != packet_ack_state_ptr->ack_status) ? " Err" : "");
+                        (kAdapterPacketStatusOk != packet_ptr->tx_state.ack_status) ? " Err" : "");
 #endif
     }
 
@@ -267,8 +267,8 @@ CdiReturnStatus EfaTxEndpointSend(const AdapterEndpointHandle handle, const Pack
     }
 
 #ifdef DEBUG_PACKET_SEQUENCES
-    CdiCDIPacketCommonHeader* common_hdr_ptr = (CdiCDIPacketCommonHeader*)sgl_ptr->sgl_head_ptr->address_ptr;
-    CDI_LOG_THREAD(kLogInfo, "T[%d] P[%d] S[%d]", common_hdr_ptr->payload_type, common_hdr_ptr->payload_num,
+    CdiCDIPacketCommonHeader* common_hdr_ptr = (CdiCDIPacketCommonHeader*)packet_ptr->sg_list.sgl_head_ptr->address_ptr;
+    CDI_LOG_THREAD(kLogInfo, "T[%d] P[%3d] S[%3d]", common_hdr_ptr->payload_type, common_hdr_ptr->payload_num,
                    common_hdr_ptr->packet_sequence_num);
 #endif
 
