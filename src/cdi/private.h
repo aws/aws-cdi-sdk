@@ -182,9 +182,6 @@ typedef struct {
 
     /// @brief Queue of completed work requests that need their resources freed (TxPacketWorkRequest*).
     CdiQueueHandle work_req_comp_queue_handle;
-
-    CdiCsID payload_num_lock;                   ///< Lock used to protect incrementing the payload number.
-    uint8_t payload_num;                        ///< Payload number.
 } TxConState;
 
 /// Forward reference of structure to create pointers later.
@@ -292,7 +289,7 @@ typedef struct {
     /// @brief This is true if the first payload has been received after a connection has been established. This is set
     /// to false whenever a connection is changed and remains false until a payload is received after the connection has
     /// been restablished.
-    bool received_first_payload; 
+    bool received_first_payload;
 } RxConState;
 
 /**

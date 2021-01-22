@@ -837,7 +837,7 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
     // user-registered callback functions in the application, which may erroneously block and would stall the internal
     // pipeline.
 
-    con_state_ptr->tx_state.payload_num = 0; // Clear packet number so receiver can expect packet 0 first.
+    endpoint_ptr->tx_state.payload_num = 0; // Clear payload number so receiver can expect payload zero first.
 }
 
 CdiReturnStatus TxConnectionThreadJoin(CdiConnectionHandle con_handle)
