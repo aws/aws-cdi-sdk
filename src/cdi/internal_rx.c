@@ -584,7 +584,7 @@ static void RxSendAllPayloads(CdiEndpointState* endpoint_ptr)
     CdiConnectionState* con_state_ptr = endpoint_ptr->connection_state_ptr;
 
     // Visit every slot in the window ignoring any entries in the payload state pointer array along the way.
-    for (int i = i; i < MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER; i++) {
+    for (int i = 0; i < MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER; i++) {
         const uint8_t idx = endpoint_ptr->rx_state.payload_num_window_min + i;
         RxPayloadState* send_payload_state_ptr = endpoint_ptr->rx_state.payload_state_array_ptr[idx];
         if (NULL != send_payload_state_ptr) {
