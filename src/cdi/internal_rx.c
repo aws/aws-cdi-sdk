@@ -813,7 +813,7 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
     if (kCdiStatusOk == rs) {
         // Payload state pool.
         if (!CdiPoolCreate("Rx Payload State Pool", max_rx_payloads, NO_GROW_SIZE, NO_GROW_COUNT,
-                           sizeof(RxEndpointState), true,
+                           sizeof(RxPayloadState), true,
                            &con_state_ptr->rx_state.rx_payload_state_pool_handle)) {
             rs = kCdiStatusNotEnoughMemory;
         }
