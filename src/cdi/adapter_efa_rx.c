@@ -200,6 +200,9 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
                 }
                 mem_ptr += aligned_packet_size;
             }
+        } else {
+            CDI_LOG_THREAD(kLogError, "Libfabric failed to register allocated aligned memory. This could be caused by "
+                           "insufficient ulimit locked memory.");
         }
     }
 
