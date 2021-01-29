@@ -117,6 +117,9 @@ struct SocketInfo
 /// @brief Declare a windows API function that resides within ntdll.lib.
 extern int NtQueryTimerResolution(PULONG MinimumResolution, PULONG Maximum_Resolution, PULONG ActualResolution);
 
+/// @brief Statically allocated mutex used to make initialization of profile data thread-safe.
+static CdiStaticMutexType mutex_lock = CDI_STATIC_MUTEX_INITIALIZER;
+
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
@@ -275,6 +278,7 @@ static time_t ConvertSystemTime(SYSTEMTIME* time_sys_ptr)
  */
 bool InitializeWinsock(void)
 {
+    CdiOsStaticMutexLock(mutex_lock);
     if (!winsock_initialized) {
         int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
         if (iResult != 0) {
@@ -282,6 +286,7 @@ bool InitializeWinsock(void)
         }
         winsock_initialized = true;
     }
+    CdiOsStaticMutexUnlock(mutex_lock);
     return winsock_initialized;
 }
 
@@ -1306,6 +1311,10 @@ bool CdiOsEnvironmentVariableSet(const char* name_str, const char* value_str)
 
 void CdiOsShutdown()
 {
-    WSACleanup();
-    winsock_initialized = false;
+    CdiOsStaticMutexLock(mutex_lock);
+    if (winsock_initialized) {
+        WSACleanup();
+        winsock_initialized = false;
+    }
+    CdiOsStaticMutexUnlock(mutex_lock);
 }
