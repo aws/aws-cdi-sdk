@@ -58,7 +58,7 @@ CdiReturnStatus CdiCoreNetworkAdapterInitialize(CdiAdapterData* adapter_data_ptr
     CdiReturnStatus rs = kCdiStatusOk;
 
     if (!cdi_global_context.sdk_initialized) {
-        return kCdiStatusFatal;
+        return kCdiStatusNotInitialized;
     }
 
     // initialize the adapter
@@ -166,7 +166,6 @@ uint64_t CdiCoreGetTaiTimeMicroseconds(void)
     return (uint64_t)ptp_time.seconds * 1000000L + (ptp_time.nanoseconds / 1000L);
 }
 
-
 const char* CdiCoreStatusToString(CdiReturnStatus status)
 {
     static const EnumStringKey key_array[] = {
@@ -200,6 +199,9 @@ const char* CdiCoreStatusToString(CdiReturnStatus status)
         { kCdiStatusCloudWatchNotEnabled,  "CloudWatch SDK not enabled"     },
         { kCdiStatusCloudWatchThrottling,  "CloudWatch throttling - retry"  },
         { kCdiStatusCloudWatchInvalidCredentials, "CloudWatch invalid credentials" },
+        { kCdiStatusInternalIdle,          "Internal poll thread is idle"   },
+        { kCdiStatusAdapterDuplicateEntry, "Duplicate adapter entry"        },
+        { kCdiStatusProfileNotSupported,   "Baseline profile not supported" },
         { CDI_INVALID_ENUM_VALUE,          "<invalid>"                      },
     };
 

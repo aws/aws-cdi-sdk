@@ -413,7 +413,7 @@ typedef enum {
      * @brief This adapter type has significant performance limitations and is mainly useful for testing since there
      * are no special instances required for using applications with the SOCKET adapter.
      *
-     * This adapter is implemented using kernel UDP sockets. UDP sockets do not provide the reliable delivery of 
+     * This adapter is implemented using kernel UDP sockets. UDP sockets do not provide the reliable delivery of
      * messages, or datagrams, that EFA provides. Additionally since this uses the kernel UDP socket instead of a polled
      * mode network driver the throughput is significantly constrained relative to EFA. Furthermore, the SOCKET adapter
      * does not use the same out-of-band connection management that is used by the EFA. Without the out-of-band
@@ -826,7 +826,7 @@ extern "C" {
 #endif
 
 /**
- * Initialize the SDK.
+ * Initialize the SDK. Must be called once before using any other SDK APIs. When done, must call CdiCoreShutdown() once.
  *
  * NOTE: Newly created data structures that are passed in to this function should be properly initialized before being
  * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
@@ -842,7 +842,7 @@ extern "C" {
 CDI_INTERFACE CdiReturnStatus CdiCoreInitialize(const CdiCoreConfigData* core_config_ptr);
 
 /**
- * Create an instance of a network adapter. When done, must call CdiCoreShutdown().
+ * Create an instance of a network adapter.
  *
  * NOTE: Currently if the shared memory provider is enabled in the EFA Adapter (see FI_EFA_ENABLE_SHM_TRANSFER in
  * CDI), libfabric uses fork() to determine capability (see rxr_check_cma_capability() in the EFA provider). This

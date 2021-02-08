@@ -41,6 +41,9 @@
 /// @brief global configuration data.
 CdiGlobalContext cdi_global_context = { 0 };
 
+/// @brief Statically allocated mutex used to make initialization of global data thread-safe.
+static CdiStaticMutexType global_context_mutex_lock = CDI_STATIC_MUTEX_INITIALIZER;
+
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -198,6 +201,39 @@ static void FifoDebugCallback(const CdiFifoCbData* cb_ptr)
 }
 #endif
 
+/**
+ * @brief Cleanup global resources. NOTE: Caller must have acquired mutex_lock.
+ */
+static void CleanupGlobalResources(void)
+{
+    // Walk through the cdi adapter list freeing resources used by them.
+    CdiListEntry* entry_ptr = NULL;
+    while (NULL != (entry_ptr = CdiListPop(&cdi_global_context.adapter_handle_list))) {
+        // Get pointer to the entry's parent object (CdiAdapterState).
+        CdiAdapterState* adapter_state_ptr = CONTAINER_OF(entry_ptr, CdiAdapterState, list_entry);
+        AdapterShutdownInternal(adapter_state_ptr);
+    }
+    if (cdi_global_context.adapter_handle_list_lock) {
+        CdiOsCritSectionDelete(cdi_global_context.adapter_handle_list_lock);
+    }
+
+#ifdef CLOUDWATCH_METRICS_ENABLED
+#ifdef METRICS_GATHERING_SERVICE_ENABLED
+    MetricsGathererDestroy(cdi_global_context.metrics_gathering_sdk_handle);
+#endif  // METRICS_GATHERING_SERVICE_ENABLED
+
+    CloudWatchSdkMetricsDestroy(cdi_global_context.cw_sdk_handle);
+    cdi_global_context.cw_sdk_handle = NULL;
+#endif // CLOUDWATCH_METRICS_ENABLED
+
+    CdiLoggerDestroyLog(cdi_global_context.global_log_handle); // WARNING: Cannot use the logger after this.
+    cdi_global_context.global_log_handle = NULL;
+    CdiLoggerShutdown(false); // Matches call to CdiLoggerInitialize(). NOTE: false= Normal termination.
+    cdi_global_context.logger_handle = NULL;
+
+    cdi_global_context.sdk_initialized = false;
+}
+
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -207,9 +243,18 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
     // NOTE: Since the caller is the application's thread, use SDK_LOG_GLOBAL() for any logging in this function.
     CdiReturnStatus rs = kCdiStatusOk;
 
-    // Create a critical section used to protect access to connections_list.
-    if (!CdiOsCritSectionCreate(&cdi_global_context.adapter_handle_list_lock)) {
-        rs = kCdiStatusNotEnoughMemory;
+    CdiOsStaticMutexLock(global_context_mutex_lock);
+
+    if (cdi_global_context.sdk_initialized) {
+        SDK_LOG_GLOBAL(kLogError, "SDK Already initialized.");
+        rs = kCdiStatusNonFatal;
+    }
+
+    if (kCdiStatusOk == rs) {
+        // Create a critical section used to protect access to connections_list.
+        if (!CdiOsCritSectionCreate(&cdi_global_context.adapter_handle_list_lock)) {
+            rs = kCdiStatusNotEnoughMemory;
+        }
     }
 
     if (kCdiStatusOk == rs) {
@@ -287,7 +332,11 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
 
     if (kCdiStatusOk == rs) {
         cdi_global_context.sdk_initialized = true;
+    } else {
+        CleanupGlobalResources();
     }
+
+    CdiOsStaticMutexUnlock(global_context_mutex_lock);
 
     return rs;
 }
@@ -642,29 +691,14 @@ CdiReturnStatus SdkShutdownInternal(void)
 {
     CdiReturnStatus rs = kCdiStatusOk;
 
-    // Walk through the cdi adapter list freeing resources used by them.
-    CdiListEntry* entry_ptr = NULL;
-    while (NULL != (entry_ptr = CdiListPop(&cdi_global_context.adapter_handle_list))) {
-        // Get pointer to the entry's parent object (CdiAdapterState).
-        CdiAdapterState* adapter_state_ptr = CONTAINER_OF(entry_ptr, CdiAdapterState, list_entry);
-        AdapterShutdownInternal(adapter_state_ptr);
+    CdiOsStaticMutexLock(global_context_mutex_lock);
+
+    if (cdi_global_context.sdk_initialized) {
+        CleanupGlobalResources();
     }
-    if (cdi_global_context.adapter_handle_list_lock) {
-        CdiOsCritSectionDelete(cdi_global_context.adapter_handle_list_lock);
-    }
+    CdiOsShutdown(); // Always cleanup/shutdown the OS API.
 
-#ifdef CLOUDWATCH_METRICS_ENABLED
-#ifdef METRICS_GATHERING_SERVICE_ENABLED
-    MetricsGathererDestroy(cdi_global_context.metrics_gathering_sdk_handle);
-#endif  // METRICS_GATHERING_SERVICE_ENABLED
-
-    CloudWatchSdkMetricsDestroy(cdi_global_context.cw_sdk_handle);
-    cdi_global_context.cw_sdk_handle = NULL;
-#endif  // CLOUDWATCH_METRICS_ENABLED
-
-    CdiLoggerDestroyLog(cdi_global_context.global_log_handle); // WARNING: Cannot use the logger after this.
-    CdiLoggerShutdown(false); // Do normal shutdown
-    CdiOsShutdown();
+    CdiOsStaticMutexUnlock(global_context_mutex_lock);
 
     return rs;
 }

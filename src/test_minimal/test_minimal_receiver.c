@@ -246,6 +246,10 @@ int main(int argc, const char** argv)
         .cloudwatch_config_ptr = NULL
     };
     CdiReturnStatus rs = CdiCoreInitialize(&core_config);
+    if (kCdiStatusOk != rs) {
+        CDI_LOG_THREAD(kLogError, "SDK core initialize failed. Error=[%d], Message=[%s]", rs,
+                       CdiCoreStatusToString(rs));
+    }
 
     //-----------------------------------------------------------------------------------------------------------------
     // CDI SDK Step 2: Register the EFA adapter.
@@ -300,7 +304,9 @@ int main(int argc, const char** argv)
         CdiOsSignalWait(con_info.connection_state_change_signal, CDI_INFINITE, NULL);
         CdiOsSignalClear(con_info.connection_state_change_signal);
     }
-    CDI_LOG_THREAD(kLogInfo, "Connected. Waiting to receive payloads...");
+    if (kCdiStatusOk == rs) {
+        CDI_LOG_THREAD(kLogInfo, "Connected. Waiting to receive payloads...");
+    }
 
     //-----------------------------------------------------------------------------------------------------------------
     // CDI SDK Step 5: Loop until the desired number of payloads are received. If we get any errors or the connection
@@ -338,8 +344,10 @@ int main(int argc, const char** argv)
         }
     }
 
-    TestConsoleLog(kLogInfo, "");
-    CDI_LOG_THREAD(kLogInfo, "All done. Received [%d] payloads. Shutting down.", payload_count);
+    if (kCdiStatusOk == rs) {
+        TestConsoleLog(kLogInfo, "");
+        CDI_LOG_THREAD(kLogInfo, "All done. Received [%d] payloads. Shutting down.", payload_count);
+    }
 
     //-----------------------------------------------------------------------------------------------------------------
     // CDI SDK Step 6. Shutdown and clean-up CDI SDK resources.
@@ -353,6 +361,7 @@ int main(int argc, const char** argv)
     CdiOsSignalDelete(con_info.connection_state_change_signal);
     CdiOsSignalDelete(con_info.payload_callback_signal);
     TestCommandLineParserDestroy(command_line_handle);
+    CdiLoggerShutdown(false); // Matches call to CdiLoggerInitialize(). NOTE: false= Normal termination.
 
     return (kCdiStatusOk == rs) ? 0 : 1;
 }

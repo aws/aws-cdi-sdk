@@ -5,6 +5,21 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
+CDI (Cloud Digital Interface) SDK Version 2.x.x - XX/XX/XXXX
+---------------------------------------------------------------------------
+
+What's New
+------------
+
+* Added internal reference count to Logger state data. NOTE: Each time CdiLoggerInitialize() is called,
+  CdiLoggerShutdown() must be called once. The test applications have been updated to call CdiLoggerShutdown().
+
+Bug Fixes
+------------
+
+* Fixed problems with multiple calls to CdiCoreInitialize(). See https://github.com/aws/aws-cdi-sdk/issues/34
+
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 2.0.2 - 01/08/2021
 ---------------------------------------------------------------------------
 

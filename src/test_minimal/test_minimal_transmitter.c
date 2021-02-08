@@ -390,6 +390,10 @@ int main(int argc, const char** argv)
         .cloudwatch_config_ptr = NULL
     };
     CdiReturnStatus rs = CdiCoreInitialize(&core_config);
+    if (kCdiStatusOk != rs) {
+        CDI_LOG_THREAD(kLogError, "SDK core initialize failed. Error=[%d], Message=[%s]", rs,
+                       CdiCoreStatusToString(rs));
+    }
 
     //-----------------------------------------------------------------------------------------------------------------
     // CDI SDK Step 2: Register the EFA adapter.
@@ -448,7 +452,9 @@ int main(int argc, const char** argv)
         CdiOsSignalWait(con_info.connection_state_change_signal, CDI_INFINITE, NULL);
         CdiOsSignalClear(con_info.connection_state_change_signal);
     }
-    CDI_LOG_THREAD(kLogInfo, "Connected. Sending payloads...");
+    if (kCdiStatusOk == rs) {
+        CDI_LOG_THREAD(kLogInfo, "Connected. Sending payloads...");
+    }
 
     //-----------------------------------------------------------------------------------------------------------------
     // CDI SDK Step 5: Can now send the desired number of payloads. Will send at the specified rate. If we get any
@@ -457,25 +463,28 @@ int main(int argc, const char** argv)
     int payload_count = 0;
     CdiAvmConfig avm_config = { 0 };
     int payload_unit_size = 0;
+    uint64_t rate_next_start_time = 0;
 
-    // Fill Tx payload buffer with a simple pattern.
-    if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
-        const uint8_t pattern_array[5] = { 0x80, 0x04, 0x08, 0x00, 0x40 }; // Black for 10-bit 4:2:2.
-        for (int i = 0; i < con_info.test_settings.payload_size; i+= sizeof(pattern_array)) {
-            memcpy(((uint8_t*)con_info.adapter_tx_buffer_ptr)+i, pattern_array, sizeof(pattern_array));
+    if (kCdiStatusOk == rs) {
+        // Fill Tx payload buffer with a simple pattern.
+        if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
+            const uint8_t pattern_array[5] = { 0x80, 0x04, 0x08, 0x00, 0x40 }; // Black for 10-bit 4:2:2.
+            for (int i = 0; i < con_info.test_settings.payload_size; i+= sizeof(pattern_array)) {
+                memcpy(((uint8_t*)con_info.adapter_tx_buffer_ptr)+i, pattern_array, sizeof(pattern_array));
+            }
+
+            // Fill in the AVM configuration structure and payload unit size.
+            MakeAvmConfig(&con_info, &avm_config, &payload_unit_size);
+        } else {
+            memset(con_info.adapter_tx_buffer_ptr, 0x7f, con_info.test_settings.payload_size);
         }
 
-        // Fill in the AVM configuration structure and payload unit size.
-        MakeAvmConfig(&con_info, &avm_config, &payload_unit_size);
-    } else {
-        memset(con_info.adapter_tx_buffer_ptr, 0x7f, con_info.test_settings.payload_size);
+        // Setup rate period and start times.
+        con_info.rate_period_microseconds = ((1000000 * con_info.test_settings.rate_denominator) /
+                                            con_info.test_settings.rate_numerator);
+        con_info.payload_start_time = CdiOsGetMicroseconds();
+        rate_next_start_time = con_info.payload_start_time + con_info.rate_period_microseconds;
     }
-
-    // Setup rate period and start times.
-    con_info.rate_period_microseconds = ((1000000 * con_info.test_settings.rate_denominator) /
-                                        con_info.test_settings.rate_numerator);
-    con_info.payload_start_time = CdiOsGetMicroseconds();
-    uint64_t rate_next_start_time = con_info.payload_start_time + con_info.rate_period_microseconds;
 
     while (kCdiStatusOk == rs && payload_count < con_info.test_settings.num_transactions &&
            kCdiConnectionStatusConnected == con_info.connection_status && !con_info.payload_error) {
@@ -555,7 +564,9 @@ int main(int argc, const char** argv)
         }
     }
 
-    CDI_LOG_THREAD(kLogInfo, "All done. Sent [%d] payloads. Shutting down.", payload_count);
+    if (kCdiStatusOk == rs) {
+        CDI_LOG_THREAD(kLogInfo, "All done. Sent [%d] payloads. Shutting down.", payload_count);
+    }
 
     //-----------------------------------------------------------------------------------------------------------------
     // CDI SDK Step 6. Shutdown and clean-up CDI SDK resources.
@@ -569,6 +580,7 @@ int main(int argc, const char** argv)
     CdiOsSignalDelete(con_info.connection_state_change_signal);
     CdiOsSignalDelete(con_info.payload_callback_signal);
     TestCommandLineParserDestroy(command_line_handle);
+    CdiLoggerShutdown(false); // Matches call to CdiLoggerInitialize(). NOTE: false= Normal termination.
 
     return (kCdiStatusOk == rs) ? 0 : 1;
 }

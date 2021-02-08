@@ -113,7 +113,12 @@ struct MultilineLogBufferState {
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
 
-static bool initialized = false;                ///< If true, this module has been initialized.
+/// @brief Statically allocated mutex used to make initialization of logger data thread-safe.
+static CdiStaticMutexType logger_context_mutex_lock = CDI_STATIC_MUTEX_INITIALIZER;
+
+/// @brief Logger module initialization reference count. If zero, logger has not been initialized. If 1 or greater,
+/// logger has been initialized.
+static int initialization_ref_count = 0;
 
 static CdiCsID log_state_list_lock = NULL;      ///< Lock used to protect multi-thread access to the log state list.
 static CdiList log_state_list;                  ///< List of log state objects (CdiLogState).
@@ -681,7 +686,9 @@ bool CdiLoggerInitialize(void)
 {
     bool ret = true;
 
-    if (!initialized) {
+    CdiOsStaticMutexLock(logger_context_mutex_lock);
+
+    if (0 == initialization_ref_count) {
         // Initialize log state list.
         CdiListInit(&log_state_list);
 
@@ -733,11 +740,16 @@ bool CdiLoggerInitialize(void)
 
         if (ret) {
             CdiOsUseLogger();
-            initialized = true;
         } else {
             CdiLoggerShutdown(false); // Do normal shutdown.
         }
     }
+
+    if (ret) {
+        initialization_ref_count++;
+    }
+
+    CdiOsStaticMutexUnlock(logger_context_mutex_lock);
 
     return ret;
 }
@@ -745,26 +757,24 @@ bool CdiLoggerInitialize(void)
 bool CdiLoggerCreate(CdiLogLevel default_log_level, CdiLoggerHandle* ret_logger_handle_ptr)
 {
     bool ret = true;
-
-    if (!initialized) {
-        return false;
-    }
-
     CdiLoggerState* logger_state_ptr = NULL;
-    logger_state_ptr = (CdiLoggerState*)CdiOsMemAllocZero(sizeof(CdiLoggerState));
-    if (NULL == logger_state_ptr) {
+
+    CdiOsStaticMutexLock(logger_context_mutex_lock);
+
+    if (0 == initialization_ref_count) {
         ret = false;
-    }
-
-    if (ret) {
-        logger_state_ptr->default_log_level = default_log_level;
-    }
-
-    if (!ret) {
-        CdiLoggerDestroyLogger(logger_state_ptr);
+    } else {
+        logger_state_ptr = (CdiLoggerState*)CdiOsMemAllocZero(sizeof(CdiLoggerState));
+        if (NULL == logger_state_ptr) {
+            ret = false;
+        } else {
+            logger_state_ptr->default_log_level = default_log_level;
+        }
     }
 
     *ret_logger_handle_ptr = (CdiLoggerHandle)logger_state_ptr;
+
+    CdiOsStaticMutexUnlock(logger_context_mutex_lock);
 
     return ret;
 }
@@ -1102,6 +1112,8 @@ CdiReturnStatus CdiLoggerComponentEnableGlobal(CdiLogComponent component, bool e
         stdout_log_handle->component_state_array[component].log_enable = enable;
     }
 
+    CdiOsCritSectionReserve(log_state_list_lock); // Lock access to the logger list.
+
     CdiListIterator list_iterator;
     CdiListIteratorInit(&log_state_list, &list_iterator);
 
@@ -1110,6 +1122,8 @@ CdiReturnStatus CdiLoggerComponentEnableGlobal(CdiLogComponent component, bool e
     while (NULL != (state_ptr = ListGetNextEntry(&list_iterator))) {
         state_ptr->component_state_array[component].log_enable = enable;
     }
+
+    CdiOsCritSectionRelease(log_state_list_lock); // Done with access to the logger list.
 
     return kCdiStatusOk;
 }
@@ -1124,6 +1138,8 @@ CdiReturnStatus CdiLoggerLevelSetGlobal(CdiLogComponent component, CdiLogLevel l
         stdout_log_handle->component_state_array[component].log_level = level;
     }
 
+    CdiOsCritSectionReserve(log_state_list_lock); // Lock access to the logger list.
+
     CdiListIterator list_iterator;
     CdiListIteratorInit(&log_state_list, &list_iterator);
 
@@ -1132,6 +1148,8 @@ CdiReturnStatus CdiLoggerLevelSetGlobal(CdiLogComponent component, CdiLogLevel l
     while (NULL != (state_ptr = ListGetNextEntry(&list_iterator))) {
         state_ptr->component_state_array[component].log_level = level;
     }
+
+    CdiOsCritSectionRelease(log_state_list_lock); // Done with access to the logger list.
 
     return kCdiStatusOk;
 }
@@ -1184,7 +1202,11 @@ void CdiLoggerDestroyLogger(CdiLoggerHandle logger_handle)
 
 void CdiLoggerFlushAllFileLogs(void)
 {
-    if (initialized) {
+    CdiOsStaticMutexLock(logger_context_mutex_lock);
+
+    if (initialization_ref_count) {
+        CdiOsCritSectionReserve(log_state_list_lock); // Lock access to the logger list.
+
         if (!CdiListIsEmpty(&log_state_list)) {
             CdiListIterator list_iterator;
             CdiListIteratorInit(&log_state_list, &list_iterator);
@@ -1199,19 +1221,39 @@ void CdiLoggerFlushAllFileLogs(void)
                 }
             }
         }
+        CdiOsCritSectionRelease(log_state_list_lock); // Done with access to the logger list.
     }
+    CdiOsStaticMutexUnlock(logger_context_mutex_lock);
 }
 
 void CdiLoggerShutdown(bool force)
 {
-    CdiLoggerThreadLogUnset();
+    bool do_shutdown = force;
 
-    // If stdout log handle exists, just remove it from our list so we can still use it for stdout in this function.
-    if (stdout_log_handle) {
-        CdiListRemove(&log_state_list, &stdout_log_handle->list_entry);
+    CdiOsStaticMutexLock(logger_context_mutex_lock);
+
+    if (force) {
+        // Forcing shutdown, so force reference counter to zero.
+        initialization_ref_count = 0;
+    } else if (initialization_ref_count) {
+        if (0 == --initialization_ref_count) {
+            // Reference count is zero, so ok to perform the shutdown.
+            do_shutdown = true;
+        }
     }
 
-    if (initialized) {
+    if (do_shutdown) {
+        CdiLoggerThreadLogUnset();
+
+        if (log_state_list_lock) {
+            CdiOsCritSectionReserve(log_state_list_lock); // Lock access to the logger list.
+        }
+
+        // If stdout log handle exists, just remove it from our list so we can still use it for stdout in this function.
+        if (stdout_log_handle) {
+            CdiListRemove(&log_state_list, &stdout_log_handle->list_entry);
+        }
+
         if (!CdiListIsEmpty(&log_state_list)) {
             // This list should have been empty.
             CdiListIterator list_iterator;
@@ -1234,34 +1276,37 @@ void CdiLoggerShutdown(bool force)
                     }
                 }
             }
-
             if (!force) {
                 assert(false);
             }
         }
-        initialized = false;
+
+        if (log_state_list_lock) {
+            CdiOsCritSectionRelease(log_state_list_lock); // Done with access to the logger list.
+            CdiOsCritSectionDelete(log_state_list_lock);
+            log_state_list_lock = NULL;
+        }
+
+        CdiOsCritSectionDelete(multiline_free_list_lock);
+        multiline_free_list_lock = NULL;
+
+        // Free memory of multiline log buffers.
+        MultilineLogBufferState* state_ptr = NULL;
+        while (NULL != (state_ptr = (MultilineLogBufferState*)CdiSinglyLinkedListPopHead(&multiline_free_list))) {
+            CdiOsMemFree(state_ptr);
+        }
+
+        if (log_thread_data_valid) {
+            CdiOsThreadFreeData(log_thread_data);
+            log_thread_data_valid = false;
+        }
+
+        // Now that are done using the stdout logger, it is safe to destroy the stdout handle.
+        if (stdout_log_handle) {
+            CdiOsMemFree(stdout_log_handle);
+            stdout_log_handle = NULL;
+        }
     }
 
-    CdiOsCritSectionDelete(log_state_list_lock);
-    log_state_list_lock = NULL;
-
-    CdiOsCritSectionDelete(multiline_free_list_lock);
-    multiline_free_list_lock = NULL;
-
-    // Free memory of multiline log buffers.
-    MultilineLogBufferState* state_ptr = NULL;
-    while (NULL != (state_ptr = (MultilineLogBufferState*)CdiSinglyLinkedListPopHead(&multiline_free_list))) {
-        CdiOsMemFree(state_ptr);
-    }
-
-    if (log_thread_data_valid) {
-        CdiOsThreadFreeData(log_thread_data);
-        log_thread_data_valid = false;
-    }
-
-    // Now that are done using the stdout logger, it is safe to destroy the stdout handle.
-    if (stdout_log_handle) {
-        CdiOsMemFree(stdout_log_handle);
-        stdout_log_handle = NULL;
-    }
+    CdiOsStaticMutexUnlock(logger_context_mutex_lock);
 }
