@@ -166,12 +166,10 @@ static void ConnectionShutdownInternal(CdiConnectionHandle handle)
 static void AdapterShutdownInternal(CdiAdapterHandle handle)
 {
     // NOTE: No need to use the connections_list_lock here, since only one thread should be calling this function.
-
-    // Close all of the connections associated with this adapter.
-    CdiListEntry* connection_entry_ptr = NULL;
-    while (NULL != (connection_entry_ptr = CdiListPop(&handle->connections_list))) {
-        CdiConnectionHandle connection_handle = CONTAINER_OF(connection_entry_ptr, CdiConnectionState, list_entry);
-        ConnectionShutdownInternal(connection_handle);
+    if (!CdiListIsEmpty(&handle->connections_list)) {
+        SDK_LOG_GLOBAL(kLogError,
+                       "Connection list is not empty. Must use CdiCoreConnectionDestroy() for each connection before"
+                       " shutting down an adapter.");
     }
 
     // Free the lock resource.
@@ -206,12 +204,11 @@ static void FifoDebugCallback(const CdiFifoCbData* cb_ptr)
  */
 static void CleanupGlobalResources(void)
 {
-    // Walk through the cdi adapter list freeing resources used by them.
-    CdiListEntry* entry_ptr = NULL;
-    while (NULL != (entry_ptr = CdiListPop(&cdi_global_context.adapter_handle_list))) {
-        // Get pointer to the entry's parent object (CdiAdapterState).
-        CdiAdapterState* adapter_state_ptr = CONTAINER_OF(entry_ptr, CdiAdapterState, list_entry);
-        AdapterShutdownInternal(adapter_state_ptr);
+    // Adapter list should be empty here.
+    if (!CdiListIsEmpty(&cdi_global_context.adapter_handle_list)) {
+        SDK_LOG_GLOBAL(kLogError,
+                       "Adapter list is not empty. Must use CdiCoreNetworkAdapterDestroy() for each adapter before"
+                       " shutting down the SDK.");
     }
     if (cdi_global_context.adapter_handle_list_lock) {
         CdiOsCritSectionDelete(cdi_global_context.adapter_handle_list_lock);
@@ -397,7 +394,7 @@ CdiReturnStatus AdapterInitializeInternal(CdiAdapterData* adapter_data_ptr, CdiA
     CdiListIteratorInit(&cdi_global_context.adapter_handle_list, &list_iterator);
     CdiListEntry* entry_ptr = NULL;
     // If there are any adapters that have already been initialized, then walk through list until we reach the head or
-    // find an entry that matches the one we are currently trying to initialize.  If we do find a match, then error out
+    // find an entry that matches the one we are currently trying to initialize. If we do find a match, then error out
     // and exit.
     while (NULL != (entry_ptr = CdiListIteratorGetNext(&list_iterator))) {
         CdiAdapterHandle adapter_handle_entry = (CdiAdapterHandle)entry_ptr;
@@ -423,6 +420,8 @@ CdiReturnStatus AdapterInitializeInternal(CdiAdapterData* adapter_data_ptr, CdiA
     }
 
     if (rs == kCdiStatusOk) {
+        state_ptr->magic = kMagicAdapter;
+
         // Make a copy of the adapter's initialization data.
         state_ptr->adapter_data = *adapter_data_ptr;
 
@@ -486,6 +485,33 @@ CdiReturnStatus AdapterInitializeInternal(CdiAdapterData* adapter_data_ptr, CdiA
 
     return rs;
 }
+
+CdiReturnStatus NetworkAdapterDestroyInternal(CdiAdapterHandle handle)
+{
+    CdiReturnStatus rs = kCdiStatusInvalidHandle; // Default to an error, if we don't find the handle in the list.
+    CdiListIterator list_iterator;
+
+    CdiOsCritSectionReserve(cdi_global_context.adapter_handle_list_lock);
+    CdiListIteratorInit(&cdi_global_context.adapter_handle_list, &list_iterator);
+    CdiListEntry* entry_ptr = NULL;
+
+    // Walk adapter list and try to find a match.
+    while (NULL != (entry_ptr = CdiListIteratorGetNext(&list_iterator))) {
+        CdiAdapterHandle adapter_handle_entry = (CdiAdapterHandle)entry_ptr;
+        if (adapter_handle_entry == handle) {
+            // Remove it from the list and then shutdown and free resources used by the adapter.
+            CdiListRemove(&cdi_global_context.adapter_handle_list, entry_ptr);
+            AdapterShutdownInternal(handle);
+            rs = kCdiStatusOk; // Found handle, so set returned status to ok.
+            break; // Exit the loop.
+        }
+    }
+
+    CdiOsCritSectionRelease(cdi_global_context.adapter_handle_list_lock);
+
+    return rs;
+}
+
 
 CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiCoreStatsCallback stats_cb_ptr,
                                                 CdiUserCbParameter stats_user_cb_param,

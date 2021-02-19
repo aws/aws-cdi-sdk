@@ -346,7 +346,7 @@ static bool CreateTxBufferPools(TestConnectionInfo* connection_info_ptr, uint8_t
 
 bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entries, int num_connections)
 {
-    CdiAdapterHandle adapter_handle;
+    CdiAdapterHandle adapter_handle = NULL;
     bool got_error = false;
 
     // Create a data structure for all connection info that we can assign the test settings to.
@@ -523,6 +523,14 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                 }
             }
         }
+    }
+
+    if (adapter_handle) {
+        if (kCdiStatusOk != CdiCoreNetworkAdapterDestroy(adapter_handle)) {
+            CDI_LOG_THREAD(kLogError, "Failed to destroy network adapter.");
+            got_error = true;
+        }
+        adapter_handle = NULL;
     }
 
     // Return the correct return status to the test app.

@@ -84,6 +84,18 @@ static inline bool IsValidMemoryHandle(const CdiMemoryHandle handle)
 }
 
 /**
+ * Function to check if a adapter handle is valid.
+ *
+ * @param handle Pointer to adapter handle being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
+ */
+static inline bool IsValidAdapterHandle(const CdiAdapterHandle handle)
+{
+    return handle != NULL && handle->magic == kMagicAdapter;
+}
+
+/**
  * Performs initialization of the SDK that only needs to be done once and applies to programs that transmit, receive,
  * or both transmit and receive.
  *
@@ -121,6 +133,17 @@ int CdiGatherInternal(const CdiSgList* sgl_ptr, int offset, void* dest_data_ptr,
  * @see CdiCoreNetworkAdapterInitialize
  */
 CdiReturnStatus AdapterInitializeInternal(CdiAdapterData* adapter_data_ptr, CdiAdapterHandle* ret_handle_ptr);
+
+/**
+ * Destroy an adapter.
+ *
+ * @param handle Handle of adapter to destroy.
+ *
+ * @return CdiReturnStatus kCdiStatusOk if all went well, otherwise a value indicating why it failed.
+ *
+ * @see CdiCoreNetworkAdapterDestroy
+ */
+CdiReturnStatus NetworkAdapterDestroyInternal(CdiAdapterHandle handle);
 
 /**
  * Shuts down a connection and frees all of the resources associated with it.

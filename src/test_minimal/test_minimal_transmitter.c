@@ -574,6 +574,9 @@ int main(int argc, const char** argv)
     if (con_info.connection_handle) {
         CdiCoreConnectionDestroy(con_info.connection_handle);
     }
+    if (adapter_handle) {
+        CdiCoreNetworkAdapterDestroy(adapter_handle);
+    }
     CdiCoreShutdown();
 
     // Clean-up additional resources used by this application.

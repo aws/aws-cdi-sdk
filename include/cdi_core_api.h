@@ -842,13 +842,14 @@ extern "C" {
 CDI_INTERFACE CdiReturnStatus CdiCoreInitialize(const CdiCoreConfigData* core_config_ptr);
 
 /**
- * Create an instance of a network adapter.
+ * Create an instance of a network adapter. CdiCoreNetworkAdapterDestroy() must be called before CdiCoreShutdown() but
+ * after all connections using the adapter are closed using CdiCoreConnectionDestroy().
  *
- * NOTE: Currently if the shared memory provider is enabled in the EFA Adapter (see FI_EFA_ENABLE_SHM_TRANSFER in
- * CDI), libfabric uses fork() to determine capability (see rxr_check_cma_capability() in the EFA provider). This
- * causes a double flush of cached write data of any open files. By default, the shared memory provider is disabled. If
- * enabled, all open files must have used fflush() prior to using this API function. The CDI SDK always flushes all
- * open log files that were created using the CDI logger API functions.
+ * NOTE: Currently if the shared memory provider is enabled in the EFA Adapter (see FI_EFA_ENABLE_SHM_TRANSFER in CDI),
+ * libfabric uses fork() to determine capability (see rxr_check_cma_capability() in the EFA provider). This causes a
+ * double flush of cached write data of any open files. By default, the shared memory provider is disabled. If enabled,
+ * all open files must have used fflush() prior to using this API function. The CDI SDK always flushes all open log
+ * files that were created using the CDI logger API functions.
  *
  * NOTE: Newly created data structures that are passed in to this function should be properly initialized before being
  * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
@@ -863,6 +864,17 @@ CDI_INTERFACE CdiReturnStatus CdiCoreInitialize(const CdiCoreConfigData* core_co
  */
 CDI_INTERFACE CdiReturnStatus CdiCoreNetworkAdapterInitialize(CdiAdapterData* adapter_data_ptr,
                                                               CdiAdapterHandle* ret_handle_ptr);
+
+/**
+ * Free resources associated with the specified network adapter that was previously created using
+ * CdiCoreNetworkAdapterInitialize(). NOTE: Before calling this function, all connections that use the adapter should be
+ * closed using CdiCoreConnectionDestroy().
+ *
+ * @param handle Handle of network adapter to destroy.
+ *
+ * @return A value from the CdiReturnStatus enumeration.
+ */
+CDI_INTERFACE CdiReturnStatus CdiCoreNetworkAdapterDestroy(CdiAdapterHandle handle);
 
 /**
  * Free the receive buffer that was used in one of the Cdi...RxCallback() API functions.

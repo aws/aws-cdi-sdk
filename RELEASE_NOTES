@@ -11,6 +11,11 @@ CDI (Cloud Digital Interface) SDK Version 2.x.x - XX/XX/XXXX
 What's New
 ------------
 
+* Added new CdiCoreNetworkAdapterDestroy() API. This allows dynamic destruction of resources created by
+  CdiCoreNetworkAdapterInitialize(). Before using CdiCoreNetworkAdapterDestroy(), must ensure all connections using the
+  adapter are closed. See CdiCoreConnectionDestroy(). Also, all connections and adapters must be closed/destroyed before
+  using CdiCoreShutdown().
+
 * Added internal reference count to Logger state data. NOTE: Each time CdiLoggerInitialize() is called,
   CdiLoggerShutdown() must be called once. The test applications have been updated to call CdiLoggerShutdown().
 

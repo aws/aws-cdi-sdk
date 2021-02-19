@@ -417,6 +417,9 @@ static const uint32_t kMagicCon = 0x8ab73d45;
 /// Somewhat random number to aid in detecting invalid memory handles.
 static const uint32_t kMagicMem = 0x9bc84e56;
 
+/// Somewhat random number to aid in detecting invalid adapter handles.
+static const uint32_t kMagicAdapter = 0xacd95f67;
+
 /**
  * @brief This defines a structure used to contain all of the state information for a linear buffer.
  */

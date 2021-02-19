@@ -69,6 +69,21 @@ CdiReturnStatus CdiCoreNetworkAdapterInitialize(CdiAdapterData* adapter_data_ptr
     return rs;
 }
 
+CdiReturnStatus CdiCoreNetworkAdapterDestroy(CdiAdapterHandle handle)
+{
+    CdiReturnStatus rs = kCdiStatusOk;
+
+    if (!IsValidAdapterHandle(handle)) {
+        rs = kCdiStatusInvalidHandle;
+    }
+
+    if (rs == kCdiStatusOk) {
+        rs = NetworkAdapterDestroyInternal(handle);
+    }
+
+    return rs;
+}
+
 CdiReturnStatus CdiCoreRxFreeBuffer(const CdiSgList* sgl_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;

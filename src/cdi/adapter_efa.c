@@ -631,6 +631,9 @@ static CdiReturnStatus EfaAdapterShutdown(CdiAdapterHandle adapter_handle)
     if (adapter_handle != NULL) {
         EfaAdapterState* efa_adapter_state_ptr = (EfaAdapterState*)adapter_handle->type_specific_ptr;
         if (efa_adapter_state_ptr) {
+            if (efa_adapter_state_ptr->control_interface_adapter_handle) {
+                rs = NetworkAdapterDestroyInternal(efa_adapter_state_ptr->control_interface_adapter_handle);
+            }
             CdiOsMemFree(efa_adapter_state_ptr);
             adapter_handle->type_specific_ptr = NULL;
         }

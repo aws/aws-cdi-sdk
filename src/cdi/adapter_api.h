@@ -253,6 +253,9 @@ struct CdiAdapterState {
     /// Used to store an instance of this object in a list using this element as the list item.
     CdiListEntry list_entry;
 
+    /// Set to kMagicAdapter when allocated, checked at every API function to help ensure validity.
+    uint32_t magic;
+
     /// @brief Copy of the adapter's IP address string. "adapter_data.adapter_ip_addr_str" (see below) points to this
     /// value.
     char adapter_ip_addr_str[MAX_IP_STRING_LENGTH];
