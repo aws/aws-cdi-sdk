@@ -1,0 +1,42 @@
+name: Documentation
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  push:
+    branches: [ mainline ]
+
+jobs:
+  build-documentation:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    
+    # Build the HTML documentation
+    - run: echo "doxygen_exclude=aws-cpp-sdk-cdi src/common/src/os_windows.c" >> $GITHUB_ENV
+    - run: echo "doxygen_enabled_sections=ALL_DOCS" >> $GITHUB_ENV
+    - run: echo "doc_dir=docs_all" >> $GITHUB_ENV
+    - run: mkdir -p docs_all
+    - run: pwd docs_all
+    - run: VER=`grep -i sdk_version src/versions.h | sed 's/\s\+/,/g' | cut -d, -f3`
+    - run: VER=`grep -i sdk_version src/versions.h | sed 's/\s\+/,/g' | cut -d, -f3`; VER_MAJOR=`grep -i sdk_major_version src/versions.h | sed 's/\s\+/,/g' | cut -d, -f3`; VER_MINOR=`grep -i sdk_minor_version src/versions.h | sed 's/\s\+/,/g' | cut -d, -f3`; echo 'MY_VER="${VER}_${VER_MAJOR}_${VER_MINOR}" >> $GITHUB_ENV'
+    - run: echo $MY_VER
+    - name: Doxygen Action
+      uses: mattnotmitt/doxygen-action@v1.1.0
+      with:
+          doxyfile-path: ./doc/Doxyfile
+          working-directory: .
+    - run: ls docs_all
+    
+    # Deploy the HTML documentation to GitHub Pages. Use branch name as root folder, extracted from repo URL. See "${GITHUB_REF##*/".
+    - name: GH Pages Deployment
+      uses: peaceiris/actions-gh-pages@v3.7.0-8
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs_all/html/
+        enable_jekyll: false
+        allow_empty_commit: false
+        force_orphan: true
+        publish_branch: gh-pages
+        destination_dir: mainline
