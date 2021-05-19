@@ -163,7 +163,7 @@ static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int
                 // Wait for all the done signals or the timeout.
                 uint32_t signal_index;
                 CdiOsSignalsWait(signal_array, num_connections, true, timeout_ms, &signal_index);
-                if (OS_SIG_TIMEOUT != signal_index) {
+                if (CDI_OS_SIG_TIMEOUT != signal_index) {
                     // All the done signals are set, so we can exit the loop after displaying the stats message.
                     all_done = true;
                 }
@@ -447,9 +447,6 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
     // Register the adapter.
     if (!got_error) {
         CDI_LOG_THREAD(kLogInfo, "Registering an adapter.");
-        // Round-up total size to a multiple of HUGE_PAGES_BYTE_SIZE.
-        total_tx_payload_bytes = ((total_tx_payload_bytes + HUGE_PAGES_BYTE_SIZE-1) / HUGE_PAGES_BYTE_SIZE) *
-                                  HUGE_PAGES_BYTE_SIZE;
         adapter_data_ptr->tx_buffer_size_bytes = total_tx_payload_bytes;
         got_error = (kCdiStatusOk != CdiCoreNetworkAdapterInitialize(adapter_data_ptr, &adapter_handle));
     }

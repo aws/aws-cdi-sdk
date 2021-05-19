@@ -89,10 +89,6 @@ static void SglEntryInit(CdiSglEntry* sgl_entry_ptr, uint8_t* address_ptr, int s
     sgl_entry_ptr->size_in_bytes = size_in_bytes;
     sgl_entry_ptr->next_ptr = NULL;
     sgl_entry_ptr->internal_data_ptr = NULL;
-#ifdef DEBUG_INTERNAL_SGL_ENTRIES
-    sgl_entry_ptr->packet_sequence_num = 0;
-    sgl_entry_ptr->payload_num = 0;
-#endif
 }
 
 /**
@@ -149,7 +145,7 @@ static bool TestCase(const CaseParams* params_ptr)
  *
  * @return bool true if all of the cases passed, false if one case failed.
  */
-bool TestUnitSgl(void)
+CdiReturnStatus TestUnitSgl(void)
 {
     CaseParams cases[] = {
         //                                                                         entry_count
@@ -174,6 +170,5 @@ bool TestUnitSgl(void)
         }
     }
 
-    return !failed;
+    return failed ? kCdiStatusFatal : kCdiStatusOk;
 }
-

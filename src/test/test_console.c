@@ -58,9 +58,9 @@ static chtype* log_window_buffer_ptr = NULL; ///< Pointer to buffer used to hold
 static CdiCsID log_window_lock = NULL;
 
 /// File descriptor for pipe. [0]= read fd, [1]= write fd.
-static int pipe_fd_array[2] = { INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE };
+static int pipe_fd_array[2] = { CDI_INVALID_HANDLE_VALUE, CDI_INVALID_HANDLE_VALUE };
 
-static int original_stdout_fd = INVALID_HANDLE_VALUE; ///< File descriptor for stdout.
+static int original_stdout_fd = CDI_INVALID_HANDLE_VALUE; ///< File descriptor for stdout.
 
 CdiThreadID console_thread_id; ///< Thread ID for this connection.
 
@@ -135,7 +135,7 @@ static THREAD TestConsoleThread(void* arg_ptr)
     (void)arg_ptr; // Not used
     char msg_buf_ptr[MAX_MESSAGE_SIZE];
 
-    if (INVALID_HANDLE_VALUE != pipe_fd_array[1]) {
+    if (CDI_INVALID_HANDLE_VALUE != pipe_fd_array[1]) {
         int index = 0;
 
         // Read characters until the pipe has been closed and is empty.
@@ -166,8 +166,8 @@ static THREAD TestConsoleThread(void* arg_ptr)
         close(pipe_fd_array[0]); // Close the read end of the pipe.
 
         // Invalidate the FDs.
-        pipe_fd_array[0] = INVALID_HANDLE_VALUE;
-        pipe_fd_array[1] = INVALID_HANDLE_VALUE;
+        pipe_fd_array[0] = CDI_INVALID_HANDLE_VALUE;
+        pipe_fd_array[1] = CDI_INVALID_HANDLE_VALUE;
     }
 
     return 0; // This is not used.
@@ -244,7 +244,7 @@ bool TestConsoleCreate(bool multi_window_mode, int num_stats_lines)
 
 void TestConsoleDestroy(bool abnormal_termination)
 {
-    if (INVALID_HANDLE_VALUE != pipe_fd_array[1]) {
+    if (CDI_INVALID_HANDLE_VALUE != pipe_fd_array[1]) {
         close(pipe_fd_array[1]);  // Close the write end of the pipe, to prevent read() from continuing to block.
         close(CDI_STDERR_FILENO); // Done with stderr for now. Will set back to the original value below.
     }
@@ -299,14 +299,14 @@ void TestConsoleDestroy(bool abnormal_termination)
         CdiOsMemFree(log_window_buffer_ptr);
     }
 
-    if (INVALID_HANDLE_VALUE != original_stdout_fd) {
+    if (CDI_INVALID_HANDLE_VALUE != original_stdout_fd) {
 #ifndef WIN32
         // Restore the original stderr handler. Only need to do for linux. Causes a segfault in windows. Windows code
         // for reference: dup2(_fileno(stderr), original_stdout_fd);
         dup2(CDI_STDERR_FILENO, original_stdout_fd);
 #endif
         close(original_stdout_fd);
-        original_stdout_fd = INVALID_HANDLE_VALUE;
+        original_stdout_fd = CDI_INVALID_HANDLE_VALUE;
     }
 
     CdiOsCritSectionDelete(log_window_lock);

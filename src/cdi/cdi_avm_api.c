@@ -55,6 +55,23 @@ CdiReturnStatus CdiAvmTxCreate(CdiTxConfigData* config_data_ptr, CdiAvmTxCallbac
     }
 }
 
+CDI_INTERFACE CdiReturnStatus CdiAvmTxStreamConnectionCreate(CdiTxConfigData* config_data_ptr,
+                                                             CdiAvmTxCallback tx_cb_ptr,
+                                                             CdiConnectionHandle* ret_handle_ptr)
+{
+    if (!cdi_global_context.sdk_initialized) {
+        return kCdiStatusNotInitialized;
+    } else {
+        return TxStreamConnectionCreateInternal(config_data_ptr, (CdiCallback)tx_cb_ptr, ret_handle_ptr);
+    }
+}
+
+CdiReturnStatus CdiAvmTxStreamEndpointCreate(CdiConnectionHandle handle, CdiTxConfigDataStream* stream_config_ptr,
+                                             CdiEndpointHandle* ret_handle_ptr)
+{
+    return TxStreamEndpointCreateInternal(handle, stream_config_ptr, ret_handle_ptr);
+}
+
 CdiReturnStatus CdiAvmStreamEndpointDestroy(CdiEndpointHandle handle)
 {
     EndpointDestroyInternal(handle);
@@ -77,6 +94,18 @@ CdiReturnStatus CdiAvmTxPayload(CdiConnectionHandle con_handle, const CdiAvmTxPa
     if (!IsValidTxHandle(con_handle)) {
         return kCdiStatusInvalidHandle;
     }
+    return CdiAvmEndpointTxPayload(con_handle->default_tx_endpoint_ptr, payload_config_ptr, avm_config_ptr, sgl_ptr,
+                                   max_latency_microsecs);
+}
+
+CDI_INTERFACE CdiReturnStatus CdiAvmEndpointTxPayload(CdiEndpointHandle endpoint_handle,
+                                                      const CdiAvmTxPayloadConfig* payload_config_ptr,
+                                                      const CdiAvmConfig* avm_config_ptr, const CdiSgList* sgl_ptr,
+                                                      int max_latency_microsecs)
+{
+    if (!IsValidEndpointHandle(endpoint_handle)) {
+        return kCdiStatusInvalidHandle;
+    }
 
     CDIPacketAvmUnion packet_avm_data;
     memset((void*)&packet_avm_data, 0, sizeof(packet_avm_data));
@@ -90,6 +119,6 @@ CdiReturnStatus CdiAvmTxPayload(CdiConnectionHandle con_handle, const CdiAvmTxPa
     int avm_data_size =
         (NULL == avm_config_ptr) ? sizeof(packet_avm_data.no_config) : sizeof(packet_avm_data.with_config);
 
-    return TxPayloadInternal(con_handle, &payload_config_ptr->core_config_data, sgl_ptr, max_latency_microsecs,
+    return TxPayloadInternal(endpoint_handle, &payload_config_ptr->core_config_data, sgl_ptr, max_latency_microsecs,
                              avm_data_size, (uint8_t*)&packet_avm_data);
 }

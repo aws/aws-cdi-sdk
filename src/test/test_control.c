@@ -144,7 +144,7 @@ bool TestWaitForConnection(TestConnectionInfo* connection_info_ptr, int timeout_
         CdiOsSignalsWait(signal_array, 2, false, time_to_wait_ms, &signal_index);
         CdiOsSignalClear(connection_info_ptr->connection_state_change_signal);
         if (0 != signal_index) {
-            // Wait was aborted (signal_index=1) or timed-out (signal_index=OS_SIG_TIMEOUT).
+            // Wait was aborted (signal_index=1) or timed-out (signal_index=CDI_OS_SIG_TIMEOUT).
             ret = false;
             break;
         }
@@ -179,13 +179,27 @@ void TestConnectionCallback(const CdiCoreConnectionCbData* cb_data_ptr)
                                       connection_info_ptr->config_data.tx.connection_name_str :
                                       connection_info_ptr->config_data.rx.connection_name_str;
 
-    TEST_LOG_CONNECTION(kLogInfo, "Connection[%s] stream ID[%d] status changed[%s]. Msg[%s].",
-                        CdiGetEmptyStringIfNull(connection_name_str),
-                        cb_data_ptr->stream_identifier,
+    TEST_LOG_CONNECTION(kLogInfo, "Connection[%s] remote IP[%s:%d] status changed[%s]. Msg[%s].",
+                        CdiGetEmptyStringIfNull(connection_name_str), cb_data_ptr->remote_ip_str,
+                        cb_data_ptr->remote_dest_port,
                         CdiUtilityKeyEnumToString(kKeyConnectionStatus, cb_data_ptr->status_code),
                         CdiGetEmptyStringIfNull(cb_data_ptr->err_msg_str));
 
-    connection_info_ptr->connection_status = cb_data_ptr->status_code;
+    CdiConnectionStatus status_code = cb_data_ptr->status_code;
+    connection_info_ptr->connection_status = status_code;
+    if (connection_info_ptr->test_settings_ptr->tx && connection_info_ptr->test_settings_ptr->multiple_endpoints) {
+        // Tx connection supports multiple endpoints, so don't signal connected state until all of the endpoints are
+        // connected.
+        for (int i = 0; i < connection_info_ptr->test_settings_ptr->number_of_streams; i++) {
+            if (connection_info_ptr->tx_stream_endpoint_handle_array[i] == cb_data_ptr->tx_stream_endpoint_handle) {
+                connection_info_ptr->connection_status_stream_array[i] = cb_data_ptr->status_code;
+            }
+            if (kCdiConnectionStatusDisconnected == connection_info_ptr->connection_status_stream_array[i]) {
+                connection_info_ptr->connection_status = kCdiConnectionStatusDisconnected;
+            }
+        }
+    }
+
     CdiOsSignalSet(connection_info_ptr->connection_state_change_signal);
 }
 
@@ -590,14 +604,4 @@ CdiPtpTimestamp GetPtpTimestamp(const TestConnectionInfo* connection_info_ptr,
     };
 
     return timestamp;
-}
-
-int GetStreamSettingsIndex(const TestSettings* test_settings_ptr, int stream_id)
-{
-    for (int i = 0; i< test_settings_ptr->number_of_streams; i++) {
-        if (test_settings_ptr->stream_settings[i].stream_id == stream_id) {
-            return i;
-        }
-    }
-    return -1;
 }

@@ -71,6 +71,12 @@ CdiReturnStatus CdiRawTxPayload(CdiConnectionHandle con_handle,
         return kCdiStatusInvalidHandle;
     }
 
+    CdiEndpointState* endpoint_ptr = con_handle->default_tx_endpoint_ptr;
+    if (!IsValidEndpointHandle(endpoint_ptr)) {
+        return kCdiStatusInvalidHandle;
+    }
+
     // Raw doesn't use extra data (so last two parameters are 0 and NULL).
-    return TxPayloadInternal(con_handle, payload_config_ptr, sgl_ptr, max_latency_microsecs, 0, NULL);
+    return TxPayloadInternal(con_handle->default_tx_endpoint_ptr, payload_config_ptr, sgl_ptr, max_latency_microsecs,
+                             0, NULL);
 }

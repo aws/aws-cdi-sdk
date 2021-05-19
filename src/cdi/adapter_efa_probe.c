@@ -18,33 +18,58 @@
  *
  * @section probe_overview Architecture Overview
  *
- * In order to establish an SRD connection between two EC2 instances using
- * EFA adapters, a specific sequence of events must occur. The EC2 instance used as a transmitter must obtain an EFA
- * device identifier of the remote EC2 instance in order to establish the connection. Initial startup and optimization
- * of the SRD network flows need to be establish before the connection can be used by the application. For this, a
- * socket based interface is used to control communication. The specific steps used are described below:
+ * In order to establish an SRD connection between two EC2 instances using EFA adapters, a specific sequence of events
+ * must occur. The EC2 instance used as a transmitter must obtain an EFA device identifier of the remote EC2 instance in
+ * order to establish the EFA connection. Initial startup and optimization of the SRD network flows need to be
+ * established before the EFA connection can be used by the application. For this, a socket based interface is used to
+ * control communication. All requests contain information about the sender such as #CdiProtocolVersionNumber, IP
+ * address, port and EFA device identifier. #CdiProtocolVersionNumber is used to negotiate compatible probe and CDI-SDK
+ * protocols. In order to support legacy protocols, the negotiation process involves multiple steps and is described
+ * below:
  *
- * 1. Create the socket based control interface. The instances start in #kProbeStateSendReset.
- * 2. Receiver sends reset requests to transmitter until a reset request is received. All requests contain the EFA
- *    device identifier of the sender.
- * 3. Once the receiver has received the reset request, it advances to #kProbeStateEfaReset and the Endpoint Manager is
- *    used to reset the local connection. While this is occuring, the state is set to #kProbeStateResetting. When
- *    complete, the state is set to #kProbeStateResetDone, which causes the ACK to be sent back to the transmitter.
- *    State then advances to #kProbeStateEfaProbe. This state is used to transmit several SRD packets over the EFA
- *    interface to establish the initial network flows.
- * 4. Once the transmitter has received the ACK for a reset request, it uses the Endpoint Manager to prepare the
- *    connection to be started. While this is occuring, the state is set to #kProbeStateWaitForStart. When complete, the
- *    state is set to #kProbeStateEfaStart, which causes the connection to be started and begins transmitting SRD
- *    packets over the EFA interface. State is set to #kProbeStateEfaProbe.
- * 5. After the desired number of SRD probe packets have been successfully transmitted and confirmed as being received
- *    by the receiver, the receiver will advance to #kProbeStateEfaConnected, call the user registered callback function
- *    CdiCoreConnectionCallback(), and send #kProbeCommandConnected to the transmitter. After the transmitter receives
- *    the command, it advances the state to #kProbeStateEfaConnected and the user registered callback function
- *    CdiCoreConnectionCallback() is invoked.
- * 6. While connected, the transmitter will send #kProbeCommandPing commands using the control interface to the receiver
+ * 1. Create the socket based control interface. The instances start in #kProbeStateIdle and then advance to
+ *    #kProbeStateSendReset.
+ *
+ * 2. Transmitter sends reset requests that contain protocol v1.0.x to receiver until an ACK is received. This value is
+ *    used to allow backwards compatibilty with legacy versions of the protocols. For legacy versions of the probe
+ *    protocol, the value of "x" is ignored. For all other versions:
+ *
+ *      If the value of "x" (defined by CDI_PROBE_VERSION) is 3 or greater, then the probe protocol supports the new
+ *      #kProbeCommandProtocolVersion command. Otherwise, the legacy protocol v1.0.x is used.
+ *
+ * 3. Once the receiver has received the reset request, non-legacy versions of the probe protocol examine the
+ *    transmitter's CDI_PROBE_VERSION. If the value is 3 or greater than the ACK response will contain the receiver's
+ *    CDI-SDK and probe version and wait for the transmitter to send the new #kProbeCommandProtocolVersion command.
+ *    Otherwise, the receiver sets its negotiated protocol to legacy v1.0.x, which will be used for all future probe
+ *    communication until another reset command is received or the connection is lost. In either case it advances the
+ *    state to #kProbeStateEfaReset, using the Endpoint Manager to reset the local connection. While this is occurring,
+ *    the state is set to #kProbeStateResetting. When complete, the state is set to #kProbeStateResetDone, which causes
+ *    the ACK to be sent back to the transmitter. State then advances to #kProbeStateEfaProbe, which is used to transmit
+ *    several SRD packets over the EFA interface to establish the initial network flows.
+ *
+ * 4. Once the transmitter has received the ACK for a reset request, for non-legacy probe protocols the receiver's probe
+ *    protocol version is evaluated as described below:
+*
+ *      If the probe protocol version is 3 or greater, then the state advances to #kProbeStateSendProtocolVersion and
+ *      the #kProbeCommandProtocolVersion command is sent to the receiver. After the transmitter receives the ACK for
+ *      #kProbeCommandProtocolVersion, it sets its negotiated CDI-SDK and probe protocol version. Otherwise, the
+ *      transmitter sets its negotiated protocol to legacy v1.0.x.
+ *
+ * 5. After the transmitter's negotiated protocols have been set, the transmitter then uses the Endpoint Manager to
+ *    prepare the EFA connection so it can be started. While this is occurring, the state is set to
+ *    #kProbeStateWaitForStart. When complete, the state is set to #kProbeStateEfaStart, which causes the connection to
+ *    be started and begins transmitting SRD probe packets over the EFA interface. State is set to #kProbeStateEfaProbe.
+ *
+ * 6. After the desired number of SRD probe packets have been successfully transmitted and confirmed as being received
+ *    by the receiver, the receiver will advance its state to #kProbeStateEfaConnected, invoke the user registered
+ *    callback function CdiCoreConnectionCallback(), and send #kProbeCommandConnected to the transmitter. After the
+ *    transmitter receives the command, it advances the state to #kProbeStateEfaConnected and the user registered
+ *    callback function CdiCoreConnectionCallback() is invoked.
+ *
+ * 7. While connected, the transmitter will send #kProbeCommandPing commands using the control interface to the receiver
  *    to ensure both transmitter and receiver are operating correctly. This is done at a regular interval
  *    (#SEND_PING_COMMAND_FREQUENCY_MSEC). If the transmitter does not receive an ACK back within a timeout period
- *    (#TX_PING_ACK_TIMEOUT_MSEC), a few more attempts are made. If these attempts fail, the transmitter disables the
+ *    (#TX_COMMAND_ACK_TIMEOUT_MSEC), a few more attempts are made. If these attempts fail, the transmitter disables the
  *    EFA connection and returns to #kProbeStateSendReset state.
  *
  * NOTE: The user registered callback function CdiCoreConnectionCallback() is invoked whenever the connection state
@@ -116,6 +141,22 @@ CdiReturnStatus ProbeEndpointCreate(AdapterEndpointHandle app_adapter_endpoint_h
     }
 
     if (kCdiStatusOk == rs) {
+        // Create instance of the protocol used by current version of the SDK.
+        CdiProtocolVersionNumber version = {
+            .version_num = CDI_PROTOCOL_VERSION,
+            .major_version_num = CDI_PROTOCOL_MAJOR_VERSION,
+            .probe_version_num = CDI_PROBE_VERSION
+        };
+        ProtocolVersionSet(&version, &probe_ptr->protocol_handle_sdk);
+
+        // Create instance of the protocol compatible with version 1.
+        version.version_num = 1;
+        version.major_version_num = 0;
+        version.probe_version_num = CDI_PROBE_VERSION; // This is how post v1 protocols support new probe commands.
+        ProtocolVersionSet(&version, &probe_ptr->protocol_handle_v1);
+    }
+
+    if (kCdiStatusOk == rs) {
         // Create receive control command queue. This FIFO is used by the control interface's receiver (see
         // rx_control_endpoint_handle), which uses ProbeRxControlMessageFromEndpoint() to write to the FIFO. So,
         // the FIFO must be created first.
@@ -132,21 +173,6 @@ CdiReturnStatus ProbeEndpointCreate(AdapterEndpointHandle app_adapter_endpoint_h
         }
     }
 
-    if (kCdiStatusOk == rs) {
-        // ProbePacketWorkRequests are used for sending control packets over the socket interface. One additional
-        // entry is required so a control packet can be sent while the probe packet queue is full.
-        if (!CdiPoolCreate("Send Control ProbePacketWorkRequest Pool", MAX_PROBE_CONTROL_COMMANDS_PER_CONNECTION + 1,
-                           NO_GROW_SIZE, NO_GROW_COUNT,
-                           sizeof(ProbePacketWorkRequest), true, // true= Make thread-safe
-                           &probe_ptr->control_work_request_pool_handle)) {
-            rs = kCdiStatusAllocationFailed;
-        }
-#ifdef DEBUG_ENABLE_POOL_DEBUGGING_EFA_PROBE
-        if (kCdiStatusOk == rs) {
-            CdiPoolDebugEnable(probe_ptr->control_work_request_pool_handle, PoolDebugCallback);
-        }
-#endif
-    }
     if (kCdiStatusOk == rs) {
         // ProbePacketWorkRequests are used for sending the probe packets which go through the EFA.
         if (!CdiPoolCreate("Send EFA ProbePacketWorkRequest Pool", EFA_PROBE_PACKET_COUNT,
@@ -192,7 +218,7 @@ CdiReturnStatus ProbeEndpointError(ProbeEndpointHandle handle)
     return rs;
 }
 
-CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle)
+CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle, bool reopen)
 {
     CdiReturnStatus rs = kCdiStatusOk;
     ProbeEndpointState* probe_ptr = (ProbeEndpointState*)handle;
@@ -201,7 +227,7 @@ CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle)
     if (probe_ptr) {
         // Receiver can immediately start the EFA connection. Transmitter must wait until we have the remote GID before
         // it can start.
-        if (kEndpointDirectionReceive == adapter_con_ptr->direction) {
+        if (kEndpointDirectionReceive == adapter_con_ptr->direction && reopen) {
             ProbeControlEfaConnectionStart(probe_ptr);
         }
 
@@ -240,7 +266,7 @@ void ProbeEndpointReset(ProbeEndpointHandle handle)
     CdiPoolPutAll(probe_ptr->efa_work_request_pool_handle);
 }
 
-void ProbeEndpointDestroy(ProbeEndpointHandle handle)
+void ProbeEndpointStop(ProbeEndpointHandle handle)
 {
     // NOTE: Since the caller is the application's thread, use SDK_LOG_GLOBAL() for any logging in this function.
     ProbeEndpointState* probe_ptr = (ProbeEndpointState*)handle;
@@ -248,6 +274,19 @@ void ProbeEndpointDestroy(ProbeEndpointHandle handle)
         // Clean-up thread resources. We will wait for it to exit using thread join.
         SdkThreadJoin(probe_ptr->probe_thread_id, probe_ptr->app_adapter_endpoint_handle->shutdown_signal);
         probe_ptr->probe_thread_id = NULL;
+    }
+}
+
+void ProbeEndpointDestroy(ProbeEndpointHandle handle)
+{
+    // NOTE: Since the caller is the application's thread, use SDK_LOG_GLOBAL() for any logging in this function.
+    ProbeEndpointState* probe_ptr = (ProbeEndpointState*)handle;
+    if (probe_ptr) {
+        if (probe_ptr->probe_thread_id) {
+            // Clean-up thread resources, waiting for the thread to exit.
+            ProbeEndpointStop(probe_ptr);
+        }
+
         // Now that the thread has stopped, it is safe to clean up the remaining resources. Since we are destroying this
         // connection, ensure that all buffers within these pools are freed and FIFOs emptied before destroying them.
 
@@ -265,11 +304,11 @@ void ProbeEndpointDestroy(ProbeEndpointHandle handle)
         CdiPoolDestroy(probe_ptr->efa_work_request_pool_handle);
         probe_ptr->efa_work_request_pool_handle = NULL;
 
-        // NOTE: The SGL entries in this pool are stored within the pool buffer, so no additional resource freeing needs
-        // to be done here.
-        CdiPoolPutAll(probe_ptr->control_work_request_pool_handle);
-        CdiPoolDestroy(probe_ptr->control_work_request_pool_handle);
-        probe_ptr->control_work_request_pool_handle = NULL;
+        ProtocolVersionDestroy(probe_ptr->protocol_handle_sdk);
+        probe_ptr->protocol_handle_sdk = NULL;
+
+        ProtocolVersionDestroy(probe_ptr->protocol_handle_v1);
+        probe_ptr->protocol_handle_v1 = NULL;
 
         CdiOsMemFree(probe_ptr);
     }

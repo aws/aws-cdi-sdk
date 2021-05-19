@@ -20,10 +20,11 @@
 #include "adapter_api.h"
 #include "adapter_efa_probe_rx.h"
 #include "adapter_efa_probe_tx.h"
+#include "cdi_os_api.h"
 #include "endpoint_manager.h"
 #include "internal_rx.h"
 #include "internal_utility.h"
-#include "cdi_os_api.h"
+#include "protocol.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -37,30 +38,129 @@
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
+/**
+ * Initialize the command packet header of a control interface packet.
+ *
+ * @param probe_ptr Pointer to probe endpoint state data.
+ * @param command Probe command to use.
+ * @param decoded_hdr_ptr Pointer to decoded header data. On entry, the union data must already be set.
+ * @param work_request_ptr Pointer to work request state data.
+ *
+ * @return A value from the CdiReturnStatus enumeration.
+ */
+static CdiReturnStatus EncodeProbeHeader(ProbeEndpointState* probe_ptr, ProbeCommand command,
+                                         CdiDecodedProbeHeader* decoded_hdr_ptr,
+                                         ProbePacketWorkRequest* work_request_ptr)
+{
+    CdiReturnStatus rs = kCdiStatusOk;
+    AdapterEndpointState* endpoint_ptr = probe_ptr->app_adapter_endpoint_handle;
+    AdapterConnectionState* adapter_con_ptr = endpoint_ptr->adapter_con_state_ptr;
+    CdiProtocolHandle protocol_handle = probe_ptr->app_adapter_endpoint_handle->protocol_handle;
+    CdiRawProbeHeader* dest_hdr_ptr = &work_request_ptr->packet_data;
+
+    // Get port being used by the Tx control adapter.
+    int dest_port = 0;
+    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
+    rs = CdiAdapterGetPort(ControlInterfaceGetEndpoint(efa_con_ptr->control_interface_handle), &dest_port);
+    if (kCdiStatusOk != rs) {
+        CDI_LOG_THREAD(kLogError, "CdiAdapterGetPort failed. Reason[%s].", CdiCoreStatusToString(rs));
+    } else {
+        decoded_hdr_ptr->command = command;
+
+        // NOTE: The decoded variant uses pointers to strings and arrays, so no need to copy memory. The encoded variant
+        // uses its own memory, so the memory copy is done once as part of the encode process.
+        decoded_hdr_ptr->senders_ip_str = adapter_con_ptr->adapter_state_ptr->adapter_data.adapter_ip_addr_str;
+
+        decoded_hdr_ptr->senders_control_dest_port = (uint16_t)dest_port;
+
+        EfaEndpointState* efa_endpoint_state_ptr = (EfaEndpointState*)probe_ptr->app_adapter_endpoint_handle->type_specific_ptr;
+        decoded_hdr_ptr->senders_gid_array = efa_endpoint_state_ptr->local_ipv6_gid_array;
+
+        const char* stream_name_str = EndpointManagerEndpointStreamNameGet(endpoint_ptr->cdi_endpoint_handle);
+        decoded_hdr_ptr->senders_stream_name_str = stream_name_str;
+        decoded_hdr_ptr->control_packet_num = CdiOsAtomicInc16(&probe_ptr->control_packet_num);
+
+        // Now encode the header data using the desired protocol version.
+        if (NULL == protocol_handle) {
+            // If command is an ACK and the protocol on the remote endpoint supports protocols v3 OR if sending the
+            // protocol version command, then encode the header with the version from this SDK.
+            if ((kProbeCommandAck == command && (probe_ptr->send_ack_probe_version >= 3)) ||
+                (kProbeCommandProtocolVersion == command)) {
+                protocol_handle = probe_ptr->protocol_handle_sdk;
+            } else {
+                // Otherwise, use the legacy protocol.
+                protocol_handle = probe_ptr->protocol_handle_v1;
+            }
+        }
+
+        // Encode the probe header. The protocol version data is set within the call (so no need to set it here).
+        int encoded_size = ProtocolProbeHeaderEncode(protocol_handle, decoded_hdr_ptr, dest_hdr_ptr);
+
+        // Update size of the SGL packet in the work request.
+        ProbeControlWorkRequestPacketSizeSet(work_request_ptr, encoded_size);
+    }
+
+    return rs;
+}
+
+/**
+ * Process a received control packet.
+ *
+ * NOTE: This function is called from ProbeControlThread().
+ *
+ * @param probe_ptr Pointer to probe endpoint state data.
+ * @param control_command_ptr Pointer to control packet to process.
+ * @param wait_timeout_ms_ptr Pointer to current wait timeout. This function may alter the contents of the value.
+ */
+static bool ProcessPacket(ProbeEndpointState* probe_ptr, const ControlCommand* control_command_ptr,
+                          uint64_t* wait_timeout_ms_ptr)
+{
+    bool ret_new_state = false;
+    AdapterEndpointState* endpoint_ptr = probe_ptr->app_adapter_endpoint_handle;
+    AdapterConnectionState* adapter_con_ptr = endpoint_ptr->adapter_con_state_ptr;
+    const CdiSgList* packet_sgl_ptr = &control_command_ptr->receive_packet.packet_sgl;
+
+    CdiDecodedProbeHeader header = { 0 };
+    CdiReturnStatus rs = ProtocolProbeHeaderDecode(packet_sgl_ptr->sgl_head_ptr->address_ptr,
+                                                   packet_sgl_ptr->total_data_size, &header);
+
+    if (kCdiStatusOk == rs) {
+        char error_msg_str[MAX_ERROR_STRING_LENGTH] = { 0 };
+        if (2 == header.senders_version.version_num && 0 == header.senders_version.major_version_num &&
+            0 == header.senders_version.probe_version_num) {
+            snprintf(error_msg_str, sizeof(error_msg_str), "%s",
+                    "Remote CDI SDK 2.0.0 is not supported. Upgrade it to a newer version.");
+        }
+
+        if ('\0' != error_msg_str[0]) {
+            CDI_LOG_THREAD(kLogError, "%s", error_msg_str);
+            // Queue endpoint manager to reset the EFA connection and notify the application that we are disconnected.
+            ProbeControlEfaConnectionQueueReset(probe_ptr, error_msg_str);
+
+            // Set new state to send reset.
+            probe_ptr->tx_probe_state.tx_state = kProbeStateSendReset;
+            *wait_timeout_ms_ptr = 0; // Take effect immediately.
+            ret_new_state = true;
+        }
+
+        if (kEndpointDirectionSend == adapter_con_ptr->direction) {
+            ret_new_state = ProbeTxControlProcessPacket(probe_ptr, &header, wait_timeout_ms_ptr);
+        } else {
+            ret_new_state = ProbeRxControlProcessPacket(probe_ptr, &header,
+                                                        &control_command_ptr->receive_packet.source_address,
+                                                        wait_timeout_ms_ptr);
+        }
+    }
+
+    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
+    CdiAdapterFreeBuffer(ControlInterfaceGetEndpoint(efa_con_ptr->control_interface_handle), packet_sgl_ptr);
+
+    return ret_new_state;
+}
+
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
-
-uint16_t ProbeControlChecksum(const uint16_t* buffer_ptr, int size)
-{
-    uint32_t cksum = 0;
-
-    // Sum entire packet.
-    while (size > 1) {
-        cksum += *buffer_ptr++;
-        size -= 2;
-    }
-
-    // Pad to 16-bit boundary if necessary.
-    if (size == 1) {
-        cksum += *(uint8_t*)buffer_ptr;
-    }
-
-    // Add carries and do one's complement.
-    cksum = (cksum >> 16) + (cksum & 0xffff);
-    cksum += (cksum >> 16);
-    return (uint16_t)(~cksum);
-}
 
 bool ProbeControlEfaConnectionStart(ProbeEndpointState* probe_ptr)
 {
@@ -72,7 +172,7 @@ bool ProbeControlEfaConnectionStart(ProbeEndpointState* probe_ptr)
     if (kEndpointDirectionSend == adapter_con_ptr->direction) {
         endpoint_ptr->msg_from_endpoint_func_ptr = ProbeTxEfaMessageFromEndpoint;
         // Reset EFA Tx packet/ack received counters.
-        probe_ptr->tx_probe_state.ping_retry_count = 0;
+        probe_ptr->tx_probe_state.send_command_retry_count = 0;
 
         CdiOsSignalSet(adapter_con_ptr->poll_do_work_signal); // Ensure PollThread() is ready for work.
     } else {
@@ -140,7 +240,7 @@ void ProbeControlEfaConnectionEnableApplication(ProbeEndpointState* probe_ptr)
     ProbeControlQueueStateChange(probe_ptr, kProbeStateEfaConnected);
 }
 
-ProbePacketWorkRequest* ProbeControlWorkRequestGet(CdiPoolHandle work_request_pool_handle, int packet_size)
+ProbePacketWorkRequest* ProbeControlWorkRequestGet(CdiPoolHandle work_request_pool_handle)
 {
     ProbePacketWorkRequest* work_request_ptr = NULL;
     if (!CdiPoolGet(work_request_pool_handle, (void**)&work_request_ptr)) {
@@ -151,9 +251,9 @@ ProbePacketWorkRequest* ProbeControlWorkRequestGet(CdiPoolHandle work_request_po
     }
 
     work_request_ptr->sgl_entry.address_ptr = &work_request_ptr->packet_data;
-    work_request_ptr->sgl_entry.size_in_bytes = packet_size;
+    work_request_ptr->sgl_entry.size_in_bytes = 0;
 
-    work_request_ptr->packet.sg_list.total_data_size = packet_size;
+    work_request_ptr->packet.sg_list.total_data_size = 0;
     work_request_ptr->packet.sg_list.sgl_head_ptr = &work_request_ptr->sgl_entry;
     work_request_ptr->packet.sg_list.sgl_tail_ptr = &work_request_ptr->sgl_entry;
     work_request_ptr->packet.sg_list.internal_data_ptr = work_request_ptr;
@@ -161,41 +261,10 @@ ProbePacketWorkRequest* ProbeControlWorkRequestGet(CdiPoolHandle work_request_po
     return work_request_ptr;
 }
 
-void ProbeControlInitPacketCommonHeader(ProbeEndpointState* probe_ptr, ProbeCommand command,
-                                        ControlPacketCommonHeader* header_ptr)
+void ProbeControlWorkRequestPacketSizeSet(ProbePacketWorkRequest* work_request_ptr, int packet_size)
 {
-    AdapterEndpointState* endpoint_ptr = probe_ptr->app_adapter_endpoint_handle;
-    AdapterConnectionState* adapter_con_ptr = endpoint_ptr->adapter_con_state_ptr;
-
-    header_ptr->senders_version_num = CDI_PROTOCOL_VERSION;
-    header_ptr->senders_major_version_num = CDI_PROTOCOL_MAJOR_VERSION;
-    header_ptr->senders_minor_version_num = CDI_PROTOCOL_MINOR_VERSION;
-    header_ptr->checksum = 0;
-
-    header_ptr->command = command;
-
-    CdiOsStrCpy(header_ptr->senders_ip_str, sizeof(header_ptr->senders_ip_str),
-                adapter_con_ptr->adapter_state_ptr->adapter_data.adapter_ip_addr_str);
-
-    // Get port being used by the Tx control adapter.
-    int dest_port = 0;
-    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
-    if (kCdiStatusOk != CdiAdapterGetPort(ControlInterfaceGetEndpoint(efa_con_ptr->rx_control_handle), &dest_port)) {
-        assert(false);
-    }
-    header_ptr->senders_control_dest_port = (uint16_t)dest_port;
-
-    EfaEndpointState* efa_endpoint_state_ptr = (EfaEndpointState*)probe_ptr->app_adapter_endpoint_handle->type_specific_ptr;
-    memcpy(header_ptr->senders_gid_array, efa_endpoint_state_ptr->local_ipv6_gid_array,
-           sizeof(header_ptr->senders_gid_array));
-
-    const char* stream_name_str = EndpointManagerEndpointStreamNameGet(endpoint_ptr->cdi_endpoint_handle);
-    if (stream_name_str) {
-        CdiOsStrCpy(header_ptr->senders_stream_name_str, sizeof(header_ptr->senders_stream_name_str),
-                    stream_name_str);
-    }
-    header_ptr->senders_stream_identifier = EndpointManagerEndpointStreamIdGet(endpoint_ptr->cdi_endpoint_handle);
-    header_ptr->control_packet_num = CdiOsAtomicInc16(&probe_ptr->control_packet_num);
+    work_request_ptr->sgl_entry.size_in_bytes = packet_size;
+    work_request_ptr->packet.sg_list.total_data_size = packet_size;
 }
 
 CdiReturnStatus ProbeControlSendCommand(ProbeEndpointState* probe_ptr, ProbeCommand command, bool requires_ack)
@@ -203,43 +272,43 @@ CdiReturnStatus ProbeControlSendCommand(ProbeEndpointState* probe_ptr, ProbeComm
     CdiReturnStatus rs = kCdiStatusOk;
     AdapterEndpointState* endpoint_ptr = probe_ptr->app_adapter_endpoint_handle;
     AdapterConnectionState* adapter_con_ptr = endpoint_ptr->adapter_con_state_ptr;
+    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
 
-    ControlPacketCommand* packet_ptr = NULL;
-    ProbePacketWorkRequest* work_request_ptr = ProbeControlWorkRequestGet(probe_ptr->control_work_request_pool_handle,
-                                                                          sizeof(*packet_ptr));
+    CdiDecodedProbeHeader header = { 0 };
+    ProbePacketWorkRequest* work_request_ptr = ProbeControlWorkRequestGet(efa_con_ptr->control_work_request_pool_handle);
     if (NULL == work_request_ptr) {
        rs = kCdiStatusAllocationFailed;
     } else {
-        packet_ptr = (ControlPacketCommand*)&work_request_ptr->packet_data;
+        header.command_packet.requires_ack = requires_ack;
+        EncodeProbeHeader(probe_ptr, command, &header, work_request_ptr);
+    }
 
-        ProbeControlInitPacketCommonHeader(probe_ptr, command, &packet_ptr->common_hdr);
-        packet_ptr->requires_ack = requires_ack;
-
+    if (kCdiStatusOk == rs) {
         if (requires_ack) {
             CdiOsCritSectionReserve(probe_ptr->ack_lock); // Lock access to the ack state data.
             probe_ptr->ack_is_pending = true;
-            probe_ptr->ack_command = packet_ptr->common_hdr.command;
-            probe_ptr->ack_control_packet_num = packet_ptr->common_hdr.control_packet_num;
+            probe_ptr->ack_command = command;
+            probe_ptr->ack_control_packet_num = header.control_packet_num;
             CdiOsCritSectionRelease(probe_ptr->ack_lock); // Release access to the ack state data.
         }
-
-        // Calculate the packet checksum.
-        packet_ptr->common_hdr.checksum = ProbeControlChecksum((uint16_t*)packet_ptr, sizeof(*packet_ptr));
 
         // Don't log the ping commands (generates too many log messages).
         if (kProbeCommandPing != command) {
             if (kEndpointDirectionSend == adapter_con_ptr->direction) {
                 CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
-                                         "Probe Tx stream ID[%d] sending command[%s] to Rx. packet_num[%d] ack[%d].",
-                                         packet_ptr->common_hdr.senders_stream_identifier,
+                                         "Probe Tx remote IP[%s:%d] local port[%d] sending command[%s] to Rx. packet_num[%d] ack[%d].",
+                                         EndpointManagerEndpointRemoteIpGet(endpoint_ptr->cdi_endpoint_handle),
+                                         EndpointManagerEndpointRemotePortGet(endpoint_ptr->cdi_endpoint_handle),
+                                         header.senders_control_dest_port,
                                          InternalUtilityKeyEnumToString(kKeyProbeCommand, command),
-                                         packet_ptr->common_hdr.control_packet_num, requires_ack);
+                                         header.control_packet_num, requires_ack);
             } else {
                 CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
-                                         "Probe Rx stream ID[%d] sending command[%s] to Tx. packet_num[%d] ack[%d].",
-                                         packet_ptr->common_hdr.senders_stream_identifier,
+                                         "Probe Rx remote IP[%s:%d] sending command[%s] to Tx. packet_num[%d] ack[%d].",
+                                         EndpointManagerEndpointRemoteIpGet(endpoint_ptr->cdi_endpoint_handle),
+                                         EndpointManagerEndpointRemotePortGet(endpoint_ptr->cdi_endpoint_handle),
                                          InternalUtilityKeyEnumToString(kKeyProbeCommand, command),
-                                         packet_ptr->common_hdr.control_packet_num, requires_ack);
+                                         header.control_packet_num, requires_ack);
             }
             if (kProbeCommandReset == command) {
                 CDI_LOG_THREAD(kLogInfo, "Sending connection request.");
@@ -248,14 +317,14 @@ CdiReturnStatus ProbeControlSendCommand(ProbeEndpointState* probe_ptr, ProbeComm
 
         // Put packet message in the adapter's endpoint packet queue. We use "true" here so the packet is sent
         // immediately.
-        EfaEndpointState* efa_endpoint_ptr = (EfaEndpointState*)endpoint_ptr->type_specific_ptr;
-        rs = CdiAdapterEnqueueSendPacket(ControlInterfaceGetEndpoint(efa_endpoint_ptr->tx_control_handle),
+        rs = CdiAdapterEnqueueSendPacket(ControlInterfaceGetEndpoint(efa_con_ptr->control_interface_handle),
+                                         EndpointManagerEndpointRemoteAddressGet(endpoint_ptr->cdi_endpoint_handle),
                                          &work_request_ptr->packet);
     }
 
     if (kCdiStatusOk != rs && work_request_ptr) {
         // Put back work request into the pool.
-        CdiPoolPut(probe_ptr->control_work_request_pool_handle, work_request_ptr);
+        CdiPoolPut(efa_con_ptr->control_work_request_pool_handle, work_request_ptr);
     }
 
     return rs;
@@ -267,89 +336,63 @@ CdiReturnStatus ProbeControlSendAck(ProbeEndpointState* probe_ptr, ProbeCommand 
     CdiReturnStatus rs = kCdiStatusOk;
     AdapterEndpointState* endpoint_ptr = probe_ptr->app_adapter_endpoint_handle;
     AdapterConnectionState* adapter_con_ptr = endpoint_ptr->adapter_con_state_ptr;
+    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
 
-    ControlPacketAck* packet_ptr = NULL;
-    ProbePacketWorkRequest* work_request_ptr = ProbeControlWorkRequestGet(probe_ptr->control_work_request_pool_handle,
-                                                                          sizeof(*packet_ptr));
+    CdiDecodedProbeHeader header = { 0 };
+    ProbePacketWorkRequest* work_request_ptr = ProbeControlWorkRequestGet(efa_con_ptr->control_work_request_pool_handle);
     if (NULL == work_request_ptr) {
         rs = kCdiStatusAllocationFailed;
     } else {
-        packet_ptr = (ControlPacketAck*)&work_request_ptr->packet_data;
-        ProbeControlInitPacketCommonHeader(probe_ptr, kProbeCommandAck, &packet_ptr->common_hdr);
-        packet_ptr->ack_command = ack_command;
-        packet_ptr->ack_control_packet_num = ack_probe_packet_num;
-        packet_ptr->common_hdr.checksum = ProbeControlChecksum((uint16_t*)packet_ptr, sizeof(*packet_ptr));
+        header.ack_packet.ack_command = ack_command;
+        header.ack_packet.ack_control_packet_num = ack_probe_packet_num;
+        EncodeProbeHeader(probe_ptr, kProbeCommandAck, &header, work_request_ptr);
+    }
 
+    if (kCdiStatusOk == rs) {
         // Don't log the ping ACK commands (generates too many log messages).
         if (kProbeCommandPing != ack_command) {
             if (kEndpointDirectionSend == adapter_con_ptr->direction) {
                 CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
-                    "Tx stream ID[%d] got command[%s], packet_num[%d]. Sending Ack packet_num[%d] to Rx.",
-                    EndpointManagerEndpointStreamIdGet(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle),
+                    "Tx remote IP[%s:%d] got command[%s], packet_num[%d]. Sending ACK packet_num[%d] to Rx.",
+                    EndpointManagerEndpointRemoteIpGet(endpoint_ptr->cdi_endpoint_handle),
+                    EndpointManagerEndpointRemotePortGet(endpoint_ptr->cdi_endpoint_handle),
                     InternalUtilityKeyEnumToString(kKeyProbeCommand, ack_command),
-                    ack_probe_packet_num, packet_ptr->common_hdr.control_packet_num);
+                    ack_probe_packet_num, header.control_packet_num);
             } else {
                 CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
-                    "Rx stream ID[%d] got command[%s], packet_num[%d]. Sending Ack packet_num[%d] to Tx.",
-                    EndpointManagerEndpointStreamIdGet(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle),
+                    "Rx remote IP[%s:%d] got command[%s], packet_num[%d]. Sending ACK packet_num[%d]"
+                    " to Tx.",
+                    EndpointManagerEndpointRemoteIpGet(endpoint_ptr->cdi_endpoint_handle),
+                    EndpointManagerEndpointRemotePortGet(endpoint_ptr->cdi_endpoint_handle),
                     InternalUtilityKeyEnumToString(kKeyProbeCommand, ack_command),
-                    ack_probe_packet_num, packet_ptr->common_hdr.control_packet_num);
+                    ack_probe_packet_num, header.control_packet_num);
             }
         }
 
         // Put packet message in the adapter's endpoint packet queue. We use "true" here so the packet is sent
         // immediately.
-        EfaEndpointState* efa_endpoint_ptr = (EfaEndpointState*)endpoint_ptr->type_specific_ptr;
-        rs = CdiAdapterEnqueueSendPacket(ControlInterfaceGetEndpoint(efa_endpoint_ptr->tx_control_handle),
+        EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
+        rs = CdiAdapterEnqueueSendPacket(ControlInterfaceGetEndpoint(efa_con_ptr->control_interface_handle),
+                                         EndpointManagerEndpointRemoteAddressGet(endpoint_ptr->cdi_endpoint_handle),
                                          &work_request_ptr->packet);
+    }
+
+    if (kCdiStatusOk != rs && work_request_ptr) {
+        // Put back work request into the pool.
+        CdiPoolPut(efa_con_ptr->control_work_request_pool_handle, work_request_ptr);
     }
 
     return rs;
 }
 
-bool ProbeControlProcessPacket(ProbeEndpointState* probe_ptr, CdiSgList* packet_sgl_ptr,
-                               uint64_t* wait_timeout_ms_ptr)
+void ProbeControlMessageFromBidirectionalEndpoint(void* param_ptr, Packet* packet_ptr, EndpointMessageType message_type)
 {
-    bool ret_new_state = false;
-    AdapterEndpointState* endpoint_ptr = probe_ptr->app_adapter_endpoint_handle;
-    AdapterConnectionState* adapter_con_ptr = endpoint_ptr->adapter_con_state_ptr;
-    ControlPacketCommonHeader* common_hdr_ptr = (ControlPacketCommonHeader*)packet_sgl_ptr->sgl_head_ptr->address_ptr;
-
-    char error_msg_str[MAX_ERROR_STRING_LENGTH] = {0};
-    if (2 == common_hdr_ptr->senders_version_num && 0 == common_hdr_ptr->senders_major_version_num &&
-        0 == common_hdr_ptr->senders_minor_version_num) {
-        snprintf(error_msg_str, sizeof(error_msg_str), "%s",
-                 "Remote CDI SDK 2.0.0 is not supported. Upgrade it to a newer version.");
-    } else if (CDI_PROTOCOL_VERSION != common_hdr_ptr->senders_version_num ||
-        CDI_PROTOCOL_MAJOR_VERSION != common_hdr_ptr->senders_major_version_num) {
-        snprintf(error_msg_str, sizeof(error_msg_str),
-                 "Remote CDI SDK not compatible. This version[%d.%d.%d]. Remote version[%d.%d.%d]",
-                 CDI_PROTOCOL_VERSION, CDI_PROTOCOL_MAJOR_VERSION, CDI_PROTOCOL_MINOR_VERSION,
-                 common_hdr_ptr->senders_version_num, common_hdr_ptr->senders_major_version_num,
-                 common_hdr_ptr->senders_minor_version_num);
-    }
-
-    if ('\0' != error_msg_str[0]) {
-        CDI_LOG_THREAD(kLogError, "%s", error_msg_str);
-        // Queue endpoint manager to reset the EFA connection and notify the application that we are disconnected.
-        ProbeControlEfaConnectionQueueReset(probe_ptr, error_msg_str);
-
-        // Set new state to send reset.
-        probe_ptr->tx_probe_state.tx_state = kProbeStateSendReset;
-        *wait_timeout_ms_ptr = 0; // Take effect immediately.
-        ret_new_state = true;
-    }
-
-    if (kEndpointDirectionSend == adapter_con_ptr->direction) {
-        ret_new_state = ProbeTxControlProcessPacket(probe_ptr, common_hdr_ptr, wait_timeout_ms_ptr);
+    AdapterConnectionState* adapter_con_ptr = (AdapterConnectionState*)param_ptr;
+    if (kEndpointMessageTypePacketSent == message_type) {
+        ProbeTxControlMessageFromEndpoint(adapter_con_ptr, packet_ptr);
     } else {
-        ret_new_state = ProbeRxControlProcessPacket(probe_ptr, common_hdr_ptr, wait_timeout_ms_ptr);
+        ProbeRxControlMessageFromEndpoint(adapter_con_ptr, packet_ptr);
     }
-
-    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
-    CdiAdapterFreeBuffer(ControlInterfaceGetEndpoint(efa_con_ptr->rx_control_handle), packet_sgl_ptr);
-
-    return ret_new_state;
 }
 
 THREAD ProbeControlThread(void* ptr)
@@ -365,6 +408,11 @@ THREAD ProbeControlThread(void* ptr)
 
     uint64_t start_time_us = CdiOsGetMicroseconds();
     uint64_t wait_timeout_ms = 0; // Start trying immediately to establish a connection.
+    if (kEndpointDirectionSend == adapter_con_ptr->direction) {
+        probe_ptr->tx_probe_state.tx_state = kProbeStateIdle;
+    } else {
+        probe_ptr->rx_probe_state.rx_state = kProbeStateSendReset;
+    }
 
     while (!CdiOsSignalGet(shutdown_signal)) {
         // Wait for an incoming control command message to arrive, timeout or abort if we are shutting down.
@@ -372,11 +420,16 @@ THREAD ProbeControlThread(void* ptr)
         if (CdiFifoRead(probe_ptr->control_packet_fifo_handle, wait_timeout_ms, shutdown_signal, &control_cmd)) {
             if (kCommandTypeStateChange == control_cmd.command_type) {
                 // Received a probe command directly from the local instance.
-                CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Probe stream ID[%d] process state[%s] change.",
-                    EndpointManagerEndpointStreamIdGet(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle),
+                CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Probe remote IP[%s:%d] process state[%s] change.",
+                    EndpointManagerEndpointRemoteIpGet(endpoint_ptr->cdi_endpoint_handle),
+                    EndpointManagerEndpointRemotePortGet(endpoint_ptr->cdi_endpoint_handle),
                     InternalUtilityKeyEnumToString(kKeyProbeState, control_cmd.probe_state));
                 if (kProbeStateEfaConnected == control_cmd.probe_state) {
-                    CDI_LOG_THREAD(kLogInfo, "Connection established.");
+                    CdiProtocolHandle protocol_handle = endpoint_ptr->protocol_handle;
+                    CDI_LOG_THREAD(kLogInfo, "Connection established using protocol version[%d.%d.%d].",
+                            protocol_handle->negotiated_version.version_num,
+                            protocol_handle->negotiated_version.major_version_num,
+                            protocol_handle->negotiated_version.probe_version_num);
                 }
 
                 // Set probe state, depending on endpoint direction type.
@@ -387,7 +440,7 @@ THREAD ProbeControlThread(void* ptr)
                 wait_timeout_ms = 0; // Set to zero so the state change is executed immediately in the code below.
             } else {
                 // Received a control packet.
-                if (ProbeControlProcessPacket(probe_ptr, &control_cmd.packet_sgl, &wait_timeout_ms)) {
+                if (ProcessPacket(probe_ptr, &control_cmd, &wait_timeout_ms)) {
                     // We have a new probe state, so setup our start time to wait for it before it gets processed.
                     start_time_us = CdiOsGetMicroseconds();
                 }

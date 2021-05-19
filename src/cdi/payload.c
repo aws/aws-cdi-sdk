@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "adapter_api.h"
+#include "adapter_efa_probe.h"
 #include "internal.h"
 #include "private.h"
 
@@ -32,10 +33,10 @@
  * CdiPayloadInit() prior to calls to CdiPayloadParseCDIPacket() for a given payload.
  */
 typedef struct {
-    /// The state of the packetizer so that CdiPayloadGetPacket()'s progress on a given packet can be suspended for lack
-    /// of resources and resumed in a subsequent call.
+    /// The state of the packetizer so that CdiPayloadPacketizerPacketGet()'s progress on a given packet can be
+    /// suspended for lack of resources and resumed in a subsequent call.
     enum {
-        kStateInactive,     ///< This is the first time CdiPayloadGetPacket() has been called for a given packet.
+        kStateInactive,     ///< This is the first time CdiPayloadPacketizerPacketGet() has been called for a given packet.
         kStateAddingHeader, ///< The packetizer is attempting to add the SGL entry for the CDI packet header.
         kStateAddingEntries ///< The packetizer is adding the payload SGL entries.
     } state;
@@ -60,12 +61,12 @@ typedef struct {
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-bool CdiPayloadInit(CdiConnectionState* con_state_ptr, const CdiSgList* source_sgl_ptr,
-                    TxPayloadState* payload_state_ptr)
+bool PayloadInit(CdiConnectionState* con_state_ptr, const CdiSgList* source_sgl_ptr,
+                 TxPayloadState* payload_state_ptr)
 {
     bool ret = true;
 
-    CdiPayloadCDIPacketState* packet_state_ptr = &payload_state_ptr->payload_packet_state;
+    CdiPayloadPacketState* packet_state_ptr = &payload_state_ptr->payload_packet_state;
 
     packet_state_ptr->payload_type = kPayloadTypeData;
     packet_state_ptr->maximum_packet_byte_size = con_state_ptr->adapter_state_ptr->maximum_payload_bytes;
@@ -109,29 +110,32 @@ bool CdiPayloadInit(CdiConnectionState* con_state_ptr, const CdiSgList* source_s
     return ret;
 }
 
-CdiPacketizerStateHandle CdiPacketizerStateCreate()
+CdiPacketizerStateHandle PayloadPacketizerCreate(void)
 {
     return (CdiPacketizerStateHandle)CdiOsMemAllocZero(sizeof(CdiPacketizerState));
 }
 
-void CdiPacketizerStateInit(CdiPacketizerStateHandle packetizer_state_handle)
+void PayloadPacketizerStateInit(CdiPacketizerStateHandle packetizer_state_handle)
 {
     ((CdiPacketizerState*)packetizer_state_handle)->state = kStateInactive;
 }
 
-void CdiPacketizerStateDestroy(CdiPacketizerStateHandle packetizer_state_handle)
+void PayloadPacketizerDestroy(CdiPacketizerStateHandle packetizer_state_handle)
 {
-    CdiOsMemFree(packetizer_state_handle);
+    if (packetizer_state_handle) {
+        CdiOsMemFree(packetizer_state_handle);
+    }
 }
 
-bool CdiPayloadGetPacket(CdiPacketizerStateHandle packetizer_state_handle, CdiCDIPacketHeaderUnion *hdr_union_ptr,
-                         CdiPoolHandle packet_sgl_entry_pool_handle, TxPayloadState* payload_state_ptr,
-                         CdiSgList* packet_sgl_ptr, bool* ret_is_last_packet_ptr)
+bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizerStateHandle packetizer_state_handle,
+                                CdiRawPacketHeader* header_ptr, CdiPoolHandle packet_sgl_entry_pool_handle,
+                                TxPayloadState* payload_state_ptr, CdiSgList* packet_sgl_ptr,
+                                bool* ret_is_last_packet_ptr)
 {
     bool ret = true;
 
     CdiPacketizerState* packetizer_state_ptr = (CdiPacketizerState*)packetizer_state_handle;
-    CdiPayloadCDIPacketState* packet_state_ptr = &payload_state_ptr->payload_packet_state;
+    CdiPayloadPacketState* packet_state_ptr = &payload_state_ptr->payload_packet_state;
 
     if (kStateInactive == packetizer_state_ptr->state) {
         // Initialize all data and pointers used in the SGL list.
@@ -157,51 +161,14 @@ bool CdiPayloadGetPacket(CdiPacketizerStateHandle packetizer_state_handle, CdiCD
             packetizer_state_ptr->packet_entry_hdr_ptr->next_ptr = NULL;
             packetizer_state_ptr->packet_entry_hdr_ptr->internal_data_ptr = NULL;
 
-            if (0 == packet_state_ptr->packet_sequence_num) {
-                // Process first packet of the payload (packet #0).
-                packetizer_state_ptr->header_size = sizeof(CdiCDIPacketNum0Header);
-
-                // Create new packet #0 cdi header.
-                CdiCDIPacketNum0Header* hdr_ptr = (CdiCDIPacketNum0Header*)hdr_union_ptr;
-                hdr_ptr->hdr.payload_type = packet_state_ptr->payload_type;
-                hdr_ptr->hdr.packet_sequence_num = 0;
-                hdr_ptr->hdr.payload_num = packet_state_ptr->payload_num;
-                hdr_ptr->total_payload_size = payload_state_ptr->source_sgl.total_data_size;
-                hdr_ptr->max_latency_microsecs = payload_state_ptr->max_latency_microsecs;
-                hdr_ptr->origination_ptp_timestamp =
-                        payload_state_ptr->app_payload_cb_data.core_extra_data.origination_ptp_timestamp;
-                hdr_ptr->payload_user_data = payload_state_ptr->app_payload_cb_data.core_extra_data.payload_user_data;
-
-                hdr_ptr->extra_data_size = payload_state_ptr->app_payload_cb_data.extra_data_size;
-                if (payload_state_ptr->app_payload_cb_data.extra_data_size) {
-                    memcpy((uint8_t*)hdr_ptr + packetizer_state_ptr->header_size,
-                           payload_state_ptr->app_payload_cb_data.extra_data_array,
-                           payload_state_ptr->app_payload_cb_data.extra_data_size);
-                    packetizer_state_ptr->header_size += payload_state_ptr->app_payload_cb_data.extra_data_size;
-                }
-            } else {
-                // Process additional packets of the payload (other than packet #0).
-
-                // Create new packet cdi header.
-                CdiCDIPacketCommonHeader* hdr_ptr = (CdiCDIPacketCommonHeader*)hdr_union_ptr;
-                hdr_ptr->payload_type = packet_state_ptr->payload_type;
-                hdr_ptr->packet_sequence_num = packet_state_ptr->packet_sequence_num;
-                hdr_ptr->payload_num = packet_state_ptr->payload_num;
-
-                if (kPayloadTypeDataOffset == packet_state_ptr->payload_type) {
-                    packetizer_state_ptr->header_size = sizeof(CdiCDIPacketDataOffsetHeader);
-                    CdiCDIPacketDataOffsetHeader* ptr = (CdiCDIPacketDataOffsetHeader*)hdr_union_ptr;
-                    ptr->payload_data_offset = packet_state_ptr->payload_data_offset;
-                } else {
-                    packetizer_state_ptr->header_size = sizeof(CdiCDIPacketCommonHeader);
-                }
-            }
+            // Initialize the protocol specific packet header data.
+            payload_state_ptr->payload_packet_state.packet_id = payload_state_ptr->cdi_endpoint_handle->tx_state.packet_id;
+            packetizer_state_ptr->header_size = ProtocolPayloadHeaderInit(protocol_handle, header_ptr, payload_state_ptr);
 
             // Setup SGL entry for our header and add it to the packet SGL.
-            packetizer_state_ptr->packet_entry_hdr_ptr->address_ptr = hdr_union_ptr;
+            packetizer_state_ptr->packet_entry_hdr_ptr->address_ptr = header_ptr;
             packetizer_state_ptr->packet_entry_hdr_ptr->size_in_bytes = packetizer_state_ptr->header_size;
-            SglAppend(packet_sgl_ptr, packetizer_state_ptr->packet_entry_hdr_ptr); // NOTE: SGL list size is updated in
-                                                                                   // this call.
+            SglAppend(packet_sgl_ptr, packetizer_state_ptr->packet_entry_hdr_ptr); // NOTE: SGL list size is updated.
 
             // Try to fill an entire packet, either by using part of a large SGL entry and/or multiple smaller SGL
             // entries.
@@ -281,7 +248,6 @@ bool CdiPayloadGetPacket(CdiPacketizerStateHandle packetizer_state_handle, CdiCD
                     // to know where to place the data when its using a linear buffer since packets can arrive out of
                     // order.
                     packet_state_ptr->payload_type = kPayloadTypeDataOffset;
-
                     break;
                 }
             }
@@ -289,29 +255,14 @@ bool CdiPayloadGetPacket(CdiPacketizerStateHandle packetizer_state_handle, CdiCD
 
         *ret_is_last_packet_ptr = false;
         if (ret) {
+            // Packet was successfully obtained, so update returned last state flag, increment packet counters and
+            // initialize the packet state.
             *ret_is_last_packet_ptr = NULL == packet_state_ptr->source_entry_ptr;
-
-            packet_state_ptr->packet_sequence_num++; // Increment packet sequence number.
+            packet_state_ptr->packet_sequence_num++;
+            payload_state_ptr->cdi_endpoint_handle->tx_state.packet_id++;
             packetizer_state_ptr->state = kStateInactive;
         }
     }
 
     return ret;
 }
-
-CdiCDIPacketCommonHeader* CdiPayloadParseCDIPacket(const CdiSgList* packet_sgl_ptr)
-{
-    if (packet_sgl_ptr->total_data_size < (int)sizeof(CdiCDIPacketCommonHeader)) {
-        assert(false);
-        return NULL;
-    }
-
-    if (NULL == packet_sgl_ptr->sgl_head_ptr ||
-        packet_sgl_ptr->sgl_head_ptr->size_in_bytes < (int)sizeof(CdiCDIPacketCommonHeader)) {
-        assert(false);
-        return NULL;
-    }
-
-    return packet_sgl_ptr->sgl_head_ptr->address_ptr;
-}
-

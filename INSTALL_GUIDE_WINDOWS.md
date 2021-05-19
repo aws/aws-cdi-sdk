@@ -3,30 +3,35 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
 
 ---
 
+- [Windows Installation Guide](#windows-installation-guide)
+- [Create an EFA enabled instance](#create-an-efa-enabled-instance)
 - [Connecting to Windows and activating](#connecting-to-windows-and-activating)
 - [Install the Windows EFA driver](#install-the-windows-efa-driver)
 - [Configure the EC2 Instance](#configure-the-ec2-instance)
-  - [Install the AWS SDK for C++ dependencies](#install-the-aws-sdk-for-c-dependencies)
+  - [Create IAM user required by AWS CloudWatch](#create-iam-user-required-by-aws-cloudwatch)
   - [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path)
 - [Install the AWS CDI SDK](#install-the-aws-cdi-sdk)
-- [Build the HTML documentation](#build-the-html-documentation)
-- [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications)
-  - [Install the AWS SDK for C++ dependencies](#install-the-aws-sdk-for-c-dependencies)
   - [Install the AWS SDK for C++](#install-the-aws-sdk-for-c)
+- [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications)
   - [Build the AWS CDI SDK](#build-the-aws-cdi-sdk)
-  - [Disabling the display of performance metrics to your Amazon CloudWatch account](#disabling-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
+  - [(Optional) Disable the display of performance metrics to your Amazon CloudWatch account](#optional-disable-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
+- [Build the HTML documentation](#build-the-html-documentation)
 - [Running the Windows test application](#running-the-windows-test-application)
   - [Allow test applications in Windows firewall](#allow-test-applications-in-windows-firewall)
   - [Help](#help)
   - [Additional tests](#additional-tests)
   - [Windows specific test differences from Linux](#windows-specific-test-differences-from-linux)
-    - [Disabling the EFA transfer error message](#disabling-the-shm-transfer-error-message)
+    - [Disabling the SHM transfer error message](#disabling-the-shm-transfer-error-message)
 
 ---
 
+# Create an EFA enabled instance
+
+Follow the steps in [create an EFA-enabled instance](README.md#create-an-efa-enabled-instance).
+
 # Connecting to Windows and activating
 
-After following the steps to [create an EFA-enabled instance](README.md#create-an-efa-enabled-instance), connect to your EC2 instance using Remote Destop.
+Connect to your EC2 instance using Remote Destop.
 Refer to **step 2** in the [AWS Windows Guide](https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/EC2_GetStarted.html).
 If Windows activation fails, see [these instructions](https://aws.amazon.com/premiumsupport/knowledge-center/windows-activation-fails/).
 
@@ -124,7 +129,9 @@ Completed installation.
     - Select OK, and then exit the **Server Manager**.
     - Reboot for changes to take effect.
 
-## Install the AWS SDK for C++ dependencies
+## Create IAM user required by AWS CloudWatch
+
+AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK C++](https://aws.amazon.com/sdk-for-cpp/).
 
 1. Create an IAM User with CloudWatch and performance metrics permissions.
     - Navigate to the [AWS console IAM Policies](https://console.aws.amazon.com/iam/home#/policies)
@@ -137,7 +144,7 @@ Completed installation.
             "Statement": [
                 {
                     "Effect": "Allow",
-                    "Action": "mediaconnect:*",
+                    "Action": "cloudwatch:*",
                     "Resource": "*"
                 }
             ]
@@ -185,10 +192,96 @@ Completed installation.
 
 1. Place the **PDCurses** folder at the same level as the **aws-cdi-sdk** and **libfabric** folders.
 
+The **<install_dir>** should now contain the folder hierarchy as shown below:
+
+   ```
+   <install_dir>\aws-cdi-sdk
+   <install_dir>\libfabric
+   <install_dir>\PDCurses
+   ```
+
+
 The **proj** directory contains the Visual Studio project solution for Windows development.
 
 - The solution file builds the AWS CDI SDK static library, ```cdi_sdk.lib```, and the test applications ```cdi_test.exe```, ```cdi_test_min_tx.exe``` and ```cdi_test_min_rx.exe```.
 - For detailed folder descriptions, refer to the descriptions in the [Linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk).
+
+---
+
+## Install the AWS SDK for C++
+
+**Note**: The AWS CDI SDK was tested with AWS SDK version 1.8.46.
+
+**Note**: The AWS SDK for C++ is essential for metrics gathering functions of AWS CDI SDK to operate properly. Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
+
+**Note**: It is recommended to first review the [AWS SDK Developer guide](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html) before proceeding through the next steps.
+
+**Note**: The following instructions will install the AWS SDK for C++ at the same directory level as the AWS CDI SDK. This is not required but is recommended for simplicity of installation.
+
+1. Open Microsoft Visual Studio 2019 by right clicking on it and selecting **Run as Administrator**.
+1. Inside Microsoft Visual Studio 2019 click **Open a project or solution** and navigate to the install directory used in the section [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and open the solution file ```<install_dir>/aws-cdi-sdk/proj/cdi_proj.sln```.
+1. Open a Powershell by selecting **Tools > Command Line > Developer Powershell**.
+1. Inside the shell navigate to the install directory used for [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and download the AWS SDK for C++.
+
+    ```
+    cd <install_dir>
+    git clone -b 1.8.46 https://github.com/aws/aws-sdk-cpp.git
+    ```
+
+    The **<install_dir>** should now contain the folder hierarchy as shown below:
+
+   ```
+   <install_dir>\aws-cdi-sdk
+   <install_dir>\aws-sdk-cpp
+   <install_dir>\libfabric
+   <install_dir>\PDCurses
+   ```
+
+1. Copy the AWS CDI SDK files required by ```AWS SDK for C++``` to the proper location.
+
+    ```
+    copy -recurse .\aws-cdi-sdk\aws-cpp-sdk-cdi\ .\aws-sdk-cpp\
+    ```
+
+---
+
+# Build CDI libraries and test applications
+
+The extracted AWS CDI SDK solution, cdi_proj.sln, contains three test applications: *cdi_test*, *cdi_test_min_rx*, and *cdi_test_min_tx*. Each project can be built using either the Debug or Release configuration.
+
+1. Build and install AWS SDK for C++ for use with the AWS CDI SDK.
+
+    ```
+    cd .\aws-sdk-cpp
+    cmake . -D CMAKE_BUILD_TYPE=Debug -D BUILD_ONLY="monitoring;cdi"
+    msbuild .\ALL_BUILD.vcxproj
+    msbuild .\INSTALL.vcxproj /p:Configuration=Debug
+    ```
+
+   **Important**: The install commands must be run in a shell in **Administrator mode**.
+
+   **Note**: This step builds and installs the AWS SDK for C++ **Debug** build. The AWS SDK for C++ **Release** build is incompatible with the AWS CDI SDK **Debug** build but the AWS SDK for C++ **Debug** build is compatible with both **Debug** and **Release** variants of AWS CDI SDK.
+
+2. Add the AWS SDK for C++ to the system **PATH**. The installation procedure creates a folder called ```aws-cpp-sdk-all``` in ```C:\Program Files (x86)```. This is the location the of the resulting .dlls and .libs along with the necessary include header files.
+
+    - The folder contains 3 directories: ```bin```, ```include```, and ```lib```.
+    - Add ```C:\Program Files (x86)\aws-cpp-sdk-all\bin``` to the **Path** System Environment Variable using the steps outlined in the section: [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path).
+
+## Build the AWS CDI SDK
+
+This procedure builds the entire AWS CDI SDK solution in a Debug configuration.
+
+1. Use Microsoft Visual Studio 2019 and open the *cdi_proj.sln* solution file found at ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
+1. Choose a configuration. For this example, choose **Debug**.
+1. Clean the solution each time a configuration is changed by selecting: **Build** > **Clean Solution**.
+1. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications.
+1. Choose the application to run. By default, the *cdi_test* application runs. To select another application, right-click on the target application and choose **Set as Startup Project** for the application you want to run.
+
+## (Optional) Disable the display of performance metrics to your Amazon CloudWatch account
+
+To disable the display of performance metrics to your Amazon CloudWatch account:
+
+- In the file ```src/cdi/configuration.h```, comment out ```#define CLOUDWATCH_METRICS_ENABLED```.
 
 ---
 
@@ -218,72 +311,6 @@ To build the AWS CDI SDK documentation, install Doxygen using Chocolatey and con
             Documents will appear at ```aws-cdi-sdk\build\documentation\api```.
 
 1. Use a web browser to open aws-cdi-sdk\build\documentation\\**api|all**\html\index.html, choosing **api** or **all** depending on the build option you chose.
-
----
-
-# Build CDI libraries and test applications
-
-The extracted AWS CDI SDK solution, cdi_proj.sln, contains three test applications: *cdi_test*, *cdi_test_min_rx*, and *cdi_test_min_tx*. Each project can be built using either the Debug or Release configuration.
-
-## Install the AWS SDK for C++
-
-**Note**: The AWS CDI SDK was tested with AWS SDK version 1.8.46.
-
-**Note**: The AWS SDK for C++ is essential for metrics gathering functions of AWS CDI SDK to operate properly. Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
-
-**Note**: It is recommended to first review the [AWS SDK Developer guide](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html) before proceeding through the next steps.
-
-**Note**: The following instructions will install the AWS SDK for C++ at the same directory level as the AWS CDI SDK. This is not required but is recommended for simplicity of installation.
-
-1. Open Microsoft Visual Studio 2019 by right clicking on it and selecting **Run as Administrator**.
-1. Inside Microsoft Visual Studio 2019 click **Open a project or solution** and navigate to the install directory used in the section [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and open the solution file ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
-1. Open a Powershell by selecting **Tools > Command Line > Developer Powershell**.
-1. Inside the shell navigate to the install directory used for [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and download the AWS SDK for C++.
-
-    ```ps
-    cd <path to installation directory>
-    git clone -b 1.8.46 https://github.com/aws/aws-sdk-cpp.git
-    ```
-
-1. Copy the AWS CDI SDK files required by ```AWS SDK for C++``` to the proper location.
-
-    ```ps
-    copy -recurse .\aws-cdi-sdk\aws-cpp-sdk-cdi\ .\aws-sdk-cpp\
-    ```
-
-1. Build and install AWS SDK for C++ for use with the AWS CDI SDK.
-
-    ```ps
-    cd .\aws-sdk-cpp
-    cmake . -D CMAKE_BUILD_TYPE=Debug -D BUILD_ONLY="monitoring;cdi"
-    msbuild .\ALL_BUILD.vcxproj
-    msbuild .\INSTALL.vcxproj /p:Configuration=Debug
-    ```
-
-    **Important**: The install commands must be run in a shell in **Administrator mode**.
-
-    **Note**: This step builds and installs the AWS SDK for C++ **Debug** build. The AWS SDK for C++ **Release** build is incompatible with the AWS CDI SDK **Debug** build but the AWS SDK for C++ **Debug** build is compatible with both **Debug** and **Release** variants of AWS CDI SDK.
-
-1. Add the AWS SDK for C++ to the system **PATH**. The installation procedure creates a folder called ```aws-cpp-sdk-all``` in ```C:\Program Files (x86)```. This is the location the of the resulting .dlls and .libs along with the necessary include header files.
-
-    - The folder contains 3 directories: ```bin```, ```include```, and ```lib```.
-    - Add ```C:\Program Files (x86)\aws-cpp-sdk-all\bin``` to the **Path** System Environment Variable using the steps outlined in the section: [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path).
-
-## Build the AWS CDI SDK
-
-This procedure builds the entire AWS CDI SDK solution in a Debug configuration.
-
-1. Use Microsoft Visual Studio 2019 and open the *cdi_proj.sln* solution file found at ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
-1. Choose a configuration. For this example, choose **Debug**.
-1. Clean the solution each time a configuration is changed by selecting: **Build** > **Clean Solution**.
-1. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications.
-1. Choose the application to run. By default, the *cdi_test* application runs. To select another application, right-click on the target application and choose **Set as Startup Project** for the application you want to run.
-
-## Disabling the display of performance metrics to your Amazon CloudWatch account
-
-To disable the display of performance metrics to your Amazon CloudWatch account:
-
-- In the file ```src/cdi/configuration.h```, comment out ```#define CLOUDWATCH_METRICS_ENABLED```.
 
 ---
 

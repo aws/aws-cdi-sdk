@@ -30,13 +30,13 @@
     <ClInclude Include="..\src\common\include\list_api.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\common\include\singly_linked_list_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\include\cdi_os_api.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\cdi_pool_api.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\common\include\singly_linked_list_api.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\common\include\utilities_api.h">
@@ -61,9 +61,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\cdi\private_avm.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\src\cdi\rx_reorder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\src\cdi\timeout.h">
@@ -123,6 +120,21 @@
     <ClInclude Include="..\include\cdi_queue_api.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\cdi\rx_reorder_packets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\cdi\rx_reorder_payloads.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\cdi_test_unit_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\cdi\protocol.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\cdi\receive_buffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\cdi\adapter.c">
@@ -153,9 +165,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\cdi\payload.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\src\cdi\rx_reorder.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\cdi\timeout.c">
@@ -221,9 +230,6 @@
     <ClCompile Include="..\src\cdi\cloudwatch_sdk_metrics.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\cdi\t_digest_unit_test.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\cdi\baseline_profile.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -234,6 +240,45 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\cdi\baseline_profiles_2_00.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\rx_reorder_packets.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\rx_reorder_payloads.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\test_unit_rx_reorder_packets.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\test_unit_rx_reorder_payloads.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\test_unit_sgl.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\test_unit_t_digest.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\test_unit_timeout.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\cdi_test_unit_api.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\protocol.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\protocol_v1.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\protocol_v2.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\receive_buffer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\test_unit_list.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

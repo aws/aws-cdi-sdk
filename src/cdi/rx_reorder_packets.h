@@ -28,6 +28,7 @@
 /**
  * @brief Adds initial entry to payload_state_ptr->reorder_list_ptr.
  *
+ * @param protocol_handle Handle for protocol being used.
  * @param payload_sgl_entry_pool_handle Handle to memory pool of payload SGL entries.
  * @param reorder_entries_pool_handle Handle to memory pool of rx_reorder entries.
  * @param payload_state_ptr Current state of the payload, specifically a single rx_reorder entry.
@@ -37,10 +38,9 @@
  *
  * @return True if successful.
  */
-bool CdiRxPayloadReorderStateInit(CdiPoolHandle payload_sgl_entry_pool_handle,
-                                  CdiPoolHandle reorder_entries_pool_handle,
-                                  RxPayloadState* payload_state_ptr,
-                                  const CdiSgList* new_sglist_ptr, int initial_offset, int sequence_num);
+bool RxReorderPacketPayloadStateInit(CdiProtocolHandle protocol_handle, CdiPoolHandle payload_sgl_entry_pool_handle,
+                                     CdiPoolHandle reorder_entries_pool_handle, RxPayloadState* payload_state_ptr,
+                                     const CdiSgList* new_sglist_ptr, int initial_offset, int sequence_num);
 
 /**
  * @brief Adds an entry to the payload sgl. Also checks for and maintains outstanding packets that are received out of
@@ -51,6 +51,7 @@ bool CdiRxPayloadReorderStateInit(CdiPoolHandle payload_sgl_entry_pool_handle,
  * and payload_state_ptr->reorder_list_ptr->prev_ptr will be NULL, otherwise there are dangling lists that have
  * not been attached to the single payload list.
  *
+ * @param protocol_handle Handle for protocol being used.
  * @param payload_sgl_entry_pool_handle Handle to memory pool of payload SGL entries.
  * @param reorder_entries_pool_handle Handle to memory pool of rx_reorder entries.
  * @param payload_state_ptr Current state of the payload, specifically a single rx_reorder entry.
@@ -60,10 +61,9 @@ bool CdiRxPayloadReorderStateInit(CdiPoolHandle payload_sgl_entry_pool_handle,
  *
  * @return True if successful.
  */
-bool CdiRxReorder(CdiPoolHandle payload_sgl_entry_pool_handle,
-                  CdiPoolHandle reorder_entries_pool_handle,
-                  RxPayloadState* payload_state_ptr,
-                  const CdiSgList* new_sglist_ptr, int initial_offset, int sequence_num);
+bool RxReorderPacket(CdiProtocolHandle protocol_handle, CdiPoolHandle payload_sgl_entry_pool_handle,
+                     CdiPoolHandle reorder_entries_pool_handle, RxPayloadState* payload_state_ptr,
+                     const CdiSgList* new_sglist_ptr, int initial_offset, int sequence_num);
 
 /**
  * @brief removes all lists and sgls used in processing the out of order packets
@@ -72,7 +72,7 @@ bool CdiRxReorder(CdiPoolHandle payload_sgl_entry_pool_handle,
  * @param payload_sgl_entry_pool_handle handle to memory pool of sgls
  * @param reorder_entries_pool_handle handle to memory pool of rx reorder lists
  */
-void CdiRxReorderFreeLists(CdiReorderList* reorder_list_ptr, CdiPoolHandle payload_sgl_entry_pool_handle,
-                                                             CdiPoolHandle reorder_entries_pool_handle);
+void RxReorderPacketFreeLists(CdiReorderList* reorder_list_ptr, CdiPoolHandle payload_sgl_entry_pool_handle,
+                              CdiPoolHandle reorder_entries_pool_handle);
 
 #endif  // RX_REORDER_H__

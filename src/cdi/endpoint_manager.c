@@ -48,6 +48,8 @@
 #include "adapter_efa.h" // Must include this file first due to #define _GNU_SOURCE
 #include "endpoint_manager.h"
 
+#include <arpa/inet.h> // For inet_ntop()
+
 #include "adapter_api.h"
 #include "cdi_logger_api.h"
 #include "cdi_os_api.h"
@@ -55,6 +57,7 @@
 #include "internal_rx.h"
 #include "internal_tx.h"
 #include "internal_utility.h"
+#include "rx_reorder_payloads.h"
 #include "statistics.h"
 #include "utilities_api.h"
 
@@ -63,7 +66,7 @@
 //*********************************************************************************************************************
 
 /**
- * @brief This defines a structure that contains all the the state information for endpoint state changes.
+ * @brief This defines a structure that contains all the state information for endpoint state changes.
  */
 typedef struct {
     /// @brief Used to store an instance of this object in a list using this element as the list item.
@@ -80,7 +83,7 @@ typedef struct {
 } InternalEndpointState;
 
 /**
- * @brief This defines a structure that contains all the the state information for endpoint state changes.
+ * @brief This defines a structure that contains all the state information for endpoint state changes.
  */
 struct EndpointManagerState {
     CdiConnectionState* connection_state_ptr; ///< Pointer to connection associated with this Endpoint Manager.
@@ -150,8 +153,10 @@ static void SetCommand(InternalEndpointState* internal_endpoint_ptr, EndpointMan
 {
     EndpointManagerState* mgr_ptr = internal_endpoint_ptr->endpoint_manager_ptr;
 
-    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager, "Endpoint Manager stream ID[%d] got command[%s]",
-                             internal_endpoint_ptr->cdi_endpoint.stream_identifier,
+    CdiEndpointHandle handle = &internal_endpoint_ptr->cdi_endpoint;
+    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager, "Endpoint Manager remote IP[%s:%d] got command[%s]",
+                             EndpointManagerEndpointRemoteIpGet(handle),
+                             EndpointManagerEndpointRemotePortGet(handle),
                              InternalUtilityKeyEnumToString(kKeyEndpointManagerCommand, command));
 
     // Prevent the signals/variables used in this block from being accessed by other threads.
@@ -179,8 +184,9 @@ static void SetCommand(InternalEndpointState* internal_endpoint_ptr, EndpointMan
  * Flush resources associated with the specified connection.
  *
  * @param endpoint_ptr Pointer to endpoint to free resources.
+ * @param shutting_down true if shutting down the connection, otherwise just resetting it.
  */
-static void FlushResources(InternalEndpointState* endpoint_ptr)
+static void FlushResources(InternalEndpointState* endpoint_ptr, bool shutting_down)
 {
     EndpointManagerState* mgr_ptr = endpoint_ptr->endpoint_manager_ptr;
 
@@ -197,7 +203,7 @@ static void FlushResources(InternalEndpointState* endpoint_ptr)
     // Clean up adapter level resources used by PollThread(). NOTE: For the EFA adapter, it will notify EFA Probe that
     // resetting the endpoint has completed. Therefore, this step must be the last one used as part of the connection
     // reset sequence.
-    CdiAdapterResetEndpoint(endpoint_ptr->cdi_endpoint.adapter_endpoint_ptr);
+    CdiAdapterResetEndpoint(endpoint_ptr->cdi_endpoint.adapter_endpoint_ptr, !shutting_down);
 }
 
 /**
@@ -208,6 +214,9 @@ static void FlushResources(InternalEndpointState* endpoint_ptr)
 static void DestroyEndpoint(CdiEndpointHandle handle)
 {
     EndpointManagerState* mgr_ptr = (EndpointManagerState*)handle->connection_state_ptr->endpoint_manager_handle;
+
+    InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(handle);
+    FlushResources(internal_endpoint_ptr, true); // true= shutting down the endpoint
 
     // Close the adapter endpoint, if it exists.
     if (handle->adapter_endpoint_ptr) {
@@ -225,7 +234,7 @@ static void DestroyEndpoint(CdiEndpointHandle handle)
     CdiEndpointHandle list_endpoint_handle = EndpointManagerGetFirstEndpoint(mgr_ptr);
     while (list_endpoint_handle) {
         if (handle == list_endpoint_handle) {
-            InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(list_endpoint_handle);
+            internal_endpoint_ptr = CdiEndpointToInternalEndpoint(list_endpoint_handle);
             // Must protect access to the list when removing an entry.
             CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
             CdiListRemove(&mgr_ptr->endpoint_list, &internal_endpoint_ptr->list_entry);
@@ -235,8 +244,15 @@ static void DestroyEndpoint(CdiEndpointHandle handle)
         list_endpoint_handle = EndpointManagerGetNextEndpoint(list_endpoint_handle);
     }
 
-    InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(handle);
-    CdiQueueDestroy(internal_endpoint_ptr->command_queue_handle);
+    internal_endpoint_ptr = CdiEndpointToInternalEndpoint(handle);
+    if (internal_endpoint_ptr->command_queue_handle) {
+        CdiQueueFlush(internal_endpoint_ptr->command_queue_handle);
+        CdiQueueDestroy(internal_endpoint_ptr->command_queue_handle);
+
+        // Invalidate the endpoint state in case the application tries to use its handle again.
+        internal_endpoint_ptr->cdi_endpoint.magic = 0;
+    }
+
     CdiOsMemFree(internal_endpoint_ptr);
 }
 
@@ -275,26 +291,27 @@ static THREAD EndpointManagerThread(void* ptr)
                 EndpointManagerCommand command;
                 while (internal_endpoint_ptr && CdiQueuePop(internal_endpoint_ptr->command_queue_handle, &command)) {
                     CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
-                                             "Endpoint Manager stream ID[%d] processing command[%s]",
-                                             internal_endpoint_ptr->cdi_endpoint.stream_identifier,
-                                             InternalUtilityKeyEnumToString(kKeyEndpointManagerCommand, command));
+                                            "Endpoint Manager remote IP[%s:%d] processing command[%s]",
+                                            EndpointManagerEndpointRemoteIpGet(endpoint_handle),
+                                            EndpointManagerEndpointRemotePortGet(endpoint_handle),
+                                            InternalUtilityKeyEnumToString(kKeyEndpointManagerCommand, command));
                     switch (command) {
                         case kEndpointStateIdle:
                             // Nothing special to do.
                             break;
                         case kEndpointStateReset:
-                            FlushResources(internal_endpoint_ptr);
+                            FlushResources(internal_endpoint_ptr, false); // false= not shutting down the endpoint.
                             break;
                         case kEndpointStateStart:
                             CdiAdapterStartEndpoint(endpoint_handle->adapter_endpoint_ptr);
                             break;
                         case kEndpointStateShutdown:
-                            FlushResources(internal_endpoint_ptr);
+                            FlushResources(internal_endpoint_ptr, true); // true= is shutting down the endpoint.
                             keep_alive = false;
                             break;
                     }
-               }
-               endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
+                }
+                endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
             }
         }
         // Commands have completed. Set signal to unblock registered connection threads that are blocked in
@@ -351,12 +368,11 @@ static void DecrementThreadWaitCount(EndpointManagerState* mgr_ptr)
  * Create resources common to both Tx and Rx endpoints.
  *
  * @param mgr_ptr Pointer to Endpoint Manager.
- * @param stream_identifier Stream identifier.
  * @param ret_internal_endpoint_ptr Address where to write returned endpoint handle.
  *
  * @return kCdiStatusOk if successful, otherwise a value that indicates the nature of the failure is returned.
  */
-static CdiReturnStatus CreateEndpointCommonResources(EndpointManagerState* mgr_ptr, int stream_identifier,
+static CdiReturnStatus CreateEndpointCommonResources(EndpointManagerState* mgr_ptr,
                                                      InternalEndpointState** ret_internal_endpoint_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;
@@ -364,8 +380,8 @@ static CdiReturnStatus CreateEndpointCommonResources(EndpointManagerState* mgr_p
 
     if (CdiListCount(&mgr_ptr->endpoint_list) >= MAX_ENDPOINTS_PER_CONNECTION) {
         CDI_LOG_THREAD(kLogError,
-            "Failed to create stream ID[%d] endpoint. Already at the maximum[%d] allowed in a single connection.",
-            stream_identifier, MAX_ENDPOINTS_PER_CONNECTION);
+            "Failed to create endpoint. Already at the maximum[%d] allowed in a single connection.",
+            MAX_ENDPOINTS_PER_CONNECTION);
         rs = kCdiStatusArraySizeExceeded;
     }
 
@@ -378,7 +394,7 @@ static CdiReturnStatus CreateEndpointCommonResources(EndpointManagerState* mgr_p
 
     if (kCdiStatusOk == rs) {
         internal_endpoint_ptr->endpoint_manager_ptr = mgr_ptr;
-        internal_endpoint_ptr->cdi_endpoint.stream_identifier = stream_identifier;
+        internal_endpoint_ptr->cdi_endpoint.magic = kMagicEndpoint;
         internal_endpoint_ptr->cdi_endpoint.connection_state_ptr = mgr_ptr->connection_state_ptr;
 
         if (!CdiQueueCreate("Endpoint Command Queue", MAX_ENDPOINT_COMMAND_QUEUE_SIZE, NO_GROW_SIZE, NO_GROW_COUNT,
@@ -557,19 +573,20 @@ EndpointManagerHandle EndpointManagerConnectionToEndpointManager(CdiConnectionHa
     return con_ptr->endpoint_manager_handle;
 }
 
-void EndpointManagerEndpointInfoSet(CdiEndpointHandle handle, int remote_stream_identifier,
-                                    const char* remote_stream_name_str)
+void EndpointManagerRemoteEndpointInfoSet(CdiEndpointHandle handle, const struct sockaddr_in* remote_address_ptr,
+                                          const char* stream_name_str)
 {
     CdiEndpointState* endpoint_ptr = (CdiEndpointState*)handle;
 
-    if (remote_stream_name_str) {
+    inet_ntop(AF_INET, &remote_address_ptr->sin_addr, endpoint_ptr->remote_ip_str, sizeof(endpoint_ptr->remote_ip_str));
+    endpoint_ptr->remote_sockaddr_in = *remote_address_ptr;
+
+    if (stream_name_str) {
         CdiOsStrCpy(endpoint_ptr->stream_name_str, sizeof(endpoint_ptr->stream_name_str),
-                    remote_stream_name_str);
+                    stream_name_str);
     } else {
         endpoint_ptr->stream_name_str[0] = '\0';
     }
-
-    endpoint_ptr->stream_identifier = remote_stream_identifier;
 }
 
 const char* EndpointManagerEndpointStreamNameGet(CdiEndpointHandle handle)
@@ -581,10 +598,22 @@ const char* EndpointManagerEndpointStreamNameGet(CdiEndpointHandle handle)
     return endpoint_ptr->stream_name_str;
 }
 
-int EndpointManagerEndpointStreamIdGet(CdiEndpointHandle handle)
+const char* EndpointManagerEndpointRemoteIpGet(CdiEndpointHandle handle)
 {
     CdiEndpointState* endpoint_ptr = (CdiEndpointState*)handle;
-    return endpoint_ptr->stream_identifier;
+    return endpoint_ptr->remote_ip_str;
+}
+
+int EndpointManagerEndpointRemotePortGet(CdiEndpointHandle handle)
+{
+    CdiEndpointState* endpoint_ptr = (CdiEndpointState*)handle;
+    return ntohs(endpoint_ptr->remote_sockaddr_in.sin_port); // Convert network byte order to int
+}
+
+const struct sockaddr_in* EndpointManagerEndpointRemoteAddressGet(CdiEndpointHandle handle)
+{
+    CdiEndpointState* endpoint_ptr = (CdiEndpointState*)handle;
+    return &endpoint_ptr->remote_sockaddr_in;
 }
 
 void EndpointManagerQueueEndpointReset(CdiEndpointHandle handle)
@@ -715,15 +744,32 @@ void EndpointManagerConnectionStateChange(CdiEndpointHandle handle, CdiConnectio
 {
     CdiEndpointState* endpoint_ptr = (CdiEndpointState*)handle;
     AdapterEndpointState* adapter_endpoint_ptr = endpoint_ptr->adapter_endpoint_ptr;
+    EndpointManagerState* mgr_ptr = CdiEndpointToInternalEndpoint(handle)->endpoint_manager_ptr;
+    bool ignore = (status_code == adapter_endpoint_ptr->connection_status_code);
 
-    // Only notify the application if the status code has changed or there is an error message.
-    if ((status_code != adapter_endpoint_ptr->connection_status_code) || error_msg_str) {
+    // Only notify the application if the status code has changed.
+    if (!ignore) {
         adapter_endpoint_ptr->connection_status_code = status_code;
 
+        if (kHandleTypeRx == endpoint_ptr->connection_state_ptr->handle_type) {
+            // Connection is Rx. Clear the flag indicating that a payload has been received.
+            endpoint_ptr->connection_state_ptr->rx_state.received_first_payload = false;
+            // If status is disconnected, notify the application if there are no connected endpoints related to the
+            // connection.
+            if (kCdiConnectionStatusDisconnected == status_code) {
+                CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
+                if (CdiListCount(&mgr_ptr->endpoint_list) > 1) {
+                    ignore = true; // Other endpoints are still connected, so don't notify the application.
+                }
+                CdiOsCritSectionRelease(mgr_ptr->endpoint_list_lock);
+            }
+        }
+    }
+
+    if (!ignore) {
         // If connected and all other endpoints related to this connection are also connected, then set the adapter's
         // connection state to connected.
         if (kCdiConnectionStatusConnected == status_code) {
-            EndpointManagerState* mgr_ptr = CdiEndpointToInternalEndpoint(handle)->endpoint_manager_ptr;
             CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
             CdiEndpointHandle found_handle = EndpointManagerGetFirstEndpoint(mgr_ptr);
             while (found_handle) {
@@ -738,26 +784,27 @@ void EndpointManagerConnectionStateChange(CdiEndpointHandle handle, CdiConnectio
             CdiOsCritSectionRelease(mgr_ptr->endpoint_list_lock);
         }
 
-        // On connection change for a receiver clear the flag indicating that a payload has been received.
-        if (kHandleTypeRx == endpoint_ptr->connection_state_ptr->handle_type) {
-            endpoint_ptr->connection_state_ptr->rx_state.received_first_payload = false;
-        }
-
         // Set connection state for the adapter's connection (all endpoints related to the connection must be connected,
         // otherwise it is not considered connected).
         adapter_endpoint_ptr->adapter_con_state_ptr->connection_status_code = status_code;
-
         CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager,
-                                 "Notifying app of connection stream ID[%d] state change[%s].",
-                                 handle->stream_identifier,
-                                 CdiUtilityKeyEnumToString(kKeyConnectionStatus, status_code));
+                                 "Notifying app of connection remote IP[%s:%d] state change[%s].",
+                                 EndpointManagerEndpointRemoteIpGet(handle),
+                                 EndpointManagerEndpointRemotePortGet(handle),
+                                 CdiUtilityKeyEnumToString(kKeyConnectionStatus,
+                                                           adapter_endpoint_ptr->connection_status_code));
 
         CdiCoreConnectionCbData cb_data = {
-            .status_code = status_code,
+            .status_code = adapter_endpoint_ptr->connection_status_code,
             .err_msg_str = error_msg_str,
-            .stream_identifier = handle->stream_identifier,
-            .endpoint_handle = handle,
-            .connection_user_cb_param = adapter_endpoint_ptr->adapter_con_state_ptr->data_state.connection_user_cb_param
+            .tx_stream_endpoint_handle = (kHandleTypeTx == endpoint_ptr->connection_state_ptr->handle_type) ?
+                                          handle : NULL, // Only valid for Tx endpoints
+            .remote_ip_str = EndpointManagerEndpointRemoteIpGet(handle),
+            .remote_dest_port = EndpointManagerEndpointRemotePortGet(handle),
+            .connection_user_cb_param = adapter_endpoint_ptr->adapter_con_state_ptr->data_state.connection_user_cb_param,
+            .negotiated_version_num = 0,
+            .negotiated_major_version_num = 0,
+            .negotiated_probe_version_num = 0,
         };
 
         if (kCdiConnectionStatusDisconnected == status_code) {
@@ -765,6 +812,14 @@ void EndpointManagerConnectionStateChange(CdiEndpointHandle handle, CdiConnectio
             adapter_endpoint_ptr->endpoint_stats_ptr->connected = false;
         } else {
             adapter_endpoint_ptr->endpoint_stats_ptr->connected = true;
+
+            // Set negotiated version number information if it exists.
+            if (adapter_endpoint_ptr->protocol_handle) {
+                CdiProtocolVersionNumber* version_ptr = &adapter_endpoint_ptr->protocol_handle->negotiated_version;
+                cb_data.negotiated_version_num = version_ptr->version_num;
+                cb_data.negotiated_major_version_num = version_ptr->major_version_num;
+                cb_data.negotiated_probe_version_num = version_ptr->probe_version_num;
+            }
         }
 
         // Call the application's user registered connection function.
@@ -772,7 +827,7 @@ void EndpointManagerConnectionStateChange(CdiEndpointHandle handle, CdiConnectio
     }
 }
 
-CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, int stream_identifier,
+CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, bool is_multi_stream,
                                                 const char* dest_ip_addr_str, int dest_port,
                                                 const char* stream_name_str,
                                                 CdiEndpointHandle* ret_endpoint_handle_ptr)
@@ -780,6 +835,12 @@ CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, in
     CdiReturnStatus rs = kCdiStatusOk;
     EndpointManagerState* mgr_ptr = (EndpointManagerState*)handle;
     CdiConnectionState* con_ptr = mgr_ptr->connection_state_ptr;
+
+    // Make a copy of provided stream name or copy the connection name if no stream name provided.
+    char temp_stream_name_str[MAX_STREAM_NAME_STRING_LENGTH];
+    const char* src_str = (stream_name_str && '\0' != stream_name_str[0])
+                          ? stream_name_str : con_ptr->saved_connection_name_str;
+    CdiOsStrCpy(temp_stream_name_str, sizeof(temp_stream_name_str), src_str);
 
     CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
 
@@ -791,68 +852,80 @@ CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, in
         rs = kCdiStatusInvalidParameter;
     }
 
-    InternalEndpointState* internal_endpoint_ptr = NULL;
-    if (kCdiStatusOk == rs) {
-        rs = CreateEndpointCommonResources(mgr_ptr, stream_identifier, &internal_endpoint_ptr);
-    }
-
     CdiEndpointState* endpoint_ptr = NULL;
-    if (kCdiStatusOk == rs) {
-        endpoint_ptr = &internal_endpoint_ptr->cdi_endpoint;
-    }
-
-    if (kCdiStatusOk == rs) {
-        if (!CdiOsCritSectionCreate(&endpoint_ptr->tx_state.payload_num_lock)) {
-            rs = kCdiStatusNotEnoughMemory;
+    InternalEndpointState* internal_endpoint_ptr = NULL;
+    if (kCdiStatusOk == rs && is_multi_stream) {
+        // For multi-stream endpoints, if matching destination endpoint already exists then use it.
+        CdiEndpointHandle found_handle = EndpointManagerGetFirstEndpoint(mgr_ptr);
+        while (found_handle) {
+            int found_dest_port = EndpointManagerEndpointRemotePortGet(found_handle);
+            if (0 == CdiOsStrCmp(found_handle->remote_ip_str, dest_ip_addr_str) &&
+                found_dest_port == dest_port) {
+                endpoint_ptr = found_handle;
+                internal_endpoint_ptr = CdiEndpointToInternalEndpoint(found_handle);
+                CDI_LOG_HANDLE(cdi_global_context.global_log_handle, kLogInfo,
+                               "Using existing Tx endpoint with same remote IP[%s:%d].", dest_ip_addr_str, dest_port);
+                break;
+            }
+            found_handle = EndpointManagerGetNextEndpoint(found_handle);
         }
     }
 
-    if (kCdiStatusOk == rs) {
-        endpoint_ptr->stream_identifier = stream_identifier;
-
-        if (NULL == stream_name_str || '\0' == stream_name_str[0]) {
-            // Stream name was not provided, so generate one.
-            snprintf(endpoint_ptr->stream_name_str, sizeof(endpoint_ptr->stream_name_str), "%s:%d",
-                    con_ptr->saved_connection_name_str, stream_identifier);
-        } else {
-            // Make a copy of provided stream name.
-            CdiOsStrCpy(endpoint_ptr->stream_name_str, sizeof(endpoint_ptr->stream_name_str), stream_name_str);
+    if (NULL == endpoint_ptr) {
+        if (kCdiStatusOk == rs) {
+            rs = CreateEndpointCommonResources(mgr_ptr, &internal_endpoint_ptr);
         }
-    }
 
-    if (kCdiStatusOk == rs) {
-        // Open an endpoint to send packets to a remote host. Do this last since doing so will open the flood gates for
-        // callbacks to begin.
-        CdiAdapterEndpointConfigData config_data = {
-            .connection_handle = con_ptr->adapter_connection_ptr,
-            .cdi_endpoint_handle = endpoint_ptr,
+        if (kCdiStatusOk == rs) {
+            endpoint_ptr = &internal_endpoint_ptr->cdi_endpoint;
+            struct sockaddr_in dest_addr = {
+                .sin_family = AF_INET,
+                .sin_port = htons(dest_port), // Convert int port to network byte order
+                .sin_addr = { 0 },
+                .sin_zero = { 0 }
+            };
+            inet_pton(AF_INET, dest_ip_addr_str, &dest_addr.sin_addr);
+            EndpointManagerRemoteEndpointInfoSet(endpoint_ptr, &dest_addr, stream_name_str);
 
-            .msg_from_endpoint_func_ptr = TxPacketWorkRequestComplete,
-            .msg_from_endpoint_param_ptr = endpoint_ptr,
-
-            .remote_address_str = dest_ip_addr_str,
-            .port_number = dest_port,
-            .endpoint_stats_ptr = &endpoint_ptr->transfer_stats.endpoint_stats,
-        };
-        if (kCdiStatusOk != CdiAdapterOpenEndpoint(&config_data, &endpoint_ptr->adapter_endpoint_ptr)) {
-            rs = kCdiStatusFatal;
+            if (!CdiOsCritSectionCreate(&endpoint_ptr->tx_state.payload_num_lock)) {
+                rs = kCdiStatusNotEnoughMemory;
+            }
         }
-    }
 
-    if (kCdiStatusOk == rs) {
-        CdiOsSignalSet(con_ptr->start_signal); // Start connection threads.
-        CdiAdapterStartEndpoint(endpoint_ptr->adapter_endpoint_ptr);   // Start adapter endpoint threads.
-        CDI_LOG_HANDLE(con_ptr->log_handle, kLogInfo, "Successfully created Tx stream ID[%d] endpoint. Name[%s]",
-                       stream_identifier, con_ptr->saved_connection_name_str);
+        if (kCdiStatusOk == rs) {
+            // Open an endpoint to send packets to a remote host. Do this last since doing so will open the flood gates
+            // for callbacks to begin.
+            CdiAdapterEndpointConfigData config_data = {
+                .connection_handle = con_ptr->adapter_connection_ptr,
+                .cdi_endpoint_handle = endpoint_ptr,
 
-        // Protect multi-threaded access to the list.
-        CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
-        CdiListAddTail(&mgr_ptr->endpoint_list, &internal_endpoint_ptr->list_entry);
-        CdiOsCritSectionRelease(mgr_ptr->endpoint_list_lock);
-    } else {
-        DestroyEndpoint(endpoint_ptr);
-        endpoint_ptr = NULL;
-        internal_endpoint_ptr = NULL; // DestroyEndpoint() frees this
+                .msg_from_endpoint_func_ptr = TxPacketWorkRequestComplete,
+                .msg_from_endpoint_param_ptr = endpoint_ptr,
+
+                .remote_address_str = dest_ip_addr_str,
+                .port_number = dest_port,
+                .endpoint_stats_ptr = &endpoint_ptr->transfer_stats.endpoint_stats,
+            };
+            if (kCdiStatusOk != CdiAdapterOpenEndpoint(&config_data, &endpoint_ptr->adapter_endpoint_ptr)) {
+                rs = kCdiStatusFatal;
+            }
+        }
+
+        if (kCdiStatusOk == rs) {
+            CdiOsSignalSet(con_ptr->start_signal); // Start connection threads.
+            CdiAdapterStartEndpoint(endpoint_ptr->adapter_endpoint_ptr); // Start adapter endpoint threads.
+            CDI_LOG_HANDLE(con_ptr->log_handle, kLogInfo, "Successfully created Tx remote IP[%s:%d] endpoint. Name[%s]",
+                        dest_ip_addr_str, dest_port, con_ptr->saved_connection_name_str);
+
+            // Protect multi-threaded access to the list.
+            CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
+            CdiListAddTail(&mgr_ptr->endpoint_list, &internal_endpoint_ptr->list_entry);
+            CdiOsCritSectionRelease(mgr_ptr->endpoint_list_lock);
+        } else if (endpoint_ptr) {
+            DestroyEndpoint(endpoint_ptr);
+            endpoint_ptr = NULL;
+            internal_endpoint_ptr = NULL; // DestroyEndpoint() frees this.
+        }
     }
 
     if (ret_endpoint_handle_ptr) {
@@ -872,7 +945,7 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
     CdiConnectionState* con_ptr = mgr_ptr->connection_state_ptr;
 
     InternalEndpointState* internal_endpoint_ptr = NULL;
-    rs = CreateEndpointCommonResources(mgr_ptr, STREAM_IDENTIFIER_NOT_USED, &internal_endpoint_ptr);
+    rs = CreateEndpointCommonResources(mgr_ptr, &internal_endpoint_ptr);
 
     CdiEndpointState* endpoint_ptr = NULL;
     if (kCdiStatusOk == rs) {
@@ -907,14 +980,15 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
     if (kCdiStatusOk == rs) {
         CdiOsSignalSet(con_ptr->start_signal); // Start connection threads.
         CdiAdapterStartEndpoint(endpoint_ptr->adapter_endpoint_ptr);   // Start adapter endpoint threads.
-        CDI_LOG_HANDLE(con_ptr->log_handle, kLogInfo, "Successfully created Rx stream endpoint. Name[%s]",
-                       con_ptr->saved_connection_name_str);
+        CDI_LOG_HANDLE(con_ptr->log_handle, kLogInfo,
+                       "Successfully created Rx stream endpoint. Listen port[%d] Name[%s]",
+                       dest_port, con_ptr->saved_connection_name_str);
 
         // Protect multi-threaded access to the list.
         CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
         CdiListAddTail(&mgr_ptr->endpoint_list, &internal_endpoint_ptr->list_entry);
         CdiOsCritSectionRelease(mgr_ptr->endpoint_list_lock);
-    } else {
+    } else if (endpoint_ptr) {
         DestroyEndpoint(endpoint_ptr);
         endpoint_ptr = NULL;
         internal_endpoint_ptr = NULL; // DestroyEndpoint() frees this
@@ -922,6 +996,24 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
 
     if (ret_endpoint_handle_ptr) {
         *ret_endpoint_handle_ptr = endpoint_ptr;
+    }
+
+    return rs;
+}
+
+CdiReturnStatus EndpointManagerProtocolVersionSet(CdiEndpointHandle handle,
+                                                  const CdiProtocolVersionNumber* remote_version_ptr)
+{
+    CdiReturnStatus rs = kCdiStatusOk;
+
+    if (handle->adapter_endpoint_ptr->protocol_handle) {
+        ProtocolVersionDestroy(handle->adapter_endpoint_ptr->protocol_handle);
+        handle->adapter_endpoint_ptr->protocol_handle = NULL;
+    }
+
+    ProtocolVersionSet(remote_version_ptr, &handle->adapter_endpoint_ptr->protocol_handle);
+    if (kHandleTypeRx == handle->connection_state_ptr->handle_type) {
+        rs = RxEndpointCreateDynamicPools(handle);
     }
 
     return rs;
@@ -951,8 +1043,9 @@ void EndpointManagerEndpointDestroy(CdiEndpointHandle handle)
     CdiOsCritSectionRelease(mgr_ptr->endpoint_list_lock);
 
     if (destroy) {
-        CDI_LOG_HANDLE(con_ptr->log_handle, kLogInfo, "Destroy endpoint stream ID[%d].",
-                       handle->stream_identifier);
+        CDI_LOG_HANDLE(con_ptr->log_handle, kLogInfo, "Destroy endpoint remote IP[%s:%d].",
+                       EndpointManagerEndpointRemoteIpGet(handle),
+                       EndpointManagerEndpointRemotePortGet(handle));
 
         EndpointManagerConnectionStateChange(handle, kCdiConnectionStatusDisconnected, NULL);
 

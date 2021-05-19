@@ -69,20 +69,29 @@
 #define CDI_SDK_VERSION             2
 
 /// @brief CDI major version.
-#define CDI_SDK_MAJOR_VERSION       0
+#define CDI_SDK_MAJOR_VERSION       2
 
 /// @brief CDI minor version.
-#define CDI_SDK_MINOR_VERSION       2
+#define CDI_SDK_MINOR_VERSION       0
 
 /// @brief CDI protcol version.
-#define CDI_PROTOCOL_VERSION             1
+#define CDI_PROTOCOL_VERSION             2
 
 /// @brief CDI protocol major version.
-#define CDI_PROTOCOL_MAJOR_VERSION       0
+#define CDI_PROTOCOL_MAJOR_VERSION       1
 
-/// @brief CDI protocol minor version. This is set to 2 to identify the sender as being from SDK version 2.
-/// This value is currently not being used, other than for informational purposes.
-#define CDI_PROTOCOL_MINOR_VERSION       2
+/// @brief CDI probe command version. Possible value are:
+/// For Protocol version 2.0 (CDI_PROTOCOL_VERSION.CDI_PROTOCOL_MAJOR_VERSION):
+/// 0: SDK 1.x.x. Only supports protocol version 1.0.
+/// 1: not used
+/// 2: SDK 2.0.x, Only supports protocol version 1.0
+/// 3: SDK 2.1.x. Supports the new protocol version command. See kProbeCommandProtocolVersion. Supports protocols
+///               version 1.0 and 2.0.
+///
+/// For Protocol version 2.1 (CDI_PROTOCOL_VERSION.CDI_PROTOCOL_MAJOR_VERSION):
+/// 4: SDK 2.2.x. Supports bidirectional sockets for probe control interface. Logic added to maintain compatibility with
+///               previous probe version that used unidirectional sockets.
+#define CDI_PROBE_VERSION                4
 
 /// @brief Define to limit the max number of allowable Tx or Rx connections that can be created in the SDK.
 #define MAX_SIMULTANEOUS_CONNECTIONS                (30)
@@ -108,12 +117,12 @@
 /// NOTE: This value must be a power of two because it is used to mask the MSBs of array indices. @see RxPacketReceive
 #define MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION  (32)
 
-/// @brief Define to limit the max number of payloads that can arrive out of order and be put back in order.
-#define MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER  (32)
+/// @brief Define to limit the max number of payloads that can arrive out of order and be put back in order. Value must
+/// be a power of 2.
+#define MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER          (4096)
 
-/// @brief The number of entries the Rx Payload is allowed to
-/// grow if a PoolIncrease is called.
-#define MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION_GROW (2)
+/// @brief Define to limit the max number packets of that can arrive out of order and be put back in order.
+#define MAX_RX_PACKET_OUT_OF_ORDER_WINDOW           (4000)
 
 /// @brief Maximum connection name string length.
 #define MAX_CONNECTION_NAME_STRING_LENGTH           (128)
@@ -123,9 +132,6 @@
 
 /// @brief Maximum log filename string length.
 #define MAX_LOG_FILENAME_LENGTH                     (1024)
-
-/// @brief Enables internal SDK debug info for Scatter-Gather-List entries.
-#define DEBUG_INTERNAL_SGL_ENTRIES
 
 /// @brief When Rx Buffer delay is enabled using "-1", this is the delay used in milliseconds. This is 4 video frames at
 /// 60FPS (4*16.6ms= 66.4ms). This value is the recommended buffer size for transport between instances that are not
@@ -288,6 +294,16 @@ typedef enum {
 
     /// An attempt was made to use a profile that is not supported.
     kCdiStatusProfileNotSupported   = 33,
+
+    /// Failed to decode a probe packet due to a CRC error.
+    kCdiStatusProbePacketCrcError   = 34,
+
+    /// Failed to decode a probe packet due to invalid size.
+    kCdiStatusProbePacketInvalidSize = 35,
+
+    /// Payloads are being received, but back pressure is preventing allocation of resources to store them. Payloads are
+    /// being discarded until another status message is provided (ie. kCdiStatusOk).
+    kCdiStatusRxPayloadBackPressure  = 36,
 } CdiReturnStatus;
 
 /// @brief A structure for holding a PTP timestamp defined in seconds and nanoseconds. This PTP time as defined by
@@ -349,16 +365,22 @@ typedef struct {
     /// The application needs to copy the message to its own memory before returning if it needs it to be retained.
     const char* err_msg_str;
 
-    /// @brief Used to identify the source data stream number associated with this connection.
-    int stream_identifier;
+    /// @brief Used to identify the handle of the stream endpoint associated with the connection. Only valid for Tx
+    /// endpoints that were created using the CdiAvmTxStreamEndpointCreate() function. Value is NULL for Rx endpoints.
+    CdiEndpointHandle tx_stream_endpoint_handle;
 
-    /// @brief Used to identify the handle of the stream endpoint associated with this connection.
-    CdiEndpointHandle endpoint_handle;
+    const char* remote_ip_str; ///< Pointer to remote IP address string.
+    int remote_dest_port; ///< Remote destination port.
 
     /// @brief User defined connection callback parameter. For a transmitter, this value is set as part of the
     /// CdiTxConfigData data provided as a parameter to one of the Cdi...TXCreate() API functions. For a receiver, this
     /// value is set as part of the CdiRxConfigData data provided to one of the Cdi...RxCreate() API functions.
     CdiUserCbParameter connection_user_cb_param;
+
+    /// @brief Negotiated CDI protocol version number for the endpoint associated with this connection.
+    uint8_t negotiated_version_num;
+    uint8_t negotiated_major_version_num; ///< Negotiated CDI protocol major version number.
+    uint8_t negotiated_probe_version_num; ///< Negotiated CDI protocol probe version number.
 } CdiCoreConnectionCbData;
 
 /**
@@ -442,12 +464,11 @@ typedef struct {
     /// dotted form of an IPv4 address. DHCP and/or DNS may be supported in the future.
     const char* adapter_ip_addr_str;
 
-    /// @brief The size in bytes of a memory region for holding payload data to transmit. A special memory type is used
-    /// so both CPU and DMA hardware can access the memory. The application manages how the buffer is partitioned and
-    /// used. NOTE: The value should be at least twice the total size of the maximum payload size of each transmit
-    /// connection that will be created using the Cdi...TxCreate() API functions. This allows the application to setup
-    /// data for a payload while a previous payload is being transmitted.
-    /// NOTE: This value must be a multiple of HUGE_PAGES_BYTE_SIZE.
+    /// @brief The size in bytes of a memory region for holding payload data to transmit. If no transmit connections
+    /// will be created, then this value can be zero. Otherwise it must be a value greater than 1.
+    ///
+    /// A special memory type is used so both CPU and DMA hardware can access the memory. The application manages how
+    /// the buffer is partitioned and used.
     uint64_t tx_buffer_size_bytes;
 
     /// @brief Returned pointer to start of the allocated transmit buffer. Size is specified using
@@ -663,11 +684,6 @@ struct CdiSglEntry {
     /// @brief Handle to private data used within the SDK that relates to this SGL entry. Do not use or modify this
     /// value.
     void* internal_data_ptr;
-
-#ifdef DEBUG_INTERNAL_SGL_ENTRIES
-    uint16_t packet_sequence_num; ///< Packet sequence number for the payload.
-    uint8_t payload_num;          ///< Payload number this CDI packet is associated with.
-#endif
 
     /// @brief The next entry in the list or NULL if this is the final entry in the list.
     CdiSglEntry* next_ptr;

@@ -41,6 +41,7 @@ top.common := $(top.src)/common
 top.tests := $(top.sdk)/tests
 top.test_common := $(top.src)/test_common
 top.test_minimal := $(top.src)/test_minimal
+top.test_unit := $(top.src)/test_unit
 
 ### Obtain a list of the real build goals, if any, to determine whether some dependencies apply or not.
 real_build_goals := $(strip $(filter-out clean% docs% headers help,$(if $(MAKECMDGOALS),$(MAKECMDGOALS),none)))
@@ -114,6 +115,7 @@ src_dir.cdi := $(top.cdi)
 src_dir.common := $(top.common)/src
 src_dir.test_common := $(top.test_common)/src
 src_dir.test_minimal := $(top.test_minimal)
+src_dir.test_unit := $(top.test_unit)
 
 # directories with header files
 include_dir.cdi := $(top.cdi)
@@ -151,6 +153,15 @@ depends.test := $(patsubst %.o,%.d,$(objs.test))
 # the end goal of building cdi_test program
 test_program := $(build_dir.bin)/cdi_test
 
+# generate lists for building cdi_test_unit program
+srcs.test_unit := $(wildcard $(src_dir.test_unit)/*.c) $(wildcard $(src_dir.test_common)/*.c)
+objs.test_unit := $(addprefix $(build_dir.obj)/,$(patsubst %.c,%.o,$(notdir $(srcs.test_unit))))
+headers.test_unit := $(foreach dir,$(include_dirs.test_unit),$(wildcard $(dir)/*.h))
+depends.test_unit := $(patsubst %.o,%.d,$(objs.test_unit))
+
+# the end goal of building cdi_test_unit program
+test_program_unit := $(build_dir.bin)/cdi_test_unit
+
 # generate lists for building cdi_test_min_tx programs
 srcs.test_min_tx := $(src_dir.test_minimal)/test_minimal_transmitter.c $(wildcard $(src_dir.test_common)/*.c)
 objs.test_min_tx := $(addprefix $(build_dir.obj)/,$(patsubst %.c,%.o,$(notdir $(srcs.test_min_tx))))
@@ -170,7 +181,7 @@ depends.test_min_rx := $(patsubst %.o,%.d,$(objs.test_min_rx))
 test_program_min_rx := $(build_dir.bin)/cdi_test_min_rx
 
 # all of the header files, used only for "headers" target
-headers.all := $(foreach dir,cdi test test_common test_min_tx test_min_rx,$(headers.$(dir)))
+headers.all := $(foreach dir,cdi test test_common test_min_tx test_min_rx test_unit,$(headers.$(dir)))
 
 # augment compiler flags
 COMMON_COMPILER_FLAG_ADDITIONS := \
@@ -248,7 +259,7 @@ help ::
 	@echo "Build targets:"
 	@echo "    all [default]  - Includes libraries, test program, docs."
 	@echo "    lib            - Builds only the libraries."
-	@echo "    test           - Builds test programs (cdi_test, cdi_test_min_tx, cdi_test_min_rx)."
+	@echo "    test           - Builds test programs (cdi_test, cdi_test_min_tx, cdi_test_min_rx, cdi_test_unit)."
 	@echo "    docs           - Generates all HTML documentation from embedded Doxygen comments."
 	@echo "    docs_api       - Generates only API HTML documentation from embedded Doxygen comments."
 	@echo "    clean          - Removes all build artifacts (debug and release)."
@@ -269,7 +280,7 @@ help ::
 #
 # NOTE: the vpath function does not support ambiguity of files with the same name in different directories. Therefore
 # all .c files used in this project MUST have unique names.
-vpath %.c $(foreach proj,cdi common test test_common test_minimal,$(src_dir.$(proj)))
+vpath %.c $(foreach proj,cdi common test test_common test_minimal test_unit,$(src_dir.$(proj)))
 vpath %.cpp $(src_dir.cdi)
 
 # rule to create the various build output directories
@@ -322,7 +333,7 @@ $(libsdk) : $(libfabric_config_h) $(objs.cdi) $(libfabric) $(libaws) | $(build_d
 # rule to create symlink to CDI monitoring service client source code
 ifneq ($(cdi_sdk_src),)
 $(cdi_sdk_src) :
-	$(Q)ln -s $(top.sdk)/$(notdir $@) $@
+	$(Q)ln -fs $(top.sdk)/$(notdir $@) $@
 endif
 
 # rule to build the AWS SDK
@@ -330,9 +341,9 @@ $(aws_h) $(libaws) : $(cdi_sdk_src) | $(build_dir.libaws)
 	$(Q)cd $(build_dir.libaws) \
 	    && cmake -j $$(nproc) -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_ONLY="monitoring;cdi" \
 	           -DCMAKE_INSTALL_PREFIX=$(build_dir) $(AWS_SDK_ABS) \
-                   -DCMAKE_VERBOSE_MAKEFILE=TRUE \
-                   -DAUTORUN_UNIT_TESTS=FALSE \
-                   -DENABLE_TESTING=FALSE \
+               -DCMAKE_VERBOSE_MAKEFILE=TRUE \
+	           -DAUTORUN_UNIT_TESTS=FALSE \
+	           -DENABLE_TESTING=FALSE \
 	    && $(MAKE) -j $$(nproc) V=$(V) \
 	    && $(MAKE) install V=$(V)
 ifneq ($(aws_h),)
@@ -358,9 +369,9 @@ $(build_dir.obj)/%.d : %.cpp | $(build_dir.obj)
 $(build_dir.obj)/%.o : %.cpp | $(build_dir.obj)
 	$(Q)$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-# rules for building the test program
+# rules for building the test programs
 .PHONY : test
-test : $(test_program) $(test_program_min_tx) $(test_program_min_rx)
+test : $(test_program) $(test_program_min_tx) $(test_program_min_rx) $(test_program_unit)
 $(test_program) : $(objs.test) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
 	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test) $(CDI_LDFLAGS)
@@ -372,6 +383,10 @@ $(test_program_min_tx) : $(objs.test_min_tx) $(libsdk) | $(build_dir.bin)
 $(test_program_min_rx) : $(objs.test_min_rx) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
 	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_min_rx) $(CDI_LDFLAGS)
+
+$(test_program_unit) : $(objs.test_unit) $(libsdk) | $(build_dir.bin)
+	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
+	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_unit) $(CDI_LDFLAGS)
 
 # how to build the docs
 docs_dir.docs := $(build_dir.doc)/all
@@ -423,7 +438,7 @@ $(depends.cdi) : $(libfabric_config_h) $(aws_h)
 
 # include dependency rules from generated files; this is conditional so .d files are only created if needed.
 ifneq ($(real_build_goals),)
--include $(foreach proj,cdi test test_min_tx test_min_rx,$(depends.$(proj)))
+-include $(foreach proj,cdi test test_min_tx test_min_rx test_unit,$(depends.$(proj)))
 endif
 
 # Users can add their own rules to this makefile by creating a makefile in this directory called

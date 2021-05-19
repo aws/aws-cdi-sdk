@@ -15,6 +15,7 @@
 
 #include "adapter_efa.h"
 
+#include "adapter_efa_probe_rx.h"
 #include "adapter_efa_probe_tx.h"
 #include "endpoint_manager.h"
 #include "internal_tx.h"
@@ -114,7 +115,7 @@ static bool GetCompletions(struct fid_cq* completion_queue_ptr, struct fi_cq_dat
 
     int fi_ret = fi_cq_read(completion_queue_ptr, comp_array, *packet_ack_count_ptr);
     // If the returned value is greater than zero, then the value is the number of completion queue messages that were
-    // returned in comp_array. Otherwise a negative value represents an  error or -FI_EAGAIN which means no completions
+    // returned in comp_array. Otherwise a negative value represents an error or -FI_EAGAIN which means no completions
     // were ready.
     if (fi_ret > 0) {
         *packet_ack_count_ptr = fi_ret;
@@ -172,14 +173,16 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
 
         // Send the completion message for the packet.
         (adapter_endpoint_ptr->msg_from_endpoint_func_ptr)(adapter_endpoint_ptr->msg_from_endpoint_param_ptr,
-                                                           packet_ptr);
+                                                           packet_ptr, kEndpointMessageTypePacketSent);
 
 #ifdef DEBUG_PACKET_SEQUENCES
-        CdiCDIPacketCommonHeader* common_hdr_ptr =
-            (CdiCDIPacketCommonHeader*)packet_ptr->sg_list.sgl_head_ptr->address_ptr;
+        CdiProtocolHandle protocol_handle = adapter_endpoint_ptr->protocol_handle;
+        CdiDecodedPacketHeader decoded_header;
+        ProtocolPayloadHeaderDecode(protocol_handle, packet_ptr->sg_list.sgl_head_ptr->address_ptr,
+                                    packet_ptr->sg_list.sgl_head_ptr->size_in_bytes, &decoded_header);
         CDI_LOG_THREAD(kLogInfo, "CQ T[%d] P[%d] S[%d]%s",
-                        common_hdr_ptr->payload_type, common_hdr_ptr->payload_num,
-                        common_hdr_ptr->packet_sequence_num,
+                        decoded_header.payload_type, decoded_header.payload_num,
+                        decoded_header.packet_sequence_num,
                         (kAdapterPacketStatusOk != packet_ptr->tx_state.ack_status) ? " Err" : "");
 #endif
     }
@@ -199,19 +202,10 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
 CdiReturnStatus EfaTxEndpointOpen(EfaEndpointState* endpoint_state_ptr, const char* remote_address_str, int dest_port)
 {
     (void)remote_address_str;
-    CdiReturnStatus rs = kCdiStatusOk;
+    (void)dest_port;
 
     // Setup additional Tx specific resources.
-    rs = EfaAdapterProbeEndpointCreate(endpoint_state_ptr, &endpoint_state_ptr->probe_endpoint_handle);
-    if (!ProbeTxControlCreateInterface(endpoint_state_ptr->probe_endpoint_handle, remote_address_str, dest_port)) {
-        rs = kCdiStatusAllocationFailed;
-    }
-
-    if (kCdiStatusOk != rs) {
-        EfaTxEndpointClose(endpoint_state_ptr);
-    }
-
-    return rs;
+    return EfaAdapterProbeEndpointCreate(endpoint_state_ptr, &endpoint_state_ptr->probe_endpoint_handle);
 }
 
 CdiReturnStatus EfaTxEndpointPoll(EfaEndpointState* endpoint_state_ptr)
@@ -228,10 +222,8 @@ CdiReturnStatus EfaTxEndpointReset(EfaEndpointState* endpoint_state_ptr)
 
 CdiReturnStatus EfaTxEndpointClose(EfaEndpointState* endpoint_state_ptr)
 {
-    // Must close the control interface before destroying resources they use, such as control_packet_fifo_handle.
-    // Close sockets if they are open (CdiAdapterCloseEndpoint checks if handle is NULL).
-    ControlInterfaceDestroy(endpoint_state_ptr->tx_control_handle);
-    endpoint_state_ptr->tx_control_handle = NULL;
+    // Stop the probe endpoint (stops its thread) before freeing probe related resources.
+    ProbeEndpointStop(endpoint_state_ptr->probe_endpoint_handle);
 
     ProbeEndpointDestroy(endpoint_state_ptr->probe_endpoint_handle);
     endpoint_state_ptr->probe_endpoint_handle = NULL;
@@ -267,9 +259,12 @@ CdiReturnStatus EfaTxEndpointSend(const AdapterEndpointHandle handle, const Pack
     }
 
 #ifdef DEBUG_PACKET_SEQUENCES
-    CdiCDIPacketCommonHeader* common_hdr_ptr = (CdiCDIPacketCommonHeader*)packet_ptr->sg_list.sgl_head_ptr->address_ptr;
-    CDI_LOG_THREAD(kLogInfo, "T[%d] P[%3d] S[%3d]", common_hdr_ptr->payload_type, common_hdr_ptr->payload_num,
-                   common_hdr_ptr->packet_sequence_num);
+    CdiProtocolHandle protocol_handle = handle->protocol_handle;
+    CdiDecodedPacketHeader decoded_header = { 0 };
+    ProtocolPayloadHeaderDecode(protocol_handle, packet_ptr->sg_list.sgl_head_ptr->address_ptr,
+                                packet_ptr->sg_list.sgl_head_ptr->size_in_bytes, &decoded_header);
+    CDI_LOG_THREAD(kLogInfo, "T[%d] P[%3d] S[%3d]", decoded_header.payload_type, decoded_header.payload_num,
+                   decoded_header.packet_sequence_num);
 #endif
 
     if (!PostTxData(endpoint_state_ptr, msg_iov_array, iov_count, packet_ptr, flush_packets)) {

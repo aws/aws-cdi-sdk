@@ -458,8 +458,8 @@ int main(int argc, const char **argv)
         }
 
         // Get a time string to add to the log.
-        char time_str[MAX_FORMATTED_TIMEZONE_STRING_LENGTH];
-        CdiOsGetLocalTimeString(time_str, MAX_FORMATTED_TIMEZONE_STRING_LENGTH);
+        char time_str[CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH];
+        CdiOsGetLocalTimeString(time_str, CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH);
         CDI_LOG_THREAD(kLogInfo, "-- Running CDI Test App -- %s", time_str);
 
         // Print the command line to the log.
@@ -492,44 +492,6 @@ int main(int argc, const char **argv)
 
         // Print the test_settings data structure for each connection.
         PrintTestSettings(test_settings, num_connections_found);
-
-// The following runs some minimal unit testing when the respective defines are enabled.
-// Normally, this code is not run.
-#ifdef TEST_UNIT_DEBUG
-        extern bool TestUnitRxReorder(void);
-        if (TestUnitRxReorder()) {
-            CDI_LOG_THREAD(kLogInfo, "Unit test for rx_reorder passed.");
-        } else {
-            CDI_LOG_THREAD(kLogError, "Unit tests for rx_reorder failed.");
-            got_error = true;
-        }
-
-        extern bool TestUnitTimeout(void);
-        if (TestUnitTimeout()) {
-            CDI_LOG_THREAD(kLogInfo, "Unit test for timeouts passed.");
-        } else {
-            CDI_LOG_THREAD(kLogError, "Unit tests for timeouts failed.");
-            got_error = true;
-        }
-
-        extern bool TestUnitSgl(void);
-        if (TestUnitSgl()) {
-            CDI_LOG_THREAD(kLogInfo, "Unit test for scatter/gather lists passed.");
-        } else {
-            CDI_LOG_THREAD(kLogError, "Unit tests for scatter/gather lists failed.");
-            got_error = true;
-        }
-
-#ifdef DEBUG_T_DIGEST_UNIT_TEST // Set this define in configuration.h
-        extern bool CdiTestUnitTDigest(void);
-        if (CdiTestUnitTDigest()) {
-            CDI_LOG_THREAD(kLogInfo, "Unit test for t-Digest passed.");
-        } else {
-            CDI_LOG_THREAD(kLogError, "Unit tests for t-Digest failed.");
-            got_error = true;
-        }
-#endif // DEBUG_T_DIGEST_LOGGING
-#endif // TEST_UNIT_DEBUG
 
         // Run the test!  Note that we allocate the number of connections specified on the command line.
         if (!got_error) {

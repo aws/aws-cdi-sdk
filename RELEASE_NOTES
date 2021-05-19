@@ -5,19 +5,47 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
-CDI (Cloud Digital Interface) SDK Version 2.x.x - XX/XX/XXXX
+CDI (Cloud Digital Interface) SDK Version 2.2.0 - 05/19/2021
 ---------------------------------------------------------------------------
 
 What's New
 ------------
 
+ * Changed protocol version to 2.1 (CDI_PROTOCOL_VERSION.CDI_PROTOCOL_MAJOR_VERSION) and added new probe protocol
+   version 4 (CDI_PROBE_VERSION) to support bidirectional sockets used by probe control interface.
+ * Added new OS APIs for sockets. See CdiOsSocketGetSockAddrIn(), CdiOsSocketReadFrom() and CdiOsSocketWriteTo().
+ * Using bidirectional sockets for the out-of-band probe control interface. A single socket is used for each
+   connection. Compatibilty with previous versions of the probe control interface is maintained.
+ * Added "CDI_" prefix to defines and types in cdi_os_api.h to prevent name collisions with application code.
+ * Added support for AVM connections that contain multiple endpoints. They can be used to demux and mux video, audio and
+	 ancillary data streams. Changes include:
+    * New documentation and diagrams. See include/cdi_avm_api.h.
+    * New AVM APIs. See CdiAvmTxStreamConnectionCreate(), CdiAvmTxStreamEndpointCreate() and CdiAvmEndpointTxPayload().
+    * Removed stream_identifier from CdiTxConfigDataStream structure. See include/cdi_avm_api.h.
+    * Removed stream_identifier from CdiCoreConnectionCbData structure. Added remote_ip_str and remote_dest_port. See
+      include/cdi_core_api.h.
+    * Added new command line options to the cdi_test application. See "-XS" or "--new_conns".
+* Added payload transfer start time. It is available in the CdiAvmRxCbData/CdiRawRxCbData structure parameter passed to
+  the Rx payload application callbacks. See CdiCoreCbData, tx_start_time_microseconds in include/cdi_core_api.h.
 * Added new CdiCoreNetworkAdapterDestroy() API. This allows dynamic destruction of resources created by
   CdiCoreNetworkAdapterInitialize(). Before using CdiCoreNetworkAdapterDestroy(), must ensure all connections using the
   adapter are closed. See CdiCoreConnectionDestroy(). Also, all connections and adapters must be closed/destroyed before
   using CdiCoreShutdown().
-
 * Added internal reference count to Logger state data. NOTE: Each time CdiLoggerInitialize() is called,
   CdiLoggerShutdown() must be called once. The test applications have been updated to call CdiLoggerShutdown().
+* Added support for additional internal transport layer protocols. See new types/APIs in cdi/src/protocol.h.
+    * Protocol version has been added to the application connection callback data. See negotiated_... in
+      CdiCoreConnectionCbData in include/cdi_core_api.h.
+    * CDI_PROTOCOL_MAJOR_VERSION has been replaced with CDI_PROBE_VERSION.
+    * Supports previous protocol/probe version. See cdi/src/protocol_v1.c.
+    * New protocol/probe version 2.0.3. Contains the new probe command kProbeStateSendProtocolVersion, used to negotiate
+      a compatible version between local and remote endpoints. Protocol and probe data structure differences are
+      described in cdi/src/protocol_v2.c.
+* Fixed two values in video baseline profile for TCS ("ST2065-1", "ST428-1") and colorimetry ("ST2065-1", "ST2065-3")
+  that improperly had underscores rather than hyphens. This change brings the implementation in line with the
+  specifications (ST 2110-20, -30). A calculated risk assessment has been made to not follow the normal process of
+  incrementing the API version number. While this does introduce an unhandled incompatibility, the likelihood of this
+  affecting actual workflows was deemed to be insignificant.
 
 Bug Fixes
 ------------
@@ -39,7 +67,7 @@ What's New
 * Added use of the CDI_INTERFACE define to APIs that were not previously using it. Only affects the new Windows DLL
   targets.
 * When using CdiOsMemAllocHugePage() API on Linux, the size of bytes allocated must be a multiple of
-  HUGE_PAGES_BYTE_SIZE. See definition in cdi_os_api.h. If not, the memory will not be freed when using the
+  CDI_HUGE_PAGES_BYTE_SIZE. See definition in cdi_os_api.h. If not, the memory will not be freed when using the
   CdiOsMemFreeHugePage() API.
 * Renamed the queue type kQueueMultipleWriters to kQueueMultipleWritersFlag to clarify that the value is a flag,
   not an OS signal type. See include/cdi_queue_api.h.
@@ -52,8 +80,8 @@ Bug Fixes
 * Fixed a problem in RxPollFreeBuffer() that could lead to an assert (segfault in debug build) in CdiListRemove() when
   trying to remove an entry from an empty list.
 * Fixed a Rx adapter buffer memory leak when using the CdiCoreRxFreeBuffer() API from multiple threads.
-* Fixed a seg-fault when using the CdiLoggerMultilineEnd() API from multiple threads.
-* Fixed a seg-fault in the Windows variant when logging to stdout and stdout did not exist. The global logger created
+* Fixed a segfault when using the CdiLoggerMultilineEnd() API from multiple threads.
+* Fixed a segfault in the Windows variant when logging to stdout and stdout did not exist. The global logger created
   via CdiCoreInitialize() API is now used instead of stdout. Details at: https://github.com/aws/aws-cdi-sdk/pull/25
 * Fixed problem with Linux Makefile that could cause the AWS-SDK to always partially re-build on Linux.
 

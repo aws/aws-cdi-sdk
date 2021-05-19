@@ -219,12 +219,14 @@ static bool TestRxVerify(TestConnectionInfo* connection_info_ptr)
                 }
 
                 // IMPORTANT: Now that we are done with the received SGL, free its memory.
-                CdiReturnStatus rs = CdiCoreRxFreeBuffer(&payload_state.sgl);
-                if (rs != kCdiStatusOk) {
-                    TEST_LOG_CONNECTION(kLogError, "Connection[%s] Unable to free SGL buffer [%s].",
-                                        test_settings_ptr->connection_name_str,
-                                        CdiCoreStatusToString(rs));
-                    connection_info_ptr->pass_status = false;
+                if (payload_state.sgl.sgl_head_ptr) {
+                    CdiReturnStatus rs = CdiCoreRxFreeBuffer(&payload_state.sgl);
+                    if (rs != kCdiStatusOk) {
+                        TEST_LOG_CONNECTION(kLogError, "Connection[%s] Unable to free SGL buffer [%s].",
+                                            test_settings_ptr->connection_name_str,
+                                            CdiCoreStatusToString(rs));
+                        connection_info_ptr->pass_status = false;
+                    }
                 }
                 payload_count++;
             } else {
@@ -372,9 +374,9 @@ static void RxCoreCallbackCleanup(const CdiCoreCbData* core_cb_data_ptr, const C
 
     // possible to check SGL data size against the payload size. If the transmitter is sending RIFF file payloads the
     // receiver must also use the -riff option to avoid payload size checking issues.
-    if (!(test_settings_ptr->stream_settings[stream_index].riff_file &&
-                                (stream_info_ptr->user_data_read_file_handle == NULL))) {
-
+    if (kCdiStatusOk == core_cb_data_ptr->status_code &&
+        !(test_settings_ptr->stream_settings[stream_index].riff_file &&
+          (stream_info_ptr->user_data_read_file_handle == NULL))) {
         // Check if payload size matches the expected size from test settings.
         if (sgl_ptr->total_data_size != stream_info_ptr->next_payload_size) {
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d] Payload size[%d] does not match expected size[%d].",
@@ -789,6 +791,24 @@ static void VerifyAvmConfiguration(const CdiAvmRxCbData* cb_data_ptr, CdiAvmBase
 }
 
 /**
+ * This function finds the index of the stream in the stream_settings array using the specified endpoint handle.
+ *
+ * @param connection_info_ptr Pointer to test connection information.
+ * @param stream_identifier The stream identifier to search for.
+ *
+ * @return The index of the selected stream_settings array. If an index is not found, return -1.
+ */
+static int GetStreamSettingsIndexFromStreamId(const TestConnectionInfo* connection_info_ptr, int stream_identifier)
+{
+    for (int i = 0; i < connection_info_ptr->test_settings_ptr->number_of_streams; i++) {
+        if (connection_info_ptr->test_settings_ptr->stream_settings[i].stream_id == stream_identifier) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/**
  * Handle the RX callback for AVM data payloads.  This callback will check AVM specific configuration data before
  * calling TestRxProcessCoreCallbackData().
  *
@@ -804,17 +824,22 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
     StreamSettings* stream_settings_ptr = NULL;
 
     // Use the stream id to find the stream index in the stream_settings array.
-
-    int stream_index = GetStreamSettingsIndex(test_settings_ptr, cb_data_ptr->avm_extra_data.stream_identifier);
+    int stream_index = GetStreamSettingsIndexFromStreamId(connection_info_ptr,
+                                                          cb_data_ptr->avm_extra_data.stream_identifier);
     if (stream_index >= 0) {
         stream_settings_ptr = &test_settings_ptr->stream_settings[stream_index];
     }
 
     // Verify that a stream was found with the user-defined stream_id.
     if (stream_settings_ptr == NULL) {
-        TEST_LOG_CONNECTION(kLogError, "Connection[%s]: No stream matching the Stream ID[%d] in this connection.",
-                            test_settings_ptr->connection_name_str, cb_data_ptr->avm_extra_data.stream_identifier);
+        TEST_LOG_CONNECTION(kLogError, "Connection[%s]: No stream matching the endpoint[%llu] in this connection.",
+                            test_settings_ptr->connection_name_str, cb_data_ptr->core_cb_data.connection_handle);
         connection_info_ptr->pass_status = false;
+        if (kCdiStatusOk != cb_data_ptr->core_cb_data.status_code) {
+            TEST_LOG_CONNECTION(kLogError, "Connection[%s] RX Callback received error code[%d], Message[%s]",
+                                test_settings_ptr->connection_name_str, cb_data_ptr->core_cb_data.status_code,
+                                CdiCoreStatusToString(cb_data_ptr->core_cb_data.status_code));
+        }
     } else {
         // Always check that the expected type of AVM payload (audio, video, etc.) was received if config provided.
         CdiAvmBaselineConfig baseline_config = { 0 };
@@ -904,7 +929,7 @@ THREAD TestRxCreateThread(void* arg_ptr)
 
     // Create a FIFO instance for the callback routine to pass SGL pointers to the this checking thread.
     if (!got_error) {
-        got_error = !CdiFifoCreate("Test Payload RxPayloadState FIFO", MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION,
+        got_error = !CdiFifoCreate("Test Payload RxPayloadState FIFO", MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION*10,
                                    sizeof(RxPayloadState), NULL, NULL, &connection_info_ptr->fifo_handle);
     }
 
@@ -1080,6 +1105,7 @@ THREAD TestRxCreateThread(void* arg_ptr)
         }
     }
 
+    CdiFifoFlush(connection_info_ptr->fifo_handle); // Ensure FIFO has been flushed before destroying it.
     CdiFifoDestroy(connection_info_ptr->fifo_handle);
     CdiLoggerDestroyLog(connection_info_ptr->app_file_log_handle);
     CdiLoggerDestroyLog(connection_info_ptr->sdk_file_callback_log_handle);

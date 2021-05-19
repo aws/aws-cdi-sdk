@@ -69,9 +69,9 @@ struct CdiThreadInfo
     /// Thread ID.
     pthread_t      thread_id;
     /// Name attached to thread, if any.
-    char           thread_name_str[MAX_THREAD_NAME];
+    char           thread_name_str[CDI_MAX_THREAD_NAME];
     /// Thread function that will be used in ThreadFuncHelper().
-    ThreadFuncName thread_func;
+    CdiThreadFuncName thread_func;
     /// The argument given to thread_func.
     void*          thread_func_arg_ptr;
     /// Signal used to start the thread. If NULL, thread starts immediately.
@@ -139,7 +139,7 @@ struct SocketInfo
 static const clockid_t preferred_clock = CLOCK_MONOTONIC;
 
 /// Array of data used to hold signal handlers.
-static SignalHandlerInfo signal_handler_function_array[MAX_SIGNAL_HANDLERS];
+static CdiSignalHandlerInfo signal_handler_function_array[CDI_MAX_SIGNAL_HANDLERS];
 
 /// Number of signal handlers in signal_handler_function_array.
 static int signal_handler_count = 0;
@@ -201,7 +201,7 @@ static void GetTimeout(struct timespec* spec, uint32_t num_ms, clockid_t clock_i
  *  @param sig_act_ptr The pointer to the sigaction structure.
  *  @param func_ptr The pointer to the callback that executes on an intercepted signal.
  */
-static void PopulateSigAction(struct sigaction* sig_act_ptr, SignalHandlerFunction func_ptr)
+static void PopulateSigAction(struct sigaction* sig_act_ptr, CdiSignalHandlerFunction func_ptr)
 {
     memset(sig_act_ptr, 0, sizeof(struct sigaction));
     sig_act_ptr->sa_flags = SA_SIGINFO;
@@ -220,7 +220,7 @@ static void* ThreadFuncHelper(void* thread_ptr)
     CdiThreadInfo* thread_info_ptr = (CdiThreadInfo*)thread_ptr;
 
     // Set any signal handlers that have been set for this thread.
-    for (int i = 0; i < MAX_SIGNAL_HANDLERS; i++) {
+    for (int i = 0; i < CDI_MAX_SIGNAL_HANDLERS; i++) {
         struct sigaction sig_act;
         PopulateSigAction(&sig_act, signal_handler_function_array[i].func_ptr);
         sigaction(signal_handler_function_array[i].signal_num, &sig_act, NULL);
@@ -240,6 +240,34 @@ static void* ThreadFuncHelper(void* thread_ptr)
     return NULL;
 }
 
+/**
+ * Helper function to write an IPv4 UDP packet through a socket.
+ *
+ * @param socket_handle The handle of the socket through which to send the UDP packet.
+ * @param msg_ptr Structure with the details of the packet and optionally the destination address/port.
+ * @param byte_count_ptr Address where to write the number of bytes written to the socket; this pointer is only accessed
+ *                       if the function returns true.
+ *
+ * @return bool true if the write was successful, false if not.
+ */
+static bool SocketWrite(CdiSocket socket_handle, const struct msghdr* msg_ptr, int* byte_count_ptr)
+{
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
+
+    // Send the packet via the socket.
+    const ssize_t rv = sendmsg(info_ptr->fd, msg_ptr, 0);
+
+    // Partial socket writes cannot occur here because the O_NONBLOCK attribute was not used when opening the
+    // socket. So, simply check to see that at least 1 byte was sent and that no error occurred (-1 return
+    // code).
+    if (rv > 0) {
+        *byte_count_ptr = rv;
+        return true;
+    } else {
+        return false;
+    }
+}
+
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -250,11 +278,11 @@ void CdiOsUseLogger(void)
 }
 
 // -- threads --
-bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr)
+bool CdiOsSignalHandlerSet(int signal_num, CdiSignalHandlerFunction func_ptr)
 {
     bool ret = true;
 
-    if (signal_handler_count >= MAX_SIGNAL_HANDLERS) {
+    if (signal_handler_count >= CDI_MAX_SIGNAL_HANDLERS) {
         return false;
     }
 
@@ -272,7 +300,7 @@ bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr)
     return ret;
 }
 
-bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr, const char* thread_name_str,
+bool CdiOsThreadCreatePinned(CdiThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr, const char* thread_name_str,
                              void* thread_func_arg_ptr, CdiSignalType start_signal, int cpu_affinity)
 {
     bool return_val = true;
@@ -292,10 +320,10 @@ bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_
     }
     *thread_id_out_ptr = (CdiThreadID)thread_info_ptr;
 
-    // Name the thread; limit name to MAX_THREAD_NAME characters.
+    // Name the thread; limit name to CDI_MAX_THREAD_NAME characters.
     if (thread_name_str != NULL) {
-        strncpy(thread_info_ptr->thread_name_str, thread_name_str, MAX_THREAD_NAME);
-        thread_info_ptr->thread_name_str[MAX_THREAD_NAME-1] = '\0'; // Ensure string is null-terminated.
+        strncpy(thread_info_ptr->thread_name_str, thread_name_str, CDI_MAX_THREAD_NAME);
+        thread_info_ptr->thread_name_str[CDI_MAX_THREAD_NAME-1] = '\0'; // Ensure string is null-terminated.
     } else {
         thread_info_ptr->thread_name_str[0] = '\0'; // Ensure string is null-terminated.
     }
@@ -726,12 +754,12 @@ bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wai
     bool return_val = true;
     SignalInfo** signal_info_ptr_array = (SignalInfo**)signal_array;
     uint32_t i;
-    uint32_t signal_count_array[MAX_WAIT_MULTIPLE];
+    uint32_t signal_count_array[CDI_MAX_WAIT_MULTIPLE];
     int j;
     bool keep_waiting = true;
 
-    if(num_signals > MAX_WAIT_MULTIPLE) {
-        ERROR_MESSAGE("Exceeded maximum number of wait signals[%d]", MAX_WAIT_MULTIPLE);
+    if(num_signals > CDI_MAX_WAIT_MULTIPLE) {
+        ERROR_MESSAGE("Exceeded maximum number of wait signals[%d]", CDI_MAX_WAIT_MULTIPLE);
         return false;
     }
 
@@ -767,7 +795,7 @@ bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wai
                     return_val = CdiOsSignalWait((CdiSignalType)signal_info_ptr_array[i], new_timeout_ms, &timed_out);
                     if (timed_out) {
                         if (ret_signal_index_ptr) {
-                            *ret_signal_index_ptr = OS_SIG_TIMEOUT;
+                            *ret_signal_index_ptr = CDI_OS_SIG_TIMEOUT;
                         }
                         keep_waiting = false;
                         break;
@@ -846,7 +874,7 @@ bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wai
                     int ret_code = pthread_cond_timedwait(&signal_info_ptr_array[0]->condition, &signal_info_ptr_array[0]->mutex, &sTime);
                     if (ret_code) {
                         if (ret_signal_index_ptr) {
-                            *ret_signal_index_ptr = OS_SIG_TIMEOUT;
+                            *ret_signal_index_ptr = CDI_OS_SIG_TIMEOUT;
                         }
                         keep_waiting = false;
                         break;
@@ -912,8 +940,8 @@ void* CdiOsMemAllocHugePage(int32_t mem_size)
 {
     void* mem_ptr = NULL;
 
-    if (mem_size != ((mem_size / HUGE_PAGES_BYTE_SIZE) * HUGE_PAGES_BYTE_SIZE)) {
-        ERROR_MESSAGE("Failed to allocate hugepages. Size must be a multiple of [%d] bytes.", HUGE_PAGES_BYTE_SIZE);
+    if (mem_size != ((mem_size / CDI_HUGE_PAGES_BYTE_SIZE) * CDI_HUGE_PAGES_BYTE_SIZE)) {
+        ERROR_MESSAGE("Failed to allocate hugepages. Size must be a multiple of [%d] bytes.", CDI_HUGE_PAGES_BYTE_SIZE);
     } else {
         mem_ptr = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
         if (mem_ptr == MAP_FAILED) {
@@ -1215,9 +1243,9 @@ int CdiOsGetLocalTimeString(char* time_str, int max_string_len)
 
     // gmtoff is the number of seconds to add to the UTC to get local time. The GNU description of the tm struct can
     // be found here: https://www.gnu.org/software/libc/manual/html_node/Broken_002ddown-Time.html.
-    char time_zone_str[MAX_FORMATTED_TIMEZONE_STRING_LENGTH] = {0};
+    char time_zone_str[CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH] = {0};
     if (local_time.tm_gmtoff == 0) {
-        snprintf(time_zone_str, MAX_FORMATTED_TIMEZONE_STRING_LENGTH, "Z");
+        snprintf(time_zone_str, CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH, "Z");
     } else {
         int offset = local_time.tm_gmtoff / 3600;
         int mod = local_time.tm_gmtoff % 3600;
@@ -1228,7 +1256,7 @@ int CdiOsGetLocalTimeString(char* time_str, int max_string_len)
             min_offset = 30;
         }
 
-        snprintf(time_zone_str, MAX_FORMATTED_TIMEZONE_STRING_LENGTH, "%+03d:%02d", offset, min_offset);
+        snprintf(time_zone_str, CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH, "%+03d:%02d", offset, min_offset);
     }
 
     return snprintf(time_str, max_string_len, "[%.4d-%.2d-%.2dT%.2d:%.2d:%.2d.%06d%s] ",
@@ -1283,19 +1311,34 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
     return ret;
 }
 
-bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr)
+bool CdiOsSocketGetPort(CdiSocket socket_handle, int* port_number_ptr)
 {
     if (port_number_ptr == NULL) {
         return false;
     }
 
-    SocketInfo* info_ptr = (SocketInfo*)s;
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
     struct sockaddr_in sin;
     socklen_t len = sizeof(sin);
     if (getsockname(info_ptr->fd, (struct sockaddr *)&sin, &len) != 0) {
         return false;
     } else {
         *port_number_ptr = ntohs(sin.sin_port);
+        return true;
+    }
+}
+
+bool CdiOsSocketGetSockAddrIn(CdiSocket socket_handle, struct sockaddr_in* sockaddr_in_ptr)
+{
+    if (sockaddr_in_ptr == NULL) {
+        return false;
+    }
+
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
+    socklen_t len = sizeof(*sockaddr_in_ptr);
+    if (getsockname(info_ptr->fd, (struct sockaddr*)sockaddr_in_ptr, &len) != 0) {
+        return false;
+    } else {
         return true;
     }
 }
@@ -1308,10 +1351,16 @@ bool CdiOsSocketClose(CdiSocket s)
     return ret;
 }
 
-bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
+bool CdiOsSocketRead(CdiSocket socket_handle, void* buffer_ptr, int* byte_count_ptr)
+{
+    return CdiOsSocketReadFrom(socket_handle, buffer_ptr, byte_count_ptr, NULL);
+}
+
+bool CdiOsSocketReadFrom(CdiSocket socket_handle, void* buffer_ptr, int* byte_count_ptr,
+                         struct sockaddr_in* source_address_ptr)
 {
     bool ret = true;
-    SocketInfo* info_ptr = (SocketInfo*)s;
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
 
     // Only one file descriptor will be waited on.
     struct pollfd fdset = {
@@ -1319,10 +1368,11 @@ bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
         .events = POLLIN
     };
 
-    // Time out every 10 ms to check for shutdown.
+    // Time out every 10 ms so caller can check for shutdown.
     const int rv = poll(&fdset, 1, 10);
     if (rv > 0) {
-        const size_t bytes_read = read(info_ptr->fd, buffer_ptr, *byte_count_ptr);
+        socklen_t addrlen = (source_address_ptr) ? sizeof(*source_address_ptr) : 0;
+        const size_t bytes_read = recvfrom(info_ptr->fd, buffer_ptr, *byte_count_ptr, 0, source_address_ptr, &addrlen);
         if (bytes_read <= 0) {
             ret = false;
         } else {
@@ -1339,27 +1389,30 @@ bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
     return ret;
 }
 
-bool CdiOsSocketWrite(CdiSocket s, struct iovec* iov, int iovcnt, int* byte_count_ptr)
+bool CdiOsSocketWrite(CdiSocket socket_handle, struct iovec* iov, int iovcnt, int* byte_count_ptr)
 {
-    SocketInfo* info_ptr = (SocketInfo*)s;
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
 
-    // Send the packet via the socket.
     const struct msghdr msg = {
         .msg_iov = iov,
         .msg_iovlen = iovcnt,
         .msg_name = &info_ptr->addr,
         .msg_namelen = sizeof(info_ptr->addr)
     };
-    const ssize_t rv = sendmsg(info_ptr->fd, &msg, 0);
-    // Partial socket writes cannot occur here because the O_NONBLOCK attribute was never used when opening the
-    // socket's descriptor.  So, simply check to see that at least 1 byte was sent and that no error occurred (-1 return
-    // code).
-    if (rv > 0) {
-        *byte_count_ptr = rv;
-        return true;
-    } else {
-        return false;
-    }
+    return SocketWrite(socket_handle, &msg, byte_count_ptr);
+}
+
+bool CdiOsSocketWriteTo(CdiSocket socket_handle, struct iovec* iov, int iovcnt,
+                        const struct sockaddr_in* destination_address_ptr, int* byte_count_ptr)
+{
+    struct sockaddr_in address_copy = *destination_address_ptr; // Make a copy since msghdr.msg_name is non-const.
+    const struct msghdr msg = {
+        .msg_name = &address_copy,
+        .msg_namelen = sizeof address_copy,
+        .msg_iov = iov,
+        .msg_iovlen = iovcnt
+    };
+    return SocketWrite(socket_handle, &msg, byte_count_ptr);
 }
 
 bool CdiOsEnvironmentVariableSet(const char* name_str, const char* value_str)

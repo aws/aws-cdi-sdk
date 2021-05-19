@@ -42,6 +42,9 @@
 /// and apply them.
 //#define ENABLE_TEST_INTERNAL_CORE_STATS_RECONFIGURE
 
+/// @brief Enables a dynamic endpoint creation/destruction test that is defined in test_dynamic.c.
+//#define ENABLE_TEST_INTERNAL_DYNAMIC_ENDPOINT
+
 //*********************************************************************************************************************
 //********************************************* FEATURES TO AID DEBUGGING *********************************************
 //*********************************************************************************************************************

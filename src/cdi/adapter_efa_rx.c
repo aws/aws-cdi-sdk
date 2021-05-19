@@ -66,7 +66,6 @@ static bool PostRxBuffer(EfaEndpointState* endpoint_state_ptr, const struct iove
     };
 
     const uint64_t flags = FI_RECV | (more_to_post ? FI_MORE : 0);
-
     const ssize_t fi_ret = fi_recvmsg(endpoint_state_ptr->endpoint_ptr, &msg, flags);
     if (-FI_EAGAIN == fi_ret) {
         CDI_LOG_THREAD(kLogError, "Got -FI_EAGAIN from fi_recvmsg(). This is not expected.");
@@ -124,14 +123,17 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
             }
 
 #ifdef DEBUG_PACKET_SEQUENCES
-            CdiCDIPacketCommonHeader* common_hdr_ptr = (CdiCDIPacketCommonHeader*)comp_array[i].buf;
-            CDI_LOG_THREAD(kLogInfo, "CQ T[%d] P[%d] S[%d] A[%p]", common_hdr_ptr->payload_type,
-                            common_hdr_ptr->payload_num, common_hdr_ptr->packet_sequence_num, comp_array[i].buf);
+            CdiProtocolHandle protocol_handle = efa_endpoint_ptr->adapter_endpoint_ptr->protocol_handle;
+            CdiDecodedPacketHeader decoded_header = { 0 };
+            ProtocolPayloadHeaderDecode(protocol_handle, comp_array[i].buf, comp_array[i].len, &decoded_header);
+            CDI_LOG_THREAD(kLogInfo, "CQ T[%d] P[%d] S[%d] A[%p]", decoded_header.payload_type,
+                           decoded_header.payload_num, decoded_header.packet_sequence_num, comp_array[i].buf);
 #endif
 
             // Send the completion message for the packet.
             AdapterEndpointState* aep_ptr = efa_endpoint_ptr->adapter_endpoint_ptr;
-            (aep_ptr->msg_from_endpoint_func_ptr)(aep_ptr->msg_from_endpoint_param_ptr, &packet);
+            (aep_ptr->msg_from_endpoint_func_ptr)(aep_ptr->msg_from_endpoint_param_ptr, &packet,
+                                                  kEndpointMessageTypePacketReceived);
 
             // NOTE: Instead of using PostRxBuffer() here to make a new Rx buffer available to libfabric, we will do
             // it after the packet's buffer has been freed. See EfaRxEndpointRxBuffersFree(). This can be done
@@ -158,6 +160,9 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
 {
     bool ret = false;
 
+    // Ensure buffer was properly freed before allocating a new one. See FreePacketPool().
+    assert(NULL == endpoint_state_ptr->rx_state.allocated_buffer_ptr);
+
     const int aligned_packet_size = (packet_size + packet_buffer_alignment - 1) & ~(packet_buffer_alignment - 1);
 
     // Huge pages are not guaranteed to be aligned at all. Add enough padding to be able to shift the starting address
@@ -165,7 +170,7 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
     int allocated_size = aligned_packet_size * packet_count + packet_buffer_alignment;
 
     // Round up to next even-multiple of hugepages byte size.
-    allocated_size = ((allocated_size + HUGE_PAGES_BYTE_SIZE-1) / HUGE_PAGES_BYTE_SIZE) * HUGE_PAGES_BYTE_SIZE;
+    allocated_size = ((allocated_size + CDI_HUGE_PAGES_BYTE_SIZE-1) / CDI_HUGE_PAGES_BYTE_SIZE) * CDI_HUGE_PAGES_BYTE_SIZE;
 
     uint8_t* allocated_ptr = CdiOsMemAllocHugePage(allocated_size);
     if (NULL == allocated_ptr) {
@@ -289,14 +294,22 @@ CdiReturnStatus EfaRxEndpointReset(EfaEndpointState* endpoint_state_ptr)
     CdiPoolPutAll(endpoint_state_ptr->rx_state.packet_sgl_entries_pool_handle);
     ProbeEndpointReset(endpoint_state_ptr->probe_endpoint_handle);
 
+    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)endpoint_state_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->type_specific_ptr;
+
+    // If Tx control handle exists, flush its adapter Tx queue.
+    if (efa_con_ptr->control_interface_handle) {
+        AdapterEndpointHandle control_handle = ControlInterfaceGetEndpoint(efa_con_ptr->control_interface_handle);
+        CdiQueueFlush(control_handle->tx_packet_queue_handle);
+    }
+
     return kCdiStatusOk;
 }
 
 CdiReturnStatus EfaRxEndpointClose(EfaEndpointState* endpoint_state_ptr)
 {
     // NOTE: Since the caller is the application's thread, use SDK_LOG_GLOBAL() for any logging in this function.
-    ControlInterfaceDestroy(endpoint_state_ptr->tx_control_handle);
-    endpoint_state_ptr->tx_control_handle = NULL;
+    // Stop the probe endpoint (stops its thread) before freeing probe related resources.
+    ProbeEndpointStop(endpoint_state_ptr->probe_endpoint_handle); // Ensure probe thread is stopped.
 
     ProbeEndpointDestroy(endpoint_state_ptr->probe_endpoint_handle);
     endpoint_state_ptr->probe_endpoint_handle = NULL;

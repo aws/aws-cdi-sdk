@@ -217,6 +217,9 @@ const char* CdiCoreStatusToString(CdiReturnStatus status)
         { kCdiStatusInternalIdle,          "Internal poll thread is idle"   },
         { kCdiStatusAdapterDuplicateEntry, "Duplicate adapter entry"        },
         { kCdiStatusProfileNotSupported,   "Baseline profile not supported" },
+        { kCdiStatusProbePacketCrcError,   "Probe packet CRC error"         },
+        { kCdiStatusProbePacketInvalidSize, "Probe packet size is invalid"  },
+        { kCdiStatusRxPayloadBackPressure, "Rx back pressure"               },
         { CDI_INVALID_ENUM_VALUE,          "<invalid>"                      },
     };
 

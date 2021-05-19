@@ -37,11 +37,6 @@
 /// @brief Forward reference of structure to create pointers later.
 typedef struct EndpointManagerGlobalState* EndpointManagerGlobalHandle;
 
-/// @brief Used to define a stream identifier that is not being used. Stream identifiers that are exposed through the
-/// CDI API are 16-bit values. The values used internally are int types (32-bits), so we can identify an external
-/// stream ID from this sentinel value.
-#define STREAM_IDENTIFIER_NOT_USED      (int)(-1)
-
 /**
  * @brief Structure to hold variables that would otherwise be global in order to keep them contained in one manageable
  * location. All members will be explicitly zeroed at program startup.
@@ -86,9 +81,11 @@ typedef struct StatisticsState StatisticsState;
 /// Forward reference of structure to create pointers later.
 typedef struct StatisticsState* StatisticsHandle;
 /// Forward reference of structure to create pointers later.
-typedef struct StatisticsState* StatisticsHandle;
-/// Forward reference of structure to create pointers later.
 typedef struct CdiStatsCallbackState* CdiStatsCallbackHandle;
+/// Forward reference of structure to create pointers later.
+typedef struct ReceiveBufferState ReceiveBufferState;
+/// Forward reference of structure to create pointers later.
+typedef struct ReceiveBufferState* ReceiveBufferHandle;
 
 /**
  * @brief This enumeration is used in the CdiConnectionState and CdiEndpointState structures to indicate which of the
@@ -125,6 +122,13 @@ typedef struct {
     /// @brief Pointer to error message string. It uses a pool, so must be freed after the user-registered callback
     /// function has been invoked.
     char* error_message_str;
+
+     /// Payload Tx start time in microseconds since epoch. NOTE: Only valid for protocols 2 and later.
+    uint64_t tx_start_time_microseconds;
+
+    /// @brief The time in microsends according to the value returned by CdiOsGetMicroseconds() at which this payload
+    /// should be sent to the application callback thread. This member is only used if the receive buffer is enabled.
+    uint64_t receive_buffer_send_time;
 } AppPayloadCallbackData;
 
 /// Forward reference of structure to create pointers later.
@@ -142,7 +146,8 @@ struct TxPayloadState {
 
     AppPayloadCallbackData app_payload_cb_data; ///< Used to hold data for application payload callback.
 
-    CdiPayloadCDIPacketState payload_packet_state; ///< CDI packet state data.
+    CdiPayloadPacketState payload_packet_state; ///< CDI packet state data.
+
     int data_bytes_transferred;                 ///< Number of application payload data bytes transferred.
     CdiSinglyLinkedList completed_packets_list; ///< List of packets for current payload that have been acknowledged.
 
@@ -215,34 +220,47 @@ struct CdiReorderList {
     CdiReorderList* next_ptr;  ///< Next pointer to neighboring lists for this sgl.
     uint16_t top_sequence_num; ///< Sequence number of the packet sitting at the top of this sgl.
     uint16_t bot_sequence_num; ///< Sequence number of the packet sitting at the bottom of this sgl.
-    CdiSgList sglist;          ///< Sgl list in this reorder list.
+    CdiSgList sglist;          ///< Sgl in this reorder list.
 };
+
+/**
+ * @brief Enumeration used to maintain payload state.
+ */
+typedef enum {
+    kPayloadIdle = 0,          ///< Payload state is not in use yet.
+    kPayloadPacketZeroPending, ///< Payload is waiting for packet 0.
+    kPayloadInProgress,        ///< Payload is in progress.
+    kPayloadError,             ///< Payload received an error and has not yet been sent; transition to Ignore when sent.
+    kPayloadIgnore,            ///< Error payload has been sent and we now ignore packets for it.
+    kPayloadComplete,          ///< Payload has completed but has not been sent; transition to Idle when sent.
+} CdiPayloadState;
 
 /**
  * @brief This defines a structure that contains all of the state information for the receiving side of a payload. The
  * data is only required internally by the RxPacketReceive() function and not used elsewhere.
  */
 typedef struct {
+    CdiListEntry list_entry;          ///< Allows this structure to be used as part of a list.
+
     CdiPayloadState payload_state;    ///< Current processing state of this payload (ie. idle, in progress, etc).
 
     RxPayloadWorkRequestState work_request_state; ///< Rx work request state
 
-    uint8_t payload_num;              ///< Payload number obtained from CDI packet #0 header.
-
-    /// @brief Packet sequence number obtained from each CDI header, packet_sequence_num = 0xffff is illegal and
-    /// represents the packet_sequence_num has not yet been updated.
-    uint16_t packet_sequence_num;
+    int payload_num;                  ///< Payload number obtained from CDI packet #0 header.
+    int packet_count;                 ///< Number of Rx packets in this payload.
+    int ignore_packet_count;          ///< Number of Rx packets received since payload was set to ignore state.
 
     bool suspend_warnings;            ///< Use this flag to suspend packet warnings for a payload.
     int expected_payload_data_size;   ///< Expected total payload size in bytes obtained from CDI packet #0 header.
     int data_bytes_received;          ///< Number of payload bytes received.
     CdiReorderList* reorder_list_ptr; ///< Pointer to what will end up being the single SGL that comprises the payload
+    uint32_t last_total_packet_count; ///< Value of total_packet_count when most recent packet of the payload was received.
     uint8_t* linear_buffer_ptr;       ///< Address to be used if assembling into a linear buffer.
 } RxPayloadState;
 
 /**
  * @brief This defines a structure that contains all of the state information for an rx connection.
- * The data is only required internally by the RxPacketReceive() function and not used elsewhere.
+ * The data is only required internally by receive connections.
  */
 typedef struct {
     /// @brief Copy of the configuration data. Copies of strings are made and are then referenced in this structure.
@@ -255,41 +273,22 @@ typedef struct {
     /// @brief Memory pool for payload SGL entries that arrive out of order (CdiReorderList).
     CdiPoolHandle reorder_entries_pool_handle;
 
-    /// @brief Monotonic time when first payload arrived. This value is only used when Rx buffer_delay_ms is non-zero.
-    /// Used to calculate time deltas for future payloads. NOTE: The value may be reset when a payload arrives that is
-    /// not within the expected range.
-    uint64_t payload_base_monotonic_time_us;
-
-    /// @brief UTC time when first payload arrived. This value is only used when Rx buffer_delay_ms is non-zero. Used to
-    /// calculate time deltas for future payloads. NOTE: The value may be reset when a payload arrives that is not
-    /// within the expected range.
-    uint64_t payload_base_utc_us;
-
-    /// @brief Timestamp of first payload. This value is only used when the Rx buffer_delay_ms is non-zero. Used to
-    /// calculate timestamp deltas for future payloads. NOTE: The value may be reset when a payload arrives that is not
-    /// within the expected range.
-    uint64_t payload_base_timestamp_us;
-
-    /// @brief A count tracking the number of times a payload is received and the systems montonic clock does not match
-    /// the realtime clock. This isn't an error but it could be indicative of clock instability within the sytem.
-    uint32_t realtime_monotonic_clock_mismatch_count;
-
-    /// @brief Pool used to hold payload state data (AppPayloadCallbackData) that is stored in ptp_ordered_payload_list
-    /// ordered by PTP. NOTE: This pool is only used if Rx payload buffering is enabled for the connection (@see
-    /// CdiRxConfigData.buffer_delay_ms).
-    CdiPoolHandle ordered_payload_pool_handle;
-
     /// @brief Pool used to hold state data while receiving payloads.
     CdiPoolHandle rx_payload_state_pool_handle;
-
-    /// @brief List of AppPayloadCallbackData structures order by PTP (lowest PTP value first). NOTE: This list is only
-    /// used if Rx payload buffering is enabled for the connection (@see CdiRxConfigData.buffer_delay_ms).
-    CdiList ptp_ordered_payload_list;
 
     /// @brief This is true if the first payload has been received after a connection has been established. This is set
     /// to false whenever a connection is changed and remains false until a payload is received after the connection has
     /// been restablished.
     bool received_first_payload;
+
+    /// @brief Handle to the queue into which completely and ordered received paylaods are to be placed to be sent to
+    /// the application's callback function. This will be the input queue to the receive delay buffer (if enabled) or
+    /// it will be the input queue to the application callback thread if the receive delay buffer is disabled.
+    CdiQueueHandle active_payload_complete_queue_handle;
+
+    /// @brief Handle to the receive buffer object if the receive delay buffer is enabled. If the receive delay buffer
+    /// is disabled, this value is NULL.
+    ReceiveBufferHandle receive_buffer_handle;
 } RxConState;
 
 /**
@@ -297,7 +296,8 @@ typedef struct {
  */
 typedef struct {
     CdiCsID payload_num_lock;                   ///< Lock used to protect incrementing the payload number.
-    uint8_t payload_num;                        ///< Payload number.
+    uint16_t payload_num;                       ///< Payload number. Increments by 1 for each payload sent.
+    uint32_t packet_id;                         ///< Packet ID. Increments by 1 for each packet sent (wraps at 0).
 } TxEndpointState;
 
 /**
@@ -305,15 +305,20 @@ typedef struct {
  * internally by the RxPacketReceive() API and not used elsewhere.
  */
 typedef struct {
-    /// @brief The number of the expected payload number for the beginning of the payload buffer window.
-    /// Sized to match payload_num from CDI header packet #0.
-    uint8_t payload_num_window_min;
+    /// @brief The total number of packets received since the connection was established. Value wraps to zero, so must
+    /// use wrap logic when calculating differences.
+    uint32_t total_packet_count;
 
     CdiQueueHandle free_buffer_queue_handle; ///< Circular queue of CdiSgList structures.
 
-    /// @brief Current state of the payload number being processed. Array is addressed by payload_num, which is a
-    /// uint8_t.
-    RxPayloadState* payload_state_array_ptr[1<<(sizeof(uint8_t)<<3)];
+    /// @brief Current state of the payload number being processed. Array is addressed by payload_num, masked by
+    /// MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER-1.
+    RxPayloadState* payload_state_array_ptr[MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER];
+    /// @brief The current payload_state_array_ptr index that is pending completion or an error state, waiting to be
+    /// sent in payload sequence order.
+    int rxreorder_current_index;
+    /// @brief The number of packets that are currently buffered in the Rx payload reorder process.
+    int rxreorder_buffered_packet_count;
 } RxEndpointState;
 
 /**
@@ -321,18 +326,17 @@ typedef struct {
  * are opaque to the user's program where it only has a pointer to a declared but not defined structure.
  */
 struct CdiEndpointState {
+    /// Set to kMagicEndpoint when allocated, checked at every API function to help ensure validity.
+    uint32_t magic;
+
     /// The instance of the connection this Tx/Rx object is associated with.
     CdiConnectionState* connection_state_ptr;
 
     /// The instance of the adapter endpoint object underlying this endpoint.
     AdapterEndpointState* adapter_endpoint_ptr;
 
-    /// @brief Used to identify the source data stream that should be routed to this endpoint. This allows multiple
-    /// streams to be carried on a single connection and uniquely routed to different endpoints. If the value is
-    /// STREAM_IDENTIFIER_NOT_USED, then all stream data is routed to this endpoint. For send type endpoints, the value
-    /// is set when the endpoint is created. For receive type endpoints, the value is provided via the control inteface
-    /// from the remote transmitter's endpoint as part of the endpoint probe process.
-    int stream_identifier;
+    char remote_ip_str[MAX_IP_STRING_LENGTH];   ///< Remote IP address as a string.
+    struct sockaddr_in remote_sockaddr_in;  ///< Remote socket address structure.
 
     /// @brief Name of the stream. It is used as an identifier when generating log messages, connection callbacks and
     /// statistics data.
@@ -350,13 +354,22 @@ struct CdiEndpointState {
 };
 
 /**
+ * @brief This enumeration is used to indicate the current backpressure state of a connection.
+ */
+typedef enum {
+    kCdiBackPressureNone, ///< No back pressure. Connection is performing normally.
+    /// Back pressure is currently active due to unable to allocate resources, so throwing away payloads.
+    kCdiBackPressureActive,
+} CdiBackPressureState;
+
+/**
  * @brief Structure definition behind the connection handles shared with the user's application program. Its contents
  * are opaque to the user's program where it only has a pointer to a declared but not defined structure.
  */
 struct CdiConnectionState {
     /// Used to store an instance of this object in a list using this element as the list item.
     CdiListEntry list_entry;
-    /// Set to kMagicCon when allocated, checked at every API function to help ensure validity.
+    /// Set to kMagicConnection when allocated, checked at every API function to help ensure validity.
     uint32_t magic;
 
     /// Signal used to start connection threads. A separate signal is used for the adapter endpoints (see
@@ -367,6 +380,9 @@ struct CdiConnectionState {
     /// @brief Handle of Endpoint Manager for this connection. Manages the list of endpoints associated with this
     /// connection.
     EndpointManagerHandle endpoint_manager_handle;
+
+    /// The instance of the default Tx endpoint object underlying this connection.
+    CdiEndpointState* default_tx_endpoint_ptr;
 
     /// The instance of the adapter this Tx/Rx object is associated with.
     CdiAdapterState* adapter_state_ptr;
@@ -409,16 +425,17 @@ struct CdiConnectionState {
     CdiLogHandle log_handle; ///< Logger handle used for this connection. If NULL, the global logger is used.
 
     CdiPoolHandle error_message_pool; ///< Pool used to hold error message strings.
+
+    CdiBackPressureState back_pressure_state; ///< Back pressure state.
 };
 
-/// Somewhat random number to aid in detecting invalid TX/RX handles.
-static const uint32_t kMagicCon = 0x8ab73d45;
-
-/// Somewhat random number to aid in detecting invalid memory handles.
-static const uint32_t kMagicMem = 0x9bc84e56;
-
-/// Somewhat random number to aid in detecting invalid adapter handles.
-static const uint32_t kMagicAdapter = 0xacd95f67;
+/// Random numbers to aid in detecting invalid handles.
+enum {
+    kMagicAdapter    = 0xacd95f67,
+    kMagicConnection = 0xf98b0b0d,
+    kMagicEndpoint   = 0x725c4e3a,
+    kMagicMemory     = 0xdcf693e4,
+};
 
 /**
  * @brief This defines a structure used to contain all of the state information for a linear buffer.
@@ -442,8 +459,6 @@ struct CdiMemoryState {
 
     CdiBufferType buffer_type;         ///< Indicates which structure of the union is valid.
     MemoryLinearState linear_state;    ///< The internal state of the structure if handleType is HandleTypeLinear.
-
-    RxPayloadState* payload_state_ptr; ///< Received payload state pointer, used to return memory allocation to pool.
 
     CdiSgList endpoint_packet_buffer_sgl; ///< The SGL and entries to be returned to the endpoint's free lists.
 };

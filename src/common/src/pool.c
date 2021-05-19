@@ -57,10 +57,7 @@ typedef struct {
     CdiSinglyLinkedList free_list;             ///< List of free items.
     CdiList in_use_list;                       ///< Doubly linked list of items currently in use.
     CdiCsID lock;                              ///< Lock used to protect multi-thread access the pool.
-
-#ifdef DEBUG
-    CdiPoolCallback debug_cb_ptr;              ///< Pointer to user-provided debug callback function
-#endif
+    CdiPoolCallback pool_cb_ptr;               ///< Pointer to user-provided callback function
 } CdiPoolState;
 
 //*********************************************************************************************************************
@@ -413,18 +410,16 @@ bool CdiPoolGet(CdiPoolHandle handle, void** ret_item_ptr)
         *ret_item_ptr = GetDataItem(pool_item_ptr);
     }
 
-#ifdef DEBUG
-    if (state_ptr->debug_cb_ptr) {
-        CdiPoolCbData cb_data = {
-            .is_put = false,
-            .num_entries = CdiSinglyLinkedListSize(&state_ptr->free_list),
-            .item_data_ptr = *ret_item_ptr
-        };
-        (state_ptr->debug_cb_ptr)(&cb_data);
-    }
-#endif
-
     if (pool_item_ptr) {
+        if (state_ptr->pool_cb_ptr) {
+            CdiPoolCbData cb_data = {
+                .is_put = false,
+                .num_entries = CdiSinglyLinkedListSize(&state_ptr->free_list),
+                .item_data_ptr = *ret_item_ptr
+            };
+            (state_ptr->pool_cb_ptr)(&cb_data);
+        }
+
         // Add the item to the in use list.
         CdiListAddHead(&state_ptr->in_use_list, &pool_item_ptr->in_use_list_entry);
     }
@@ -445,16 +440,14 @@ void CdiPoolPut(CdiPoolHandle handle, const void* item_ptr)
     CdiSinglyLinkedListPushHead(&state_ptr->free_list, &pool_item_ptr->list_entry);
     CdiListRemove(&state_ptr->in_use_list, &pool_item_ptr->in_use_list_entry);
 
-#ifdef DEBUG
-    if (state_ptr->debug_cb_ptr) {
+    if (state_ptr->pool_cb_ptr) {
         CdiPoolCbData cb_data = {
             .is_put = true,
             .num_entries = CdiSinglyLinkedListSize(&state_ptr->free_list),
             .item_data_ptr = item_ptr
         };
-        (state_ptr->debug_cb_ptr)(&cb_data);
+        (state_ptr->pool_cb_ptr)(&cb_data);
     }
-#endif
 
     MultithreadedRelease(state_ptr);
 }
@@ -518,7 +511,23 @@ uint32_t CdiPoolGetItemSize(CdiPoolHandle handle)
 int CdiPoolGetFreeItemCount(CdiPoolHandle handle)
 {
     CdiPoolState* state_ptr = (CdiPoolState*)handle;
-    return CdiSinglyLinkedListSize(&state_ptr->free_list);
+
+    MultithreadedReserve(state_ptr);
+    int count = CdiSinglyLinkedListSize(&state_ptr->free_list);
+    MultithreadedRelease(state_ptr);
+
+    return count;
+}
+
+int CdiPoolGetTotalItemCount(CdiPoolHandle handle)
+{
+    CdiPoolState* state_ptr = (CdiPoolState*)handle;
+
+    MultithreadedReserve(state_ptr);
+    int count = state_ptr->pool_item_count;
+    MultithreadedRelease(state_ptr);
+
+    return count;
 }
 
 bool CdiPoolForEachItem(CdiPoolHandle handle, CdiPoolItemOperatorFunction operator_function, const void* context_ptr)
@@ -543,18 +552,16 @@ bool CdiPoolForEachItem(CdiPoolHandle handle, CdiPoolItemOperatorFunction operat
     return ret;
 }
 
-#ifdef DEBUG
-void CdiPoolDebugEnable(CdiPoolHandle handle, CdiPoolCallback cb_ptr)
+void CdiPoolCallbackEnable(CdiPoolHandle handle, CdiPoolCallback cb_ptr)
 {
     CdiPoolState* state_ptr = (CdiPoolState*)handle;
 
-    state_ptr->debug_cb_ptr = cb_ptr;
+    state_ptr->pool_cb_ptr = cb_ptr;
 }
 
-void CdiPoolDebugDisable(CdiPoolHandle handle)
+void CdiPoolCallbackDisable(CdiPoolHandle handle)
 {
     CdiPoolState* state_ptr = (CdiPoolState*)handle;
 
-    state_ptr->debug_cb_ptr = NULL;
+    state_ptr->pool_cb_ptr = NULL;
 }
-#endif // DEBUG

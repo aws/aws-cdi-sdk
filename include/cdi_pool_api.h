@@ -120,7 +120,7 @@ typedef struct {
 } CdiPoolCbData;
 
 /**
- * @brief Prototype of pool debug callback function.
+ * @brief Prototype of pool callback function.
  *
  * This callback function is invoked whenever an item is put to or get from the pool.
  *
@@ -359,6 +359,15 @@ CDI_INTERFACE uint32_t CdiPoolGetItemSize(CdiPoolHandle handle);
 CDI_INTERFACE int CdiPoolGetFreeItemCount(CdiPoolHandle handle);
 
 /**
+ * @brief Get the total number of items in the pool.
+ *
+ * @param handle Pool handle.
+ *
+ * @return Number of total items.
+ */
+CDI_INTERFACE int CdiPoolGetTotalItemCount(CdiPoolHandle handle);
+
+/**
  * Call a function for each item in the pool. If any items are allocated from the pool when this function is called, no
  * operations will be performed and false will be returned.
  *
@@ -373,23 +382,21 @@ CDI_INTERFACE int CdiPoolGetFreeItemCount(CdiPoolHandle handle);
 CDI_INTERFACE bool CdiPoolForEachItem(CdiPoolHandle handle, CdiPoolItemOperatorFunction operator_function,
                                       const void* context_ptr);
 
-#ifdef DEBUG
 /**
  * Enable triggering of a user provided callback function whenever CdiPoolGet() or CdiPoolPut() is used. This is
- * typically used to provide debug information to the caller.
+ * typically used to provide debug information to the caller or the ability to maintain custom in-use lists.
  *
  * @param handle pool handle.
  * @param cb_ptr Pointer to callback function.
  */
-CDI_INTERFACE void CdiPoolDebugEnable(CdiPoolHandle handle, CdiPoolCallback cb_ptr);
+CDI_INTERFACE void CdiPoolCallbackEnable(CdiPoolHandle handle, CdiPoolCallback cb_ptr);
 
 /**
- * Disable a previously enabled pool debug callback.
+ * Disable a previously enabled pool callback.
  *
  * @param handle pool handle.
  */
-CDI_INTERFACE void CdiPoolDebugDisable(CdiPoolHandle handle);
-#endif //DEBUG
+CDI_INTERFACE void CdiPoolCallbackDisable(CdiPoolHandle handle);
 
 /**
  * Destroy a memory pool.

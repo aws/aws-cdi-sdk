@@ -3,6 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 16.0.29403.142
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cdi_test", "cdi_test.vcxproj", "{5DE0BAAC-0EB0-425B-8E33-34E370AF832F}"
+	ProjectSection(ProjectDependencies) = postProject
+		{1B1FD6A9-1E0E-4166-BFD1-DB2632E643C0} = {1B1FD6A9-1E0E-4166-BFD1-DB2632E643C0}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cdi_sdk", "cdi_sdk.vcxproj", "{41B2B832-0419-4AA6-98CF-5312E8608FA0}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -19,6 +22,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cdi_test_min_tx", "cdi_test_min_tx.vcxproj", "{5DE0BAAC-0EB0-425B-8E33-34E370AF832E}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cdi_test_min_rx", "cdi_test_min_rx.vcxproj", "{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cdi_test_unit", "cdi_test_unit.vcxproj", "{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -76,6 +81,14 @@ Global
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}.Release_DLL|x64.Build.0 = Release_DLL|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}.Release|x64.ActiveCfg = Release|x64
 		{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}.Release|x64.Build.0 = Release|x64
+		{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}.Debug_DLL|x64.ActiveCfg = Debug|x64
+		{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}.Debug_DLL|x64.Build.0 = Debug|x64
+		{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}.Debug|x64.ActiveCfg = Debug|x64
+		{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}.Debug|x64.Build.0 = Debug|x64
+		{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}.Release_DLL|x64.ActiveCfg = Release|x64
+		{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}.Release_DLL|x64.Build.0 = Release|x64
+		{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}.Release|x64.ActiveCfg = Release|x64
+		{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

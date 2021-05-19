@@ -33,7 +33,9 @@
 
 /// Enum/String keys for ProbeState. NOTE: Must match ProbeState.
 static const EnumStringKey probe_state_key_array[] = {
+    { kProbeStateIdle,                   "Idle" },
     { kProbeStateSendReset,              "SendReset" },
+    { kProbeStateSendProtocolVersion,    "SendProtocolVersion" },
     { kProbeStateResetting,              "Resetting" },
     { kProbeStateResetDone,              "ResetDone" },
     { kProbeStateWaitForStart,           "WaitForStart" },
@@ -42,6 +44,7 @@ static const EnumStringKey probe_state_key_array[] = {
     { kProbeStateEfaConnected,           "EFAConnected" },
     { kProbeStateEfaConnectedPing,       "EFAPing" },
     { kProbeStateEfaReset,               "EfaReset" },
+    { kProbeStateDestroy,                "Destroy" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
 };
 
@@ -51,6 +54,7 @@ static const EnumStringKey probe_command_key_array[] = {
     { kProbeCommandPing,      "Ping" },
     { kProbeCommandConnected, "Connected" },
     { kProbeCommandAck,       "Ack" },
+    { kProbeCommandProtocolVersion, "Protocol Version" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
 };
 

@@ -110,11 +110,12 @@ struct TestConnectionInfo {
     /// Lock used to protect access to connection connection_handle.
     CdiCsID connection_handle_lock;
 
-    /// The connection handle returned by the CdiRawTxCreate or CdiRawRxCreate functions.
+    /// The connection handle returned by the Cdi...TxCreate or Cdi...RxCreate functions.
     CdiConnectionHandle connection_handle;
 
-    /// Array of stream handles associated with this connection.
-    CdiEndpointHandle stream_endpoint_handle_array[MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION];
+    /// Array of Tx stream handles associated with this connection. Each handle is returned by the
+    /// CdiAvmTxStreamEndpointCreate function.
+    CdiEndpointHandle tx_stream_endpoint_handle_array[MAX_ENDPOINTS_PER_CONNECTION];
 
     /// This connection's index;
     int my_index;
@@ -394,15 +395,5 @@ bool IsPayloadNumLessThanTotal(int current_payload_num, int total_payloads);
 CdiPtpTimestamp GetPtpTimestamp(const TestConnectionInfo* connection_info_ptr,
                                 const StreamSettings* stream_settings_ptr,
                                 const TestConnectionStreamInfo* stream_info_ptr, int ptp_rate_count);
-
-/**
- * This function finds the index of the stream in the stream_settings array using the user-defined stream id.
- *
- * @param test_settings_ptr Pointer to TestSettings structure that contains the array of streams for this connection.
- * @param stream_id The stream id given to this stream from the command-line.
- *
- * @return The index of the selected stream_settings array. If an index is not found, return -1.
- */
-int GetStreamSettingsIndex(const TestSettings* test_settings_ptr, int stream_id);
 
 #endif // TEST_CONTROL_H__

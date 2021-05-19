@@ -21,8 +21,33 @@
  *
  * @section avm_intro_sec Introduction
  *
- * The Cloud Digital Interface Audio, Video and Metadata (CDI_AVM) is the library which implements the
-   low-latency reliable transport of audio, video and metadata between EC2 instances within the Amazon network.
+ * The Cloud Digital Interface Audio, Video and Metadata (CDI_AVM) is the library which implements the low-latency
+ * reliable transport of audio, video and metadata between EC2 instances within the Amazon network.
+ *
+ * The AVM interface of the CDI SDK is intended mainly for interoperabilty among vendors while remaining extensible. To
+ * better encourage interoperability, a constrained set of audio, video, and ancillary data formats is supported. Audio,
+ * for example, is always 24 bit linear PCM in big endian format. Ancillary data follows IETF RFC 8331. Video similarly
+ * has a narrow set of supported parameters. Together, these comprise the CDI baseline profile.
+ *
+ * Extensibility is addressed through a generic configuration mechanism which is used even for the CDI baseline profile.
+ * It is based on a structure containing a URI and optional parameter data. The URI is defined such that it ensures
+ * uniqueness and optionally points to documentation on how to interpret the parameter data. The format of the payload
+ * data is also dependent on the URI. Helper functions ease the process of creating and parsing the generic
+ * configuration structure for the CDI baseline profile.
+ *
+ * The URIs used for the CDI baseline profile are:
+ * @code
+   https://cdi.elemental.com/specs/baseline-video
+   https://cdi.elemental.com/specs/baseline-audio
+   https://cdi.elemental.com/specs/baseline-ancillary-data
+   @endcode
+ *
+ * The documents at those URIs fully specify the various aspects of each media type including the parameter data and the
+ * in memory representation of payload data. These files also reside in CDI_SDK/doc/specs.
+ *
+ * Since the media format details are specificated outside of the SDK, new formats (beyond the CDI baseline profile) can
+ * be added without changing the SDK. They can be publicly documented or they can remain private for situations where
+ * interoperability is not required.
  *
  * @section avm_high_level_arch CDI-AVM Architecture Overview
  *
@@ -30,44 +55,47 @@
  *
  * @image html "high_level_architecture.jpg"
  *
- * @section ec2_usage_avm CDI-AVM EC2 Instance Workflow Example
+ * @section ec2_usage_avm CDI-AVM EC2 Instance Workflow Example (Connections with single endpoints)
+ *
+ * Connections that contain a single endpoint can be used to transmit video, audio and ancillary data streams that are
+ * identified by a "stream_identifier" as defined in the API. This allows applications to transmit and receive multiple
+ * streams using single endpoints. See the CdiAvmTxCreate(), CdiAvmTxPayload(), and CdiCoreConnectionDestroy() API
+ * functions.
  *
  * The diagram shown below provides an example of using the CDI-AVM API on multiple EC2 instances and multiple TX/RX
- * connections. Each connection supports multiple video, audio and ancillary data streams that are identified by a
- * "stream_identifier" as defined in the API.
+ * connections.
  *
  * @image html "avm_ec2_usage_example.jpg"
+ *
+ * @section ec2_mux_demux_avm CDI-AVM EC2 Instance Workflow Example (Connections with multiple endpoints)
+ *
+ * Connections that contain multiple endpoints can be used to demux and mux video, audio and ancillary data streams that
+ * are identified by a "stream_identifier" as defined in the API. This allows an application to receive multiple streams
+ * on a single connection and transmit them to different endpoints. It also allows an application to receive multiple
+ * streams from different endpoints on a single connection. Demuxing and muxing of the streams is handled entirely by
+ * the CDI-AVM SDK. See the CdiAvmTxStreamConnectionCreate(), CdiAvmTxStreamEndpointCreate(), CdiAvmEndpointTxPayload(),
+ * and CdiAvmStreamEndpointDestroy() API functions.
+ *
+ * The diagram shown below provides an example of using the CDI-AVM API on multiple EC2 instances using single
+ * connections that contain multiple endpoints to demux and mux video, audio and ancillary data streams.
+ *
+ * @image html "multi_endpoint_flow.jpg"
  *
  * @section avm_main_api CDI-AVM Application Programming Interface (API)
  *
  * The API is declared in: @ref cdi_avm_api.h
  *
- * The diagram shown below provides an example of the typical CDI-AVM TX/RX workflow using the CDI-AVM API.
+ * @subsection avm_api Connections with Single Endpoints
  *
+ * The diagram shown below provides an example of the typical CDI-AVM TX/RX workflow using the CDI-AVM API for a
+ * connection that contains a single endpoint.
  * @image html "avm_api_workflow.jpg"
  *
- * The AVM interface of the CDI SDK is intended mainly for interoperabilty among vendors while remaining extensible.
- * To better encourage interoperability, a constrained set of audio, video, and ancillary data formats is supported.
- * Audio, for example, is always 24 bit linear PCM in big endian format. Ancillary data follows IETF RFC 8331. Video
- * similarly has a narrow set of supported parameters. Together, these comprise the CDI baseline profile.
+ * @subsection multi_avm_api Connections with Multiple Endpoints
  *
- * Extensibility is addressed through a generic configuration mechanism which is used even for the CDI baseline
- * profile. It is based on a structure containing a URI and optional parameter data. The URI is defined such that it
- * ensures uniqueness and optionally points to documentation on how to interpret the parameter data. The format of the
- * payload data is also dependent on the URI. Helper functions ease the process of creating and parsing the generic
- * configuration structure for the CDI baseline profile.
- *
- * The URIs used for the CDI baseline profile are:
- * https://cdi.elemental.com/specs/baseline-audio
- * https://cdi.elemental.com/specs/baseline-video
- * https://cdi.elemental.com/specs/baseline-ancillary-data
- *
- * The documents at those URIs fully specify the various aspects of each media type including the parameter data and the
- * in memory representation of payload data. These files also reside in CDI_SDK/doc/specs.
- *
- * Since the media format details are specificated outside of the SDK, new formats (beyond the CDI baseline profile)
- * can be added without changing the SDK. They can be publicly documented or they can remain private for situations
- * where interoperability is not required.
+ * The diagram shown below provides an example of the typical CDI-AVM TX/RX workflow using the CDI-AVM API for a
+ * connection that contains multiple endpoints.
+ * @image html "multi_endpoint_avm_api_workflow.jpg"
  */
 
 #include <stdint.h>
@@ -179,13 +207,9 @@ typedef struct {
 typedef void (*CdiAvmTxCallback)(const CdiAvmTxCbData* data_ptr);
 
 /**
- * @brief Stream configuration data used by the CdiAvmTxCreateStreams() API.
+ * @brief Stream configuration data used by the CdiAvmTxStreamEndpointCreate() API function.
  */
 typedef struct {
-    /// @brief Used to identify the data stream number associated with this Tx stream. This allows multiple streams to
-    /// be carried on a single connection and be uniquely transmitted to a unique IP and port.
-    uint16_t stream_identifier;
-
     /// @brief The IP address of the host which is to receive the flow from this transmit stream. NOTE: This must be the
     /// dotted form of an IPv4 address. DNS may be supported in the future.
     const char* dest_ip_addr_str;
@@ -230,9 +254,57 @@ CDI_INTERFACE CdiReturnStatus CdiAvmTxCreate(CdiTxConfigData* config_data_ptr, C
                                              CdiConnectionHandle* ret_handle_ptr);
 
 /**
+ * Create an instance of an AVM transmitter that uses multiple stream endpoints. A stream identifier value is used to
+ * uniquely identify each stream. Payloads are transmitted using the CdiAvmEndpointTxPayload() API function, which
+ * contains the stream identifier. The value determines which matching endpoint to use to transmit the payload. This API
+ * function only creates instance data for the connection. Use the CdiAvmTxCreateStream() and CdiAvmStreamDestroy() API
+ * functions to dynamically create and destroy stream endpoints associated with this connection. When the instance is no
+ * longer needed, use the CdiCoreConnectionDestroy() API function to free-up resources that are being used by it.
+ *
+ * NOTE: Newly created data structures that are passed in to this function should be properly initialized before being
+ * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
+ * before setting the desired members to the actual values required.
+ *
+ * @param config_data_ptr Pointer to transmitter configuration data. Copies of the data in the configuration data
+ *                        structure are made as needed. A local variable can be used for composing the structure since
+ *                        its contents are not needed after this function returns. NOTE: Within the structure,
+ *                        dest_ip_addr_str and dest_port are only used for generating the name of the connection if one
+ *                        was not provided. The IP and port are defined as part of the configuration data passed to
+ *                        CdiAvmTxCreateStream(), when creating streams.
+ * @param tx_cb_ptr Address of the user function to call whenever a payload has been transmitted or a transmit timeout
+ *                  error has occurred.
+ * @param ret_handle_ptr Pointer to returned connection handle. The handle is used as a parameter to other API functions
+ *                       to identify this specific transmitter.
+ *
+ * @return A value from the CdiReturnStatus enumeration.
+ */
+CDI_INTERFACE CdiReturnStatus CdiAvmTxStreamConnectionCreate(CdiTxConfigData* config_data_ptr,
+                                                             CdiAvmTxCallback tx_cb_ptr,
+                                                             CdiConnectionHandle* ret_handle_ptr);
+
+/**
+ * Create an instance of an AVM stream endpoint that is associated with the specified stream connection.
+ *
+ * NOTE: Newly created data structures that are passed in to this function should be properly initialized before being
+ * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
+ * before setting the desired members to the actual values required.
+ *
+ * @param handle Stream connection handle returned by a previous call to CdiAvmTxCreateStreamConnection().
+ * @param stream_config_ptr Pointer to stream configuration data. Copies of the data in this structure are made as
+ *                          needed.
+ * @param ret_handle_ptr Pointer to returned endpoint handle. The handle is used as a parameter to other API functions
+ *                       to identify this specific stream endpoint.
+ *
+ * @return A value from the CdiReturnStatus enumeration.
+ */
+CDI_INTERFACE CdiReturnStatus CdiAvmTxStreamEndpointCreate(CdiConnectionHandle handle,
+                                                           CdiTxConfigDataStream* stream_config_ptr,
+                                                           CdiEndpointHandle* ret_handle_ptr);
+
+/**
  * Destroy a specific AVM stream endpoint and free resources that were created for it.
  *
- * @param handle Connection handle returned by the CdiAvmTxCreateStream() API.
+ * @param handle Connection handle returned by the CdiAvmTxCreateStream() API function.
  *
  * @return A value from the CdiReturnStatus enumeration.
  */
@@ -258,13 +330,15 @@ CDI_INTERFACE CdiReturnStatus CdiAvmRxCreate(CdiRxConfigData* config_data_ptr, C
                                              CdiConnectionHandle* ret_handle_ptr);
 
 /**
- * Transmit a payload of data to the receiver. This function is asynchronous and will immediately return. The user
- * callback function CdiAvmTxCallback() registered through CdiAvmTxCreate() will be invoked when the payload has been
- * acknowledged by the remote receiver or a transmission timeout occurred.
+ * Transmit a payload of data to the receiver. The connection must have been created with CdiAvmTxCreate(). Connections
+ * that were created by calling CdiAvmTxStreamConnectionCreate() must use CdiAvmEndpointTxPayload() instead. This
+ * function is asynchronous and will immediately return. The user callback function CdiAvmTxCallback() registered
+ * through CdiAvmTxCreate() will be invoked when the payload has been acknowledged by the remote receiver or a
+ * transmission timeout occurred.
  *
  * MEMORY NOTE: The payload_config_ptr, avm_config_ptr, CdiSgList and SGL entries memory can be modified or released
- * immediately after the function returns. However, the the buffers pointed to in the SGL must not be modified or
- * released until after the CdiAvmTxCallback() has occurred.
+ * immediately after the function returns. However, the buffers pointed to in the SGL must not be modified or released
+ * until after the CdiAvmTxCallback() has occurred.
  *
  * NOTE: Newly created data structures that are passed in to this function should be properly initialized before being
  * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
@@ -282,10 +356,13 @@ CDI_INTERFACE CdiReturnStatus CdiAvmRxCreate(CdiRxConfigData* config_data_ptr, C
  *                       previous payload was transmitted.
  * @param sgl_ptr Scatter-gather list containing the data to be transmitted. The addresses in the SGL must point to
  *                locations that reside within the memory region specified in CdiAdapterData at ret_tx_buffer_ptr.
- * @param max_latency_microsecs Maximum latency in microseconds. If the transmission time of a payload exceeds this
- *                              value, the CdiAvmTxCallback() API function will be invoked with an error.
+ * @param max_latency_microsecs Maximum latency in microseconds. If this value is specified as 0, there will be no
+ *                              warning messages generated for late payloads. If a value is specified, and the
+ *                              transmission time of a payload exceeds this value, the CdiAvmTxCallback() API function
+ *                              will be invoked with an error.
  *
- * @return A value from the CdiReturnStatus enumeration.
+ * @return A value from the CdiReturnStatus enumeration. kCdiStatusInvalidHandle will be returned if the connection
+ *         handle was returned by CdiAvmTxStreamEndpointCreate() instead of CdiAvmTxCreate().
  *
  * @see CdiRawTxPayload() for additional detail about memory management.
  */
@@ -294,6 +371,42 @@ CDI_INTERFACE CdiReturnStatus CdiAvmTxPayload(CdiConnectionHandle con_handle,
                                               const CdiAvmConfig* avm_config_ptr, const CdiSgList* sgl_ptr,
                                               int max_latency_microsecs);
 
+/**
+ * Transmit a payload of data to a remote endpoint. Endpoint handles are obtained through
+ * CdiAvmTxStreamConnectionCreate(). This function is asynchronous and will immediately return. The user callback
+ * function CdiAvmTxCallback() registered through CdiAvmTxCreate() will be invoked when the payload has been
+ * acknowledged by the remote receiver or a transmission timeout occurred.
+ *
+ * MEMORY NOTE: The payload_config_ptr, avm_config_ptr, CdiSgList and SGL entries memory can be modified or released
+ * immediately after the function returns. However, the buffers pointed to in the SGL must not be modified or released
+ * until after the CdiAvmTxCallback() has occurred.
+ *
+ * NOTE: Newly created data structures that are passed in to this function should be properly initialized before being
+ * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
+ * before setting the desired members to the actual values required.
+ *
+ * @param endpoint_handle Connection handle returned by a previous call to CdiAvmTxCreate().
+ * @param payload_config_ptr Pointer to payload configuration data. Part of the data is sent along with the payload and
+ *                           part is provided to the registered user TX callback function.
+ * @param avm_config_ptr Pointer to configuration data that describes the contents of this payload and subsequent
+ *                       payloads. The first time this function is called for a given stream_id (in
+ *                       payload_config_ptr->avm_extra_data) in the connection, a value must be specified so the
+ *                       receiver can identify the format of the payload data. Afterwards, NULL shall be specified
+ *                       unless some aspect of the configuration for this stream has changed since the previous payload
+ *                       was transmitted.
+ * @param sgl_ptr Scatter-gather list containing the data to be transmitted. The addresses in the SGL must point to
+ *                locations that reside within the memory region specified in CdiAdapterData at ret_tx_buffer_ptr.
+ * @param max_latency_microsecs Maximum latency in microseconds. If the transmission time of a payload exceeds this
+ *                              value, the CdiAvmTxCallback() API function will be invoked with an error.
+ *
+ * @return A value from the CdiReturnStatus enumeration.
+ *
+ * @see CdiRawTxPayload() for additional detail about memory management.
+ */
+CDI_INTERFACE CdiReturnStatus CdiAvmEndpointTxPayload(CdiEndpointHandle endpoint_handle,
+                                                      const CdiAvmTxPayloadConfig* payload_config_ptr,
+                                                      const CdiAvmConfig* avm_config_ptr, const CdiSgList* sgl_ptr,
+                                                      int max_latency_microsecs);
 #ifdef __cplusplus
 }
 #endif

@@ -2,6 +2,7 @@
 
 This is the usage guide for the example CDI Test applications ```cdi_test```, ```cdi_test_min_tx```, and ```cdi_test_min_rx```.
 
+- [Test Application User Guide](#test-application-user-guide)
 - [Running the minimal test applications](#running-the-minimal-test-applications)
   - [Minimal test application help](#minimal-test-application-help)
   - [EFA test](#efa-test)
@@ -16,6 +17,7 @@ This is the usage guide for the example CDI Test applications ```cdi_test```, ``
     - [Metadata](#metadata)
     - [Variable sized ancillary payloads with RIFF files](#variable-sized-ancillary-payloads-with-riff-files)
     - [Multi-stream audio/video/metadata](#multi-stream-audiovideometadata)
+    - [Mux/Demux streams](#muxdemux-streams)
   - [Using file-based command-line argument insertion](#using-file-based-command-line-argument-insertion)
     - [Rules for file-based command-line insertion](#rules-for-file-based-command-line-insertion)
     - [Examples](#examples)
@@ -82,7 +84,7 @@ Before running the test commands, **discover the IP addresses** of the transmitt
     ./build/debug/bin/cdi_test_min_rx --local_ip 203.0.113.222 --rx RAW --dest_port 2000 --num_transactions 100 --payload_size 5184000
     ```
 
-1. The AWS CDI SDK prints registration and log messages that show that it is waiting for a connection from the transmitter:
+1. The AWS CDI SDK prints registration and log messages that show it is waiting for a connection from the transmitter:
 
     ```bash
     [18:15:54] [main:232] Initializing test.
@@ -157,7 +159,7 @@ For this test, the IP addresses of the transmit and receive instances must be kn
     --tx_timeout 16666
     ```
 
-1. ```cdi_test``` prints registration and log messages that show that it is waiting for a connection from the transmitter:
+1. ```cdi_test``` prints registration and log messages that show it is waiting for a connection from the transmitter:
 
     ```bash
     [18:56:17] [main:325] -- Running CDI Test  -- 18:56:17 02/26/2020
@@ -369,6 +371,51 @@ Transmitter:
 ```bash
 ./build/debug/bin/cdi_test --adapter EFA --local_ip <tx-ipv4> -X --tx AVM --remote_ip <rx-ipv4> --dest_port 2000 --rate 60 --num_transactions 100 -S --id 1 --payload_size 5184000 --pattern INC --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0 -S --id 2 --payload_size 6216 --pattern INC --avm_audio 51 48KHz EN -S --id 3 --payload_size 50 --pattern SHL --pat_start 1 --avm_anc
 ```
+
+### Mux/Demux streams
+
+The AWS CDI SDK supports muxing and demuxing of multiple streams using a single connection. A diagram that shows this is located at: doc/multi_endpoint_flow.jpg
+
+With the multi-endpoint option (-XS or -new_conns), the test application can send multiple AVM data types to different endpoints. The following test uses the AVM protocol in the AWS CDI SDK to mimic sending video datagrams from a test application and audio datagrams from another test application to unique endpoints within a single connection. This results in both streams being muxed by the receiver into a single connection. Note the use of a unique stream ID (```--id```) to differentiate streams in the connection.
+
+Receiver:
+
+```bash
+./build/debug/bin/cdi_test --adapter EFA --local_ip <rx-ipv4> -X --rx AVM --dest_port 3100 --rate 60 --num_transactions 100 -S --id 1 --payload_size 5184000 --pattern IGNORE --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0 -S --id 2 --payload_size 2944 --pattern IGNORE --avm_audio "ST" 48kHz none
+```
+
+Transmitter #1 (video datagrams):
+
+```bash
+./build/debug/bin/cdi_test --adapter EFA --local_ip <tx-ipv4> -XS --tx AVM --rate 60 --num_transactions 100 -S --id 1 --remote_ip <rx-ipv4> --dest_port 3100 --payload_size 5184000 --pattern INC --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0
+```
+
+Transmitter #2 (audio datagrams):
+
+```bash
+./build/debug/bin/cdi_test --adapter EFA --local_ip <tx-ipv4> -XS --tx AVM --rate 60 --num_transactions 100 -S --id 2 --remote_ip <rx-ipv4> --dest_port 3100 --payload_size 2944 --pattern INC --avm_audio "ST" 48kHz none
+```
+
+The following test uses the AVM protocol in the AWS CDI SDK to mimic sending video and audio datagrams from a single connection within a test application to unique endpoints. This results in the streams being demuxed by the transmitter and sent to different endpoints. Note the use of a unique stream ID (```--id```) to differentiate streams in the connection.
+
+Receiver #1 (video datagrams):
+
+```bash
+./build/debug/bin/cdi_test --adapter EFA --local_ip <rx-ipv4> -X --rx AVM --dest_port 3100 --rate 60 --num_transactions 100 -S --id 1 --payload_size 5184000 --pattern IGNORE --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0
+```
+
+Receiver #2 (audio datagrams):
+
+```bash
+./build/debug/bin/cdi_test --adapter EFA --local_ip <rx-ipv4> -X --rx AVM --dest_port 3200 --rate 60 --num_transactions 100 -S --id 2 --payload_size 2944 --pattern IGNORE --avm_audio "ST" 48kHz none
+```
+
+Transmitter:
+
+```bash
+./build/debug/bin/cdi_test --adapter EFA --local_ip <tx-ipv4> -XS --tx AVM --rate 60 --num_transactions 100 -S --id 1 --remote_ip <rx-ipv4> --dest_port 3100 --payload_size 5184000 --pattern INC --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0 -S --id 2 --remote_ip <rx-ipv4> --dest_port 3200 --payload_size 2944 --pattern INC --avm_audio "ST" 48kHz none
+```
+
 
 ## Using file-based command-line argument insertion
 

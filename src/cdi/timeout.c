@@ -166,7 +166,7 @@ static THREAD TimeoutMainThread(void* ptr)
                     // Shutdown signal sent.
                     thread_exit = true;
                     CDI_LOG_THREAD(kLogInfo, "Cancelled timer without logging. Shutdown received");
-                } else if (OS_SIG_TIMEOUT == signal_index) {
+                } else if (CDI_OS_SIG_TIMEOUT == signal_index) {
                     // Timeout occurred.
                     if (!ServiceExpiredTimeout(state_ptr, timeout_head_ptr)) {
                         CDI_LOG_THREAD(kLogError, "Failed to service expired timeout");

@@ -43,10 +43,14 @@
  *
  * @return The payload number.
  */
-static uint8_t GetNextPayloadNum(CdiEndpointState* endpoint_ptr)
+static uint16_t GetNextPayloadNum(CdiEndpointState* endpoint_ptr)
 {
     CdiOsCritSectionReserve(endpoint_ptr->tx_state.payload_num_lock);
-    uint8_t payload_num = endpoint_ptr->tx_state.payload_num++;
+    uint16_t payload_num = endpoint_ptr->tx_state.payload_num;
+
+    if (++endpoint_ptr->tx_state.payload_num > endpoint_ptr->adapter_endpoint_ptr->protocol_handle->payload_num_max) {
+        endpoint_ptr->tx_state.payload_num = 0;
+    }
     CdiOsCritSectionRelease(endpoint_ptr->tx_state.payload_num_lock);
 
     return payload_num;
@@ -63,14 +67,14 @@ static void DebugTxPacketSglEntries(TxPacketWorkRequest* work_request_ptr)
     CdiLogMultilineState m_state;
     CDI_LOG_THREAD_MULTILINE_BEGIN(kLogInfo, &m_state);
 
-    CdiCDIPacketCommonHeader* common_header_ptr =
-        (CdiCDIPacketCommonHeader*)work_request_ptr->packet.sg_list.sgl_head_ptr->address_ptr;
+    CdiPacketCommonHeader* common_header_ptr =
+        (CdiPacketCommonHeader*)work_request_ptr->packet.sg_list.sgl_head_ptr->address_ptr;
 
     // The payload_data_offset value is not used for packet sequence number zero, since the offset is always
     // zero.
     if (0 != common_header_ptr->packet_sequence_num &&
         kPayloadTypeDataOffset == common_header_ptr->payload_type) {
-        CdiCDIPacketDataOffsetHeader *ptr = (CdiCDIPacketDataOffsetHeader*)common_header_ptr;
+        CdiPacketDataOffsetHeader *ptr = (CdiPacketDataOffsetHeader*)common_header_ptr;
         CDI_LOG_MULTILINE(&m_state, "Tx Total Packet Size[%d]. Packet Type[%d] Packet[%d] Payload[%d] Offset[%d] Entries:",
                           work_request_ptr->packet.sg_list.total_data_size, ptr->hdr.payload_type,
                           ptr->hdr.packet_sequence_num, ptr->hdr.payload_num, ptr->payload_data_offset);
@@ -135,7 +139,7 @@ static THREAD TxPayloadThread(void* ptr)
     CdiConnectionState* con_state_ptr = (CdiConnectionState*)ptr;
 
     // Get a state tracker object for the packetizer.
-    CdiPacketizerStateHandle packetizer_state_handle = CdiPacketizerStateCreate();
+    CdiPacketizerStateHandle packetizer_state_handle = PayloadPacketizerCreate();
     if (NULL == packetizer_state_handle) {
         CDI_LOG_THREAD(kLogError, "Failed to create packetizer state.");
         return 0;
@@ -239,6 +243,9 @@ static THREAD TxPayloadThread(void* ptr)
             }
         } else {
             payload_processing_state = kPayloadStateWorkReceived;
+            // Set flag/signal that we are going to start queueing a payload of packets. This will keep the PollThread()
+            // working as long as we have these packets and more payloads in payload_queue_handle to send.
+            CdiOsSignalSet(con_state_ptr->adapter_connection_ptr->poll_do_work_signal);
         }
 
         // Always check the completion queue here. Don't want to starve it in case either several Endpoint Manager
@@ -265,12 +272,8 @@ static THREAD TxPayloadThread(void* ptr)
                                          con_state_ptr->protocol_type);
             }
 
-            // Set flag/signal that we are going to start queueing a payload of packets. This will keep the PollThread()
-            // working as long as we have these packets and more payloads in payload_queue_handle to send.
-            CdiOsSignalSet(con_state_ptr->adapter_connection_ptr->poll_do_work_signal);
-
             // Prepare packetizer for first packet.
-            CdiPacketizerStateInit(packetizer_state_handle);
+            PayloadPacketizerStateInit(packetizer_state_handle);
 
             CdiSinglyLinkedListInit(&packet_list);
             batch_size = 1;
@@ -301,13 +304,12 @@ static THREAD TxPayloadThread(void* ptr)
             }
 
             if (kPayloadStatePacketizing == payload_processing_state) {
-                // NOTE: These pools are not thread-safe, so must ensure that only one thread is accessing them at a time.
-                if (!CdiPayloadGetPacket(packetizer_state_handle,
-                                         &work_request_ptr->header,
-                                         con_state_ptr->tx_state.packet_sgl_entry_pool_handle,
-                                         payload_state_ptr,
-                                         &work_request_ptr->packet.sg_list,
-                                         &last_packet))
+                // NOTE: These pools are not thread-safe, so must ensure that only one thread is accessing them at a
+                // time.
+                if (!PayloadPacketizerPacketGet(adapter_endpoint_handle->protocol_handle,
+                                                packetizer_state_handle, &work_request_ptr->header,
+                                                con_state_ptr->tx_state.packet_sgl_entry_pool_handle,
+                                                payload_state_ptr, &work_request_ptr->packet.sg_list, &last_packet))
                 {
                     // Pool is empty; suspend processing the payload for now, retry after resources are freed.
                     keep_going = false;
@@ -318,12 +320,11 @@ static THREAD TxPayloadThread(void* ptr)
                     // Fill in the work request with the specifics of the packet.
                     work_request_ptr->payload_state_ptr = payload_state_ptr;
                     work_request_ptr->payload_num = payload_state_ptr->payload_packet_state.payload_num;
-                    work_request_ptr->packet_sequence_num = payload_state_ptr->payload_packet_state.packet_sequence_num - 1;
                     work_request_ptr->packet_payload_size =
                         payload_state_ptr->payload_packet_state.packet_payload_data_size;
 
-                    // This pointer will be used later by TxPacketWorkRequestComplete() to get access to work_request_ptr (a
-                    // pointer to a TxPacketWorkRequest structure).
+                    // This pointer will be used later by TxPacketWorkRequestComplete() to get access to
+                    // work_request_ptr (a pointer to a TxPacketWorkRequest structure).
                     work_request_ptr->packet.sg_list.internal_data_ptr = work_request_ptr;
 
                     // Add the packet to a list to be enqueued to the adapter.
@@ -349,6 +350,8 @@ static THREAD TxPayloadThread(void* ptr)
                         payload_processing_state = kPayloadStateIdle;
                         payload_state_ptr = NULL;
                         keep_going = false;
+                        // Successfully put all packets for a payload into Tx queue, so reset the back pressure state.
+                        con_state_ptr->back_pressure_state = kCdiBackPressureNone;
                     } else {
                         payload_processing_state = kPayloadStateGetWorkRequest;
                     }
@@ -357,7 +360,7 @@ static THREAD TxPayloadThread(void* ptr)
         }
     }
 
-    CdiPacketizerStateDestroy(packetizer_state_handle);
+    PayloadPacketizerDestroy(packetizer_state_handle);
     if (EndpointManagerIsConnectionShuttingDown(mgr_handle)) {
         // Since this thread was registered with the Endpoint Manager using EndpointManagerThreadRegister(), need to
         // wait for the Endpoint Manager to complete the shutdown.
@@ -408,7 +411,7 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
         con_state_ptr->adapter_state_ptr = (CdiAdapterState*)config_data_ptr->adapter_handle;
         con_state_ptr->handle_type = kHandleTypeTx;
         con_state_ptr->protocol_type = protocol_type;
-        con_state_ptr->magic = kMagicCon;
+        con_state_ptr->magic = kMagicConnection;
 
         // Make a copy of the configuration data.
         memcpy(&con_state_ptr->tx_state.config_data, config_data_ptr, sizeof *config_data_ptr);
@@ -579,36 +582,8 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
 }
 
 /**
- * Try to find an endpoint with the specified stream ID.
- *
- * @param handle Handle of Endpoint Manager to search for a matching endpoint.
- * @param stream_identifier Stream ID to use.
- *
- * @return If found, returns a pointer to CDI endpoint state data, otherwise NULL is returned.
- */
-static CdiEndpointState* FindEndpoint(EndpointManagerHandle handle, int stream_identifier)
-{
-    CdiEndpointState* ret_endpoint_state_ptr = NULL;
-
-    // Walk through the endpoint list and try to find the endpoint associated with the stream identifier.
-    CdiEndpointHandle endpoint_handle = EndpointManagerGetFirstEndpoint(handle);
-    while (endpoint_handle) {
-        if (stream_identifier == endpoint_handle->stream_identifier ||
-            STREAM_IDENTIFIER_NOT_USED == endpoint_handle->stream_identifier ||
-            STREAM_IDENTIFIER_NOT_USED == stream_identifier) {
-            // Found the matching endpoint, so setup to return it and break out of this loop.
-            ret_endpoint_state_ptr = endpoint_handle;
-            break;
-        }
-        endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
-    }
-
-    return ret_endpoint_state_ptr;
-}
-
-/**
- * Payload transfer has completed either successfully or in error. Update stats and queue a payload message to
- * the application.
+ * Payload transfer has completed either successfully or in error. Update stats and queue payload message to
+ * application.
  *
  * @param endpoint_ptr Pointer to endpoint state data.
  * @param payload_state_ptr Pointer to payload state data. The pointer is no longer valid after function returns.
@@ -666,29 +641,30 @@ CdiReturnStatus TxCreateInternal(ConnectionProtocolType protocol_type, CdiTxConf
 {
     CdiReturnStatus rs = TxCreateConnection(protocol_type, config_data_ptr, tx_cb_ptr, ret_handle_ptr);
     if (kCdiStatusOk == rs) {
-        rs = EndpointManagerTxCreateEndpoint((*ret_handle_ptr)->endpoint_manager_handle, STREAM_IDENTIFIER_NOT_USED,
-                                             config_data_ptr->dest_ip_addr_str, config_data_ptr->dest_port, NULL, NULL);
+        CdiConnectionState* con_state_ptr = *((CdiConnectionState**)ret_handle_ptr);
+        rs = EndpointManagerTxCreateEndpoint(con_state_ptr->endpoint_manager_handle, false,
+                                             config_data_ptr->dest_ip_addr_str, config_data_ptr->dest_port, NULL,
+                                             &con_state_ptr->default_tx_endpoint_ptr);
     }
 
     return rs;
 }
 
-CdiReturnStatus TxCreateStreamConnectionInternal(CdiTxConfigData* config_data_ptr, CdiCallback tx_cb_ptr,
+CdiReturnStatus TxStreamConnectionCreateInternal(CdiTxConfigData* config_data_ptr, CdiCallback tx_cb_ptr,
                                                  CdiConnectionHandle* ret_handle_ptr)
 {
     return TxCreateConnection(kProtocolTypeAvm, config_data_ptr, tx_cb_ptr, ret_handle_ptr);
 }
 
-CdiReturnStatus TxCreateStreamEndpointInternal(CdiConnectionHandle handle, CdiTxConfigDataStream* stream_config_ptr,
+CdiReturnStatus TxStreamEndpointCreateInternal(CdiConnectionHandle handle, CdiTxConfigDataStream* stream_config_ptr,
                                                CdiEndpointHandle* ret_handle_ptr)
 {
-    return  EndpointManagerTxCreateEndpoint(handle->endpoint_manager_handle,
-                                            stream_config_ptr->stream_identifier,
-                                            stream_config_ptr->dest_ip_addr_str, stream_config_ptr->dest_port,
-                                            stream_config_ptr->stream_name_str, ret_handle_ptr);
+    return EndpointManagerTxCreateEndpoint(handle->endpoint_manager_handle, true,
+                                           stream_config_ptr->dest_ip_addr_str, stream_config_ptr->dest_port,
+                                           stream_config_ptr->stream_name_str, ret_handle_ptr);
 }
 
-CdiReturnStatus TxPayloadInternal(CdiConnectionHandle con_handle, const CdiCoreTxPayloadConfig* core_payload_config_ptr,
+CdiReturnStatus TxPayloadInternal(CdiEndpointState* endpoint_ptr, const CdiCoreTxPayloadConfig* core_payload_config_ptr,
                                   const CdiSgList* sgl_ptr, int max_latency_microsecs, int extra_data_size,
                                   uint8_t* extra_data_ptr)
 {
@@ -696,17 +672,9 @@ CdiReturnStatus TxPayloadInternal(CdiConnectionHandle con_handle, const CdiCoreT
 
     uint64_t start_time = CdiOsGetMicroseconds();
     CdiReturnStatus rs = kCdiStatusOk;
-    CdiConnectionState* con_state_ptr = (CdiConnectionState*)con_handle;
+    CdiConnectionState* con_state_ptr = endpoint_ptr->connection_state_ptr;
 
-    int stream_identifier = STREAM_IDENTIFIER_NOT_USED;
-    if (extra_data_size >= (int)sizeof(CDIPacketAvmCommonHeader) && extra_data_ptr) {
-        CDIPacketAvmCommonHeader* common_header = (CDIPacketAvmCommonHeader*)extra_data_ptr;
-        stream_identifier = common_header->avm_extra_data.stream_identifier;
-    }
-
-    CdiEndpointState* endpoint_ptr = FindEndpoint(con_state_ptr->endpoint_manager_handle, stream_identifier);
-    if (NULL == endpoint_ptr ||
-        kCdiConnectionStatusConnected != endpoint_ptr->adapter_endpoint_ptr->connection_status_code) {
+    if (kCdiConnectionStatusConnected != endpoint_ptr->adapter_endpoint_ptr->connection_status_code) {
         // Currently not connected, so no need to advance the payload any further here.
         return kCdiStatusNotConnected;
     }
@@ -757,7 +725,7 @@ CdiReturnStatus TxPayloadInternal(CdiConnectionHandle con_handle, const CdiCoreT
 
         payload_state_ptr->cdi_endpoint_handle = endpoint_ptr; // Save the endpoint used to send this payload.
 
-        if (!CdiPayloadInit(con_state_ptr, sgl_ptr, payload_state_ptr)) {
+        if (!PayloadInit(con_state_ptr, sgl_ptr, payload_state_ptr)) {
             rs = kCdiStatusAllocationFailed;
         } else {
             // Put Tx payload message into the payload queue. The TxPayloadThread() thread will then process the
@@ -805,7 +773,7 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
                 payload_state_ptr = work_request_ptr->payload_state_ptr;
             } else {
                 FlushFailedPayload(endpoint_ptr, payload_state_ptr); // Frees the payload pointer
-                payload_state_ptr = NULL; // No longer valid, so clear it.
+                payload_state_ptr = NULL; // Pointer is no longer valid, so clear it.
             }
         }
 
@@ -819,13 +787,13 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
 
         // Put back work request into the pool.
         CdiPoolPut(con_state_ptr->tx_state.work_request_pool_handle, work_request_ptr);
-        work_request_ptr = NULL; // No longer valid, so clear it.
+        work_request_ptr = NULL; // Pointer is no longer valid, so clear it.
     }
 
     // Flush last payload if value exists.
     if (payload_state_ptr) {
         FlushFailedPayload(endpoint_ptr, payload_state_ptr);
-        payload_state_ptr = NULL; // No longer valid, so clear it.
+        payload_state_ptr = NULL; // Pointer is no longer valid, so clear it.
     }
 
     CdiPoolPutAll(con_state_ptr->tx_state.work_request_pool_handle);
@@ -837,7 +805,9 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
     // user-registered callback functions in the application, which may erroneously block and would stall the internal
     // pipeline.
 
+    con_state_ptr->back_pressure_state = kCdiBackPressureNone; // Reset the back pressure state.
     endpoint_ptr->tx_state.payload_num = 0; // Clear payload number so receiver can expect payload zero first.
+    endpoint_ptr->tx_state.packet_id = 0; // Reset packet ID to zero.
 }
 
 CdiReturnStatus TxConnectionThreadJoin(CdiConnectionHandle con_handle)
@@ -890,8 +860,11 @@ void TxEndpointDestroy(CdiEndpointHandle handle)
     endpoint_ptr->tx_state.payload_num_lock = NULL;
 }
 
-void TxPacketWorkRequestComplete(void* param_ptr, Packet* packet_ptr)
+void TxPacketWorkRequestComplete(void* param_ptr, Packet* packet_ptr, EndpointMessageType message_type)
 {
+    assert(kEndpointMessageTypePacketSent == message_type);
+    (void)message_type;
+
     CdiEndpointState* endpoint_ptr = (CdiEndpointState*)param_ptr;
     CdiConnectionState* con_state_ptr = endpoint_ptr->connection_state_ptr;
 
@@ -949,7 +922,7 @@ void TxInvokeAppPayloadCallback(CdiConnectionState* con_state_ptr, AppPayloadCal
         .err_msg_str = app_cb_data_ptr->error_message_str,
         .connection_handle = (CdiConnectionHandle)con_state_ptr,
         .core_extra_data = app_cb_data_ptr->core_extra_data,
-        .user_cb_param = app_cb_data_ptr->tx_payload_user_cb_param
+        .user_cb_param = app_cb_data_ptr->tx_payload_user_cb_param,
     };
 
     if (kProtocolTypeRaw == con_state_ptr->protocol_type) {

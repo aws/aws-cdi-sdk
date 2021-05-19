@@ -62,10 +62,11 @@
 #error Either _WIN32 or _LINUX must be defined.
 #endif
 
-#include <sys/uio.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/uio.h>
 #include <time.h>
 
 #include "cdi_utility_api.h"
@@ -80,10 +81,9 @@
     #define CDI_STDERR_FILENO _fileno(stderr) ///< Definition of OS agnostic standard error file number.
 
     // Define portable thread Function.
-    #define ThreadFuncName LPTHREAD_START_ROUTINE
+    #define CdiThreadFuncName LPTHREAD_START_ROUTINE
     #define THREAD DWORD WINAPI
     #define THREAD_PARAM LPVOID
-    #define WINDOW_HANDLE HWND
 
     typedef DWORD CdiThreadData;
 
@@ -131,6 +131,8 @@
     #define CdiOsAtomicLoadPointer(x) *(volatile void**)(x)
     #define CdiOsAtomicStorePointer(x, v) *(volatile void**)(x) = (v)
 
+    #define CDI_INVALID_HANDLE_VALUE INVALID_HANDLE_VALUE
+
     typedef struct siginfo_t siginfo_t;
 
     struct siginfo_t {
@@ -155,7 +157,10 @@
     #define CdiOsStaticMutexUnlock(x) (ReleaseMutex(x) == 0)
 
     // Huge pages not implemented in windows, so just use 1 byte for size.
-    #define HUGE_PAGES_BYTE_SIZE    (1)
+    #define CDI_HUGE_PAGES_BYTE_SIZE    (1)
+
+    // Windows generates a meaningful error that contains the specified message.
+    #define CDI_STATIC_ASSERT(condition, message) static_assert(condition, message)
 
 #elif defined _LINUX
     #define CDI_STDIN  stdin   ///< Definition of OS agnostic standard input stream.
@@ -168,13 +173,10 @@
 
     #define THREAD_PARAM void*  ///< Define portable thread function parameter type.
     #define THREAD int          ///< Define portable thread function return type.
-    typedef THREAD (*ThreadFuncName) (THREAD_PARAM); ///< Define portable thread function.
+    typedef THREAD (*CdiThreadFuncName) (THREAD_PARAM); ///< Define portable thread function.
 
     /// Define portable thread data type.
     typedef pthread_key_t CdiThreadData;
-
-    /// Define portable window handle.
-    #define WINDOW_HANDLE int
 
     /// Define portable semaphore.
     typedef sem_t* CdiSemID;
@@ -251,7 +253,7 @@
     #define CdiOsAtomicStorePointer(x, v) __atomic_store_n((x), (v), __ATOMIC_RELEASE)
 
     /// Define portable invalid handle.
-    #define INVALID_HANDLE_VALUE -1
+    #define CDI_INVALID_HANDLE_VALUE -1
 
     /// Define portable static mutex type. An example implementation:
     /*! @code
@@ -274,26 +276,32 @@
     /// @brief Size of huge pages. Memory must be a multiple of this size when using the CdiOsMemAllocHugePage() and
     /// CdiOsMemFreeHugePage() APIs.
     /// NOTE: Must match the "Hugepagesize" setting in /proc/meminfo.
-    #define HUGE_PAGES_BYTE_SIZE    (2 * 1024 * 1024)
+    #define CDI_HUGE_PAGES_BYTE_SIZE    (2 * 1024 * 1024)
+
+/// @brief Macro used to halt due to condition not being met during compile time. NOTE: Depending on GCC version, an
+/// assert failure may not use the specified message and instead generate an error similar to this:
+/// "error: negative width in bit-field ‘__error_if_negative".
+/// In this case, to see the specified message, see the next error in the compiler output.
+#define CDI_STATIC_ASSERT(condition, message) _Static_assert(condition, message) // NOTE: ACTUAL ERROR IS BELOW.
 #endif // _LINUX
 
-#define MAX_THREAD_NAME     (50)         ///< Maximum thread name size.
-#define OS_SIG_TIMEOUT      (0xFFFFFFFF) ///< Timeout value returned when waiting on a signal using CdiOsSignalsWait().
+#define CDI_MAX_THREAD_NAME     (50)         ///< Maximum thread name size.
+#define CDI_OS_SIG_TIMEOUT      (0xFFFFFFFF) ///< Timeout value returned when waiting on a signal using CdiOsSignalsWait().
 
 /// Maximum number of signals that can be passed to CdiOsSignalsWait().
-#define MAX_WAIT_MULTIPLE   (64)
+#define CDI_MAX_WAIT_MULTIPLE   (64)
 
 /// The maximum size of iovec array that can be passed in to CdiOsSocketWrite().
 #define CDI_OS_SOCKET_MAX_IOVCNT (10)
 
 /// @brief Type used for signal handler.
-typedef void (*SignalHandlerFunction)(int sig, siginfo_t* siginfo, void* context);
+typedef void (*CdiSignalHandlerFunction)(int sig, siginfo_t* siginfo, void* context);
 
 /// @brief Structure used to hold signal handler data.
 typedef struct {
     int signal_num;  ///< Signal number of the signal related to the handler.
-    SignalHandlerFunction func_ptr; ///< Pointer to signal handler.
-} SignalHandlerInfo;
+    CdiSignalHandlerFunction func_ptr; ///< Pointer to signal handler.
+} CdiSignalHandlerInfo;
 
 /// @brief Define portable thread type. Separate name from type, otherwise the typedef that follows it will generate a
 /// compile error (duplicate typedef).
@@ -303,10 +311,10 @@ typedef struct CdiThreadID_t* CdiThreadID;
 typedef struct CdiSocket_t* CdiSocket;
 
 /// Maximum number of signal handlers.
-#define MAX_SIGNAL_HANDLERS     (10)
+#define CDI_MAX_SIGNAL_HANDLERS     (10)
 
 /// Maximum length of a single formatted time string.
-#define MAX_FORMATTED_TIMEZONE_STRING_LENGTH   (128)
+#define CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH   (128)
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
@@ -332,7 +340,7 @@ CDI_INTERFACE void CdiOsUseLogger(void);
  *
  * @return true on success, false if there isn't enough storage to hold the signal or if there was an error.
  */
-CDI_INTERFACE bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr);
+CDI_INTERFACE bool CdiOsSignalHandlerSet(int signal_num, CdiSignalHandlerFunction func_ptr);
 
 /**
  * Creates a thread which can optionally be pinned to a specific CPU.
@@ -346,7 +354,7 @@ CDI_INTERFACE bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction f
  *
  * @return true if successful, otherwise false.
  */
-CDI_INTERFACE bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr,
+CDI_INTERFACE bool CdiOsThreadCreatePinned(CdiThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr,
                                            const char* thread_name_str, void* thread_func_arg_ptr,
                                            CdiSignalType start_signal, int cpu_affinity);
 
@@ -362,7 +370,7 @@ CDI_INTERFACE bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThread
  *
  * @return true if successful, otherwise false.
  */
-static inline bool CdiOsThreadCreate(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr,
+static inline bool CdiOsThreadCreate(CdiThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr,
                                      const char* thread_name_str, void* thread_func_arg_ptr, CdiSignalType start_signal)
 {
     return CdiOsThreadCreatePinned(thread_func, thread_id_out_ptr, thread_name_str, thread_func_arg_ptr, start_signal,
@@ -599,7 +607,7 @@ CDI_INTERFACE bool CdiOsSignalWait(CdiSignalType signal_handle, uint32_t timeout
  * @param wait_all      Use true to wait for all signals, false to block on any signal.
  * @param timeout_in_ms Timeout in mSec can be CDI_INFINITE to wait indefinitely.
  * @param ret_signal_index_ptr Pointer to the returned signal index that caused the thread to be signaled. if wait_all
- *        is true, then this is set to 1 when all signals are signaled.  If a timeout occurred, OS_SIG_TIMEOUT is
+ *        is true, then this is set to 1 when all signals are signaled.  If a timeout occurred, CDI_OS_SIG_TIMEOUT is
  *        returned. This is an optional parameter, you can pass NULL if you don't care.
  *
  * @return true if successful, otherwise false.
@@ -637,7 +645,7 @@ CDI_INTERFACE void CdiOsMemFree(void* mem_ptr);
 /**
  * Allocates a block of huge page memory and returns a pointer to the start of the block.
  *
- * @param mem_size Number of bytes to allocate. Size must be a multiple of HUGE_PAGES_BYTE_SIZE. If not, NULL is
+ * @param mem_size Number of bytes to allocate. Size must be a multiple of CDI_HUGE_PAGES_BYTE_SIZE. If not, NULL is
  * returned.
  *
  * @return Pointer to the allocated memory block. If unable to allocate the memory block, NULL is returned.
@@ -868,16 +876,24 @@ CDI_INTERFACE void CdiOsGetLocalTime(struct tm* local_time_ret_ptr);
 CDI_INTERFACE int CdiOsGetLocalTimeString(char* time_str, int max_string_len);
 
 /**
- * Opens a unidirectional Internet Protocol User Datagram Protocol (IP/UDP) socket for communications. For a socket to
- * send on, specify the host address of the remote host. To create a socket for receiving, specify NULL as
- * host_address_str.
+ * Opens a unidirectional or bidirectional Internet Protocol User Datagram Protocol (IP/UDP) socket for communications.
+ * For a unidirectional socket to send on, specify the host address of the remote host. To create a unidirectional
+ * socket for receiving, specify NULL as host_address_str.
+ *
+ * For a bidirectional socket, where datagrams can be sent and received through the socket, specify NULL as
+ * host_address_str for both client and server sides. For the client side, specify zero for port_number so a randomly
+ * selected port number is used. Call @see CdiOsSocketGetPort to determine the port number that was assigned. When
+ * sending datagrams, Use @see CdiOsSocketWriteTo to specify the remote destination address and port. For the server
+ * side, specify the local port number for port_number to listen for incoming datagrams. Use @see CdiOsSocketReadFrom so
+ * that the datagram's source host's IP address and port number are provided.
  *
  * @param host_address_str The address of the remote host (dotted IPv4 address) to which to send datagrams or NULL if
- *                         the socket is to be used for receiving datagrams.
- * @param port_number The numeric port number on the remote host (for a send-only socket) or the local port number to
- *                    listen for incoming datagrams (for a receive-only socket). Receive-only sockets can specify zero
- *                    for this value so that a randomly selected port number is used. Call @see CdiOsSocketGetPort to
- *                    determine the port number that was assigned.
+ *                         the socket is to be used for receiving datagrams or is bidirectional.
+ * @param port_number For a unidirectional send-only socket, the numeric port number on the remote host. For a
+ *                    unidirectional receive only socket or server side of a bidirectional socket, the local port number
+ *                    to listen for incoming datagrams. For the client side of a bidirectional socket, use zero for this
+ *                    value so that a randomly selected port number is used. Call @see CdiOsSocketGetPort to determine
+ *                    the port number that was assigned.
  * @param new_socket_ptr A pointer to the location which will get the new socket handle written to it.
  *
  * @return true if the socket was successfully opened and is ready for communications, otherwise false.
@@ -889,12 +905,22 @@ CDI_INTERFACE bool CdiOsSocketOpen(const char* host_address_str, int port_number
  * their port number specified as 0, which makes the operating system assign a random port number. It also works on
  * transmit sockets which are also randomly assigned a port number.
  *
- * @param s               The socket whose port number is of interest.
+ * @param socket_handle   The socket whose port number is of interest.
  * @param port_number_ptr Address of where the port number will be written.
  *
  * @return true if the port number could be determined or false if a problem was encountered.
  */
-CDI_INTERFACE bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr);
+CDI_INTERFACE bool CdiOsSocketGetPort(CdiSocket socket_handle, int* port_number_ptr);
+
+/**
+ * Gets the sockaddr_in structure to which the specified socket is bound.
+ *
+ * @param socket_handle   The socket whose port number is of interest.
+ * @param sockaddr_in_ptr Address of where the sockaddr_in data will be written.
+ *
+ * @return true if the sockaddr_in data could be determined or false if a problem was encountered.
+ */
+CDI_INTERFACE bool CdiOsSocketGetSockAddrIn(CdiSocket socket_handle, struct sockaddr_in* sockaddr_in_ptr);
 
 /**
  * Close a previously opened communications socket, freeing resources that were allocated for it including the local
@@ -907,9 +933,9 @@ CDI_INTERFACE bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr);
 CDI_INTERFACE bool CdiOsSocketClose(CdiSocket socket_handle);
 
 /**
- * Synchronously reads the next available datagram from the specified socket which must have been opened for receiving.
- * If no datagram is available after a short timeout, true is returned but the value written to byte_count_ptr will be
- * zero. This timeout is so that the caller can periodically check whether to shut down its polling loop.
+ * Synchronously reads the next available datagram from the specified socket. If no datagram is available after a short
+ * timeout, true is returned but the value written to byte_count_ptr will be zero. This timeout is so that the caller
+ * can periodically check whether to shut down its polling loop.
  *
  * @param socket_handle  The handle for the socket for which incoming datagrams are to be received.
  * @param buffer_ptr     The address in memory where the bytes of the datagram will be written.
@@ -925,9 +951,29 @@ CDI_INTERFACE bool CdiOsSocketClose(CdiSocket socket_handle);
 CDI_INTERFACE bool CdiOsSocketRead(CdiSocket socket_handle, void* buffer_ptr, int* byte_count_ptr);
 
 /**
- * Synchronously write a datagram to a communications socket which must have been opened for sending. The data is
- * represented as an array of address pointers and sizes. This data is copied inside of the function so once it returns
- * the buffer(s) are available for reuse.
+ * Synchronously reads the next available datagram from the specified socket and provides the source IP address/port
+ * number. If no datagram is available after a short timeout, true is returned but the value written to byte_count_ptr
+ * will be zero. This timeout is so that the caller can periodically check whether to shut down its polling loop.
+ *
+ * @param socket_handle  The handle for the socket for which incoming datagrams are to be received.
+ * @param buffer_ptr     The address in memory where the bytes of the datagram will be written.
+ * @param byte_count_ptr On entry, the value at the location pointed to must be the size of the buffer at buffer_ptr
+ *                       available for the datagram to be written. At exit, the address will be overwritten with the
+ *                       number of bytes that are actually contained in the datagram and thus written to the buffer. A
+ *                       value of 0 indicates that the read timed out waiting for a datagram and that the read should be
+ *                       retried unless the polling process should be shut down.
+ * @param source_address_ptr Pointer to memory where the source address and port number from the UDP packet will be
+ *                           written so that the caller can determine where to send replies.
+ *
+ * @return true if the function succeeded, false if it failed. Timing out is considered to be success but zero will have
+ *         been written to byte_count_ptr to disambiguate a timeout condition from data being written into the buffer.
+ */
+CDI_INTERFACE bool CdiOsSocketReadFrom(CdiSocket socket_handle, void* buffer_ptr, int* byte_count_ptr,
+                                       struct sockaddr_in* source_address_ptr);
+
+/**
+ * Synchronously write a datagram to a communications socket. The data is represented as an array of address pointers
+ * and sizes. This data is copied inside of the function so once it returns the buffer(s) are available for reuse.
  *
  * @param socket_handle  The handle for the socket through which the datagram will be written.
  * @param iov            The address of an array of iovec structures which specify the data to be sent.
@@ -940,6 +986,25 @@ CDI_INTERFACE bool CdiOsSocketRead(CdiSocket socket_handle, void* buffer_ptr, in
  *         was actually received by the destination host.
  */
 CDI_INTERFACE bool CdiOsSocketWrite(CdiSocket socket_handle, struct iovec* iov, int iovcnt, int* byte_count_ptr);
+
+/**
+ * Synchronously write a datagram to a communications socket. The data is represented as an array of address pointers
+ * and sizes. This data is copied inside of the function so once it returns the buffer(s) are available for reuse.
+ *
+ * @param socket_handle  The handle for the socket through which the datagram will be written.
+ * @param iov            The address of an array of iovec structures which specify the data to be sent.
+ * @param iovcnt         The number of iovec structures contained in the iov array. This value is limited to
+ *                       RMT_OS_SOCKET_MAX_IOVCNT.
+ * @param destination_address_ptr Pointer to the destination (IP address and port number) to which to send the UDP
+ *                                packet.
+ * @param byte_count_ptr The address of a location into which the number of bytes written to the socket will be placed
+ *                       if the datagram was successfully sent.
+ *
+ * @return true if the datagram was successfully sent, false if not. Note that there is no guarantee that the datagram
+ *         was actually received by the destination host.
+ */
+CDI_INTERFACE bool CdiOsSocketWriteTo(CdiSocket socket_handle, struct iovec* iov, int iovcnt,
+                                      const struct sockaddr_in* destination_address_ptr, int* byte_count_ptr);
 
 /**
  * Set an environment variable for the currently running process. NOTE: Does not set the process's shell environment.

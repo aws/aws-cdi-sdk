@@ -3,6 +3,8 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 
 ---
 
+- [Linux Installation Guide](#linux-installation-guide)
+- [Create an EFA enabled instance](#create-an-efa-enabled-instance)
 - [Install EFA driver](#install-efa-driver)
 - [Install AWS CDI SDK](#install-aws-cdi-sdk)
 - [Install AWS CloudWatch and AWS CLI](#install-aws-cloudwatch-and-aws-cli)
@@ -11,7 +13,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
   - [Install CMake](#install-cmake)
   - [Download AWS SDK](#download-aws-sdk)
 - [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications)
-  - [Disabling the display of performance metrics to your Amazon CloudWatch account](#disabling-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
+  - [(Optional) Disable the display of performance metrics to your Amazon CloudWatch account](#optional-disable-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
 - [Enable huge pages](#enable-huge-pages)
 - [Validate the EFA environment](#validate-the-efa-environment)
 - [Build the HTML documentation](#build-the-html-documentation)
@@ -19,15 +21,22 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 
 ---
 
+# Create an EFA enabled instance
+
+Follow the steps in [create an EFA-enabled instance](README.md#create-an-efa-enabled-instance).
+
 # Install EFA driver
 
-For Linux installations, follow step 3 in [launch an Elasatic Fabric Adapter (EFA)-capable instance](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html), with the following additions to **step 3, part 1**, **step 3, part 5**, and **step 3, part 7**:
+For Linux installations, follow step 3 in [launch an Elasatic Fabric Adapter (EFA)-capable instance](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html), with the following additions to the step **Install the EFA software**:
 
-1. During **step 3, part 1**, once your instance has booted, you can find the public IP you requested earlier by clicking on the instance and looking for “IPv4 Public IP” in the pane below your instance list. Use that IP address to SSH to your new instance.
+ - During **Connect to the instance you launched**, once your instance has booted, you can find the public IP you requested earlier by clicking on the instance and looking for “IPv4 Public IP” in the pane below your instance list. Use that IP address to SSH to your new instance.
     - If you cannot connect (connection times out), you may have forgotten to add an SSH rule to your security group, or you may need to set up an internet gateway for your Virtual Private Cloud (VPC) and add a route to your subnet. You can find more information about setting up SSH access and connecting to the instance at [accessing Linux instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AccessingInstancesLinux.html).
     - The default user name for Amazon Linux 2 instances is ```ec2-user```, on CentOS it’s ```centos```, and on Ubuntu, it’s ```ubuntu```.
-1. During **step 3, part 5**, install the minimum version of the EFA software (the command with the ```--minimal``` option). This will not install libfabric; the AWS CDI SDK tar file has its own packaged version.
-1. During **step 3, part 7**, note that the ```fi_info``` command does not work when installing the minimum version of EFA software. You will perform this check later after installing the AWS CDI SDK.
+- During **Install the EFA software.**, install the minimum version of the EFA software using the command shown below. This will not install libfabric; the AWS CDI SDK tar file has its own packaged version.
+
+    ```sudo ./efa_installer.sh -y --minimal```
+
+1. During **Confirm that the EFA software components were successfully installed**, note that the ```fi_info``` command does not work when installing the minimum version of EFA software. You will perform this check later after installing the AWS CDI SDK.
 
 ---
 
@@ -51,21 +60,26 @@ For Linux installations, follow step 3 in [launch an Elasatic Fabric Adapter (EF
     git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric
     ```
 
-1. The <install_dir> now contains the following folders **libfabric** and **aws-cdi-sdk**.
-    - **libfabric** is a customized version of the open-source libfabric project.
-    - **aws-cdi-sdk** is the directory that contains the source code for the AWS CDI SDK and its test application. The contents of the AWS CDI SDK include a Makefile and the following directories: **doc**, **include**, **src**, and **proj**.
-        - The AWS CDI SDK contains an overall Makefile that builds libfabric, the AWS CDI SDK, the test application, and the Doxygen-generated HTML documentation. The build of libfabric and the AWS CDI SDK produce shared libraries, ```libfabric.so.1``` and ```libcdisdk.so.2.0```, along with the test application, ```cdi_test```.
-        - The **doc** folder contains Doxygen source files used to generate the AWS CDI SDK HTML documentation.
-            - The documentation builds to this path: aws-cdi-sdk/build/documentation
-        - The **include** directory exposes the API to the AWS CDI SDK in C header files.
-        - The **src** directory contains the source code for the implementation of the AWS CDI SDK.
-            - AWS CDI SDK: ```aws-cdi-sdk/src/cdi```
-            - Common utilities: ```aws-cdi-sdk/src/common```
-            - Test application: ```aws-cdi-sdk/src/test```
-            - Minimal test applications: ```aws-cdi-sdk/src/test_minimal```
-            - Common test application utilities: ```aws-cdi-sdk/src/test_common```
-        - The **proj** directory contains the Microsoft Visual Studio project solution for Windows development.
-        - The **build** directory is generated after a make of the project is performed. The **build** folder contains the generated libraries listed above along with the generated HTML documentation.
+The **<install_dir>** should now contain the folder hierarchy as shown below:
+
+```
+  <install_dir>/aws-cdi-sdk
+  <install_dir>/libfabric
+```
+- **libfabric** is a customized version of the open-source libfabric project.
+- **aws-cdi-sdk** is the directory that contains the source code for the AWS CDI SDK and its test application. The contents of the AWS CDI SDK include the following directories: **doc**, **include**, **src**, and **proj**.
+  - The root folder contains an overall Makefile that builds libfabric, the AWS CDI SDK, the test applications, and the Doxygen-generated HTML documentation. The build of libfabric and the AWS CDI SDK produce shared libraries, ```libfabric.so.x``` and ```libcdisdk.so.x.x```, along with the test applications: ```cdi_test```, ```cdi_test_min_rx```, ```cdi_test_min_tx```, and ```cdi_test_unit```.
+    - The **doc** folder contains Doxygen source files used to generate the AWS CDI SDK HTML documentation.
+        - The documentation builds to this path: aws-cdi-sdk/build/documentation
+    - The **include** directory exposes the API to the AWS CDI SDK in C header files.
+    - The **src** directory contains the source code for the implementation of the AWS CDI SDK.
+        - AWS CDI SDK: ```aws-cdi-sdk/src/cdi```
+        - Common utilities: ```aws-cdi-sdk/src/common```
+        - Test application: ```aws-cdi-sdk/src/test```
+        - Minimal test applications: ```aws-cdi-sdk/src/test_minimal```
+        - Common test application utilities: ```aws-cdi-sdk/src/test_common```
+    - The **proj** directory contains the Microsoft Visual Studio project solution for Windows development.
+    - The **build** directory is generated after a make of the project is performed. The **build** folder contains the generated libraries listed above along with the generated HTML documentation.
 
 ---
 
@@ -99,7 +113,7 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
             "Statement": [
                 {
                     "Effect": "Allow",
-                    "Action": "mediaconnect:*",
+                    "Action": "cloudwatch:*",
                     "Resource": "*"
                 }
             ]
@@ -124,8 +138,7 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
     ```
 
 1. When prompted for the **Access Key** and **Secret Access Key**, enter these keys from the IAM role you created in step 3.
-1. If successful, two files are created in the  ```~/.aws/ directory```: ```config``` and ```credentials```.
-1. Verify the creation of the ```config``` and ```credentials``` file:
+1. If successful, two files are created in the  ```~/.aws/``` directory: ```config``` and ```credentials```. Verify they exist by using:
 
     ```bash
     ls ~/.aws
@@ -182,15 +195,23 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
 
 **Note**: The AWS SDK for C++ is essential for metrics gathering functions of AWS CDI SDK to operate properly.  Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
 
-1. Verify that the necessary [libraries are installed for AWS SDK for C++](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html).
+1. Verify that the necessary [requirements are met and libraries installed for AWS SDK for C++](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup-linux.html).
 1. Download AWS SDK for C++ source code.
     - **Note**: This procedure replaces these instructions: ["Setting Up AWS SDK for C++"](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html).
     - Commands to clone AWS SDK for C++ from git for Amazon Linux 2 and Linux CentOS 7 are listed below:
 
-    ```bash
-    cd
-    git clone -b 1.8.46 https://github.com/aws/aws-sdk-cpp.git
-    ```
+       ```bash
+       cd <install_dir>
+       git clone -b 1.8.46 https://github.com/aws/aws-sdk-cpp.git
+       ```
+
+  The **<install_dir>** should now contain the folder hierarchy as shown below:
+
+   ```
+   <install_dir>/aws-cdi-sdk
+   <install_dir>/aws-sdk-cpp
+   <install_dir>/libfabric
+   ```
 
 ---
 
@@ -208,15 +229,18 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
     ```
 
     **Note**: A trailing ```/``` may be required on the path given in <path to AWS SDK C++> above. For example:
-    ```make DEBUG=y AWS_SDK=../aws_sdk_cpp/```
 
-1. After a successful compile, the locations for the results are at:
+    ```
+    make DEBUG=y AWS_SDK=../aws-sdk-cpp/
+    ```
+
+   **Note**: After a successful compile, the locations for the results are at:
     - Test application: ```cdi_test``` is placed at ```aws-cdi-sdk/build/debug/bin```
     - Minimal test applications: ```cdi_test_min_tx``` and ```cdi_test_min_rx``` are placed at ```aws-cdi-sdk/build/debug/bin```
     - AWS CDI SDK and libfabric shared libraries ```libcdisdk.so.2.0``` and ```libfabric.so.1``` are placed at ```aws-cdi-sdk/build/debug/lib.```
     - HTML documentation can be found at ```aws-cdi-sdk/build/documentation```
 
-## Disabling the display of performance metrics to your Amazon CloudWatch account
+## (Optional) Disable the display of performance metrics to your Amazon CloudWatch account
 
 To disable the display of performance metrics to your Amazon CloudWatch account:
 

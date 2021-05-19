@@ -68,8 +68,8 @@ static const EnumStringKey tcs_key_array[] = {
     { kCdiAvmVidTcsLinear,       "Linear" },
     { kCdiAvmVidTcsBT2100LINPQ,  "BT2100LINPQ" },
     { kCdiAvmVidTcsBT2100LINHLG, "BT2100LINHLG" },
-    { kCdiAvmVidTcsST2065_1,     "ST2065_1" },
-    { kCdiAvmVidTcsST428_1,      "ST428_1" },
+    { kCdiAvmVidTcsST2065_1,     "ST2065-1" },
+    { kCdiAvmVidTcsST428_1,      "ST428-1" },
     { kCdiAvmVidTcsDensity,      "Density" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
 };
@@ -96,8 +96,8 @@ static const EnumStringKey colorimetry_key_array[] = {
     { kCdiAvmVidColorimetryBT709,    "BT709" },
     { kCdiAvmVidColorimetryBT2020,   "BT2020" },
     { kCdiAvmVidColorimetryBT2100,   "BT2100" },
-    { kCdiAvmVidColorimetryST2065_1, "ST2065_1" },
-    { kCdiAvmVidColorimetryST2065_3, "ST2065_3" },
+    { kCdiAvmVidColorimetryST2065_1, "ST2065-1" },
+    { kCdiAvmVidColorimetryST2065_3, "ST2065-3" },
     { kCdiAvmVidColorimetryXYZ,      "XYZ" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
 };

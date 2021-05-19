@@ -270,11 +270,13 @@ static CdiReturnStatus MakeAvmConfig(const TestConnectionInfo* connection_info_p
  * @param sgl_ptr Pointer to SGL.
  * @param timestamp_ptr Pointer to timestamp.
  * @param avm_config_ptr Pointer to the generic configuration structure to use for the stream.
+ * @param stream_identifier Stream identifer.
  *
  * @return A value from the CdiReturnStatus enumeration.
  */
 static CdiReturnStatus SendAvmPayload(TestConnectionInfo* connection_info_ptr, CdiSgList* sgl_ptr,
-                                      CdiPtpTimestamp* timestamp_ptr, CdiAvmConfig* avm_config_ptr)
+                                      CdiPtpTimestamp* timestamp_ptr, CdiAvmConfig* avm_config_ptr,
+                                      int stream_identifier)
 {
     CdiReturnStatus rs = kCdiStatusOk;
 
@@ -282,7 +284,8 @@ static CdiReturnStatus SendAvmPayload(TestConnectionInfo* connection_info_ptr, C
         .core_config_data.core_extra_data.origination_ptp_timestamp = *timestamp_ptr,
         .core_config_data.core_extra_data.payload_user_data = 0,
         .core_config_data.user_cb_param = connection_info_ptr,
-        .core_config_data.unit_size = 0
+        .core_config_data.unit_size = 0,
+        .avm_extra_data.stream_identifier = stream_identifier
     };
 
     if (kCdiStatusOk == rs) {
@@ -400,12 +403,10 @@ int main(int argc, const char** argv)
     //-----------------------------------------------------------------------------------------------------------------
     CdiAdapterHandle adapter_handle = NULL;
     if (kCdiStatusOk == rs) {
-        // Round-up buffer size to a multiple of HUGE_PAGES_BYTE_SIZE.
-        int tx_buffer_size_bytes = ((con_info.test_settings.payload_size + HUGE_PAGES_BYTE_SIZE-1) /
-                                   HUGE_PAGES_BYTE_SIZE) * HUGE_PAGES_BYTE_SIZE;
         CdiAdapterData adapter_data = {
             .adapter_ip_addr_str = con_info.test_settings.local_adapter_ip_str,
-            .tx_buffer_size_bytes = tx_buffer_size_bytes,
+            .tx_buffer_size_bytes = con_info.test_settings.payload_size,
+            .ret_tx_buffer_ptr = NULL, // Initialize to NULL.
             .adapter_type = kCdiAdapterTypeEfa // Use EFA adapter.
         };
         rs = CdiCoreNetworkAdapterInitialize(&adapter_data, &adapter_handle);
@@ -468,7 +469,12 @@ int main(int argc, const char** argv)
     if (kCdiStatusOk == rs) {
         // Fill Tx payload buffer with a simple pattern.
         if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
-            const uint8_t pattern_array[5] = { 0x80, 0x04, 0x08, 0x00, 0x40 }; // Black for 10-bit 4:2:2.
+
+            // 10-bit 4:2:2 pixel color patterns:
+            //   Black: 0x80, 0x04, 0x08, 0x00, 0x40
+            //   Blue:  0xF0, 0x0A, 0x46, 0xE0, 0xA4
+            //   Gold:  0x1C, 0x2F, 0x8A, 0x12, 0xF8
+            const uint8_t pattern_array[5] = { 0xF0, 0x0A, 0x46, 0xE0, 0xA4 }; // Blue
             for (int i = 0; i < con_info.test_settings.payload_size; i+= sizeof(pattern_array)) {
                 memcpy(((uint8_t*)con_info.adapter_tx_buffer_ptr)+i, pattern_array, sizeof(pattern_array));
             }
@@ -491,6 +497,10 @@ int main(int argc, const char** argv)
         // Setup Scatter-gather-list entry for the payload data to send. NOTE: The buffers the SGL entries point to must
         // persist until the payload callback has been made. Since we are reusing the same buffer for each payload, we
         // don't need any additional logic here.
+        //
+        // NOTE: To demonstrate minimal functionality, a single buffer is used here. Applications typically would use a
+        // buffering scheme that supports multiple buffers. This would allow buffers to be written to while additional
+        // buffers are used for data transfer.
         CdiSglEntry sgl_entry = {
             .address_ptr = con_info.adapter_tx_buffer_ptr,
             .size_in_bytes = con_info.test_settings.payload_size,
@@ -499,7 +509,7 @@ int main(int argc, const char** argv)
             .total_data_size = con_info.test_settings.payload_size,
             .sgl_head_ptr = &sgl_entry,
             .sgl_tail_ptr = &sgl_entry,
-            .internal_data_ptr = NULL,
+            .internal_data_ptr = NULL, // Initialize to NULL (not used by application).
         };
 
         // Create a PTP timestamp to send along with the payload. CDI doesn't use it, but just here as an example.
@@ -512,7 +522,8 @@ int main(int argc, const char** argv)
 
         // Send the payload.
         if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
-            rs = SendAvmPayload(&con_info, &sgl, &timestamp, &avm_config);
+            int stream_identifier = 0; // Used by AVM APIs to identify the stream within a connection.
+            rs = SendAvmPayload(&con_info, &sgl, &timestamp, &avm_config, stream_identifier);
         } else {
             rs = SendRawPayload(&con_info, &sgl, &timestamp);
         }

@@ -64,8 +64,6 @@
 /// @brief Log messages to aid in debugging Rx Buffer feature.
 //#define DEBUG_RX_BUFFER
 
-/// NOTE: The option "DEBUG_INTERNAL_SGL_ENTRIES" is defined in cdi_core_api.h, since a dependency exist there.
-
 //*********************************************************************************************************************
 //******************************************* MAX SIZES FOR STATIC DATA/ARRAYS ****************************************
 //*********************************************************************************************************************
@@ -202,19 +200,19 @@
 /// receiver using the control interface. The value is in milliseconds.
 #define SEND_PING_COMMAND_FREQUENCY_MSEC        (3000)
 
-/// @brief This value is used by the transmitter to define how many times a ping command is sent without receiving an
-/// ACK reply before going into connection reset mode.
-#define TX_PING_MAX_RETRIES                     (3)
+/// @brief This value is used by the transmitter to define how many times a command is sent without receiving an ACK
+/// reply before going into connection reset mode.
+#define TX_COMMAND_MAX_RETRIES                  (3)
 
-/// @brief This value is used by the transmitter to define how long it waits for an ACK response to a ping command that
-/// it sent. If the timeout expires, another ping command will be sent up to the amount specified by
-/// #TX_PING_MAX_RETRIES. Once the specified number of attempts has been exhausted, the transmitter will go into
-/// connection reset mode. The value is in milliseconds.
-#define TX_PING_ACK_TIMEOUT_MSEC                (500)
+/// @brief This value is used by the transmitter to define how long it waits for an ACK response to a command that it
+/// sent. If the timeout expires, the same command will be sent up to the amount specified by #TX_COMMAND_MAX_RETRIES.
+/// Once the specified number of attempts has been exhausted, the transmitter will go into connection reset mode. The
+/// value is in milliseconds.
+#define TX_COMMAND_ACK_TIMEOUT_MSEC             (500)
 
 /// @brief Defines how long the receiver waits for a ping command from the remote target before changing to connection
 /// reset mode. The value is in milliseconds.
-#define RX_PING_MONITOR_TIMEOUT_MSEC            (SEND_PING_COMMAND_FREQUENCY_MSEC+(TX_PING_ACK_TIMEOUT_MSEC*(TX_PING_MAX_RETRIES+1)))
+#define RX_PING_MONITOR_TIMEOUT_MSEC            (SEND_PING_COMMAND_FREQUENCY_MSEC+(TX_COMMAND_ACK_TIMEOUT_MSEC*(TX_COMMAND_MAX_RETRIES+1)))
 
 /// @brief Defines the EFA interface probe packet data size.
 #define EFA_PROBE_PACKET_DATA_SIZE              (1024)

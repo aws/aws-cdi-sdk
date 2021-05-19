@@ -68,7 +68,6 @@ typedef struct {
         EfaRxState rx_state;
     };
 
-    ControlInterfaceHandle tx_control_handle; ///< Handle of Tx control interface for this endpoint.
     int tx_control_dest_port; ///< Transmitter control interface destination port.
 
     ProbeEndpointHandle probe_endpoint_handle; ///< Handle of probe for this endpoint.
@@ -84,9 +83,8 @@ typedef struct {
     struct fid_av* address_vector_ptr;        ///< Pointer to address vector map (high-level to fabric address map)
     fi_addr_t remote_fi_addr;                 ///< Remote memory address (we don't use so it is always FI_ADDR_UNSPEC)
 
-    char local_ipv6_gid_array[MAX_IPV6_GID_LENGTH]; ///< Pointer to local device GID for this endpoint.
-    char remote_ip_str[MAX_IP_STRING_LENGTH]; ///< Pointer to remote IP address string related to this endpoint.
-    char remote_ipv6_gid_array[MAX_IPV6_GID_LENGTH]; ///< Pointer to remote device GID related to this endpoint.
+    uint8_t local_ipv6_gid_array[MAX_IPV6_GID_LENGTH]; ///< Pointer to local device GID for this endpoint.
+    uint8_t remote_ipv6_gid_array[MAX_IPV6_GID_LENGTH]; ///< Pointer to remote device GID related to this endpoint.
     int dest_control_port;                    ///< Destination control port. For socket-based we use the next higher
                                               /// port number for the data port.
 } EfaEndpointState;
@@ -96,7 +94,10 @@ typedef struct {
  */
 typedef struct {
     AdapterConnectionState* adapter_con_ptr; ///< Pointer to adapter connection data.
-    ControlInterfaceHandle rx_control_handle; ///< Handle of Rx control interface for this connection.
+    ControlInterfaceHandle control_interface_handle; ///< Handle of control interface for the connection.
+
+    /// Memory pool of send control work requests (ProbeControlPacketWorkRequest).
+    CdiPoolHandle control_work_request_pool_handle;
 } EfaConnectionState;
 
 //*********************************************************************************************************************
@@ -127,11 +128,11 @@ CdiReturnStatus EfaAdapterEndpointStart(EfaEndpointState* endpoint_ptr);
 /**
  * Get handle of adapter control inteface related to the specified EFA endpoint.
  *
- * @param endpoint_ptr Pointer to the EFA endpoint.
+ * @param adapter_con_state_ptr Pointer to adapter connection state data.
  *
  * @return Handle of control interface adapter.
  */
-CdiAdapterHandle EfaAdapterGetAdapterControlInterface(EfaEndpointState* endpoint_ptr);
+CdiAdapterHandle EfaAdapterGetAdapterControlInterface(AdapterConnectionState* adapter_con_state_ptr);
 
 // EFA Tx functions
 

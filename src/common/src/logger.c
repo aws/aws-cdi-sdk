@@ -19,9 +19,9 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#include "list_api.h"
 #include "cdi_core_api.h"
 #include "cdi_os_api.h"
+#include "list_api.h"
 #include "singly_linked_list_api.h"
 
 //*********************************************************************************************************************
@@ -451,29 +451,19 @@ static bool CreateCommonLog(CdiLoggerHandle logger_handle, CdiConnectionHandle c
  * string cannot exceed buffer_size characters in length. It will overwrite the last character if char_count is at the
  * end of the buffer.
  *
- * @param is_stdout If true, add "\n\r" to line ending, otherwise only add "\n".
  * @param log_msg_str Pointer to log message string.
  * @param buffer_size Size of log message buffer in bytes.
  * @param char_count Offset to place the linefeed and new '\0'.
  *
  * @return Adjusted character count.
  */
-static int AppendLineEnding(bool is_stdout, char* log_msg_str, int buffer_size, int char_count)
+static int AppendLineEnding(char* log_msg_str, int buffer_size, int char_count)
 {
-    if (is_stdout) {
-        // Insert carriage return and line feed onto log string and replace string terminator character.
-        if (char_count >= (buffer_size - 3)) {
-            char_count = buffer_size-3;
-        }
-        log_msg_str[char_count++] = '\n';
-        log_msg_str[char_count++] = '\r';
-    } else {
-        // Insert line feed onto log string and replace string terminator character.
-        if (char_count >= (buffer_size - 2)) {
-            char_count = buffer_size-2;
-        }
-        log_msg_str[char_count++] = '\n';
+    // Insert line feed onto log string and replace string terminator character.
+    if (char_count >= (buffer_size - 2)) {
+        char_count = buffer_size-2;
     }
+    log_msg_str[char_count++] = '\n';
     log_msg_str[char_count++] = '\0';
 
     return char_count;
@@ -482,15 +472,14 @@ static int AppendLineEnding(bool is_stdout, char* log_msg_str, int buffer_size, 
 /**
  * Write a single log message line to the specified log.
  *
- * @param is_stdout If true, format for using "\n\r", otherwise use "\n".
  * @param dest_log_buffer_str Log handle. If NULL, stdout is used.
  * @param dest_buffer_size Size of destination buffer in bytes.
  * @param log_level log level of this log message.
  * @param multiline True if this message is part of a multiline message.
  * @param log_str Pointer to log message string to write.
  */
-static int WriteLineToBuffer(bool is_stdout, char* dest_log_buffer_str, int dest_buffer_size, CdiLogLevel log_level,
-                             bool multiline, char* log_str)
+static int WriteLineToBuffer(char* dest_log_buffer_str, int dest_buffer_size, CdiLogLevel log_level, bool multiline,
+                             char* log_str)
 {
     int char_count = 0;
 
@@ -540,7 +529,7 @@ static int WriteLineToBuffer(bool is_stdout, char* dest_log_buffer_str, int dest
     char_count += CdiOsStrCpy(dest_log_buffer_str + char_count, dest_buffer_size - char_count, log_str);
 
     // Insert new line onto log string and replace string terminator character.
-    return AppendLineEnding(is_stdout, dest_log_buffer_str, dest_buffer_size, char_count);
+    return AppendLineEnding(dest_log_buffer_str, dest_buffer_size, char_count);
 }
 
 /**
@@ -635,8 +624,7 @@ static void WriteLineToLog(CdiLogHandle handle, CdiLogLevel log_level, bool mult
     }
 
     char final_log_str[MAX_LOG_STRING_LENGTH];
-    int char_count = WriteLineToBuffer(CDI_STDOUT == file_handle, final_log_str, sizeof(final_log_str), log_level,
-                                       multiline, log_str);
+    int char_count = WriteLineToBuffer(final_log_str, sizeof(final_log_str), log_level, multiline, log_str);
 
     OutputToFileHandle(file_handle, log_level, final_log_str, char_count - 1); // -1 excludes terminating '\0'
 }
@@ -936,7 +924,6 @@ void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str,
         } else {
             // For file or stdout log.
             char log_message_str[MAX_LOG_STRING_LENGTH];
-            bool is_stdout = kLogMethodStdout == state_ptr->log_handle->log_method;
 
             if (0 == state_ptr->line_count) {
                 // For first line, optionally generate function name and source code line number information.
@@ -945,14 +932,14 @@ void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str,
 
                 // Then, format the line with a timestamp and log level string, writing it to the multiline buffer.
                 // This will add a trailing linefeed. We don't want to include the trailing '\0' (so -1 on count).
-                char_count = WriteLineToBuffer(is_stdout, dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level,
-                                               false, log_message_str) - 1;
+                char_count = WriteLineToBuffer(dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level, false,
+                                               log_message_str) - 1;
             } else {
                 // Not first line. Don't generate function name, source code line number or timestamp. This will add a
                 // trailing linefeed. We don't want to include the trailing '\0' (so -1 on count).
                 vsnprintf(log_message_str, MAX_LOG_STRING_LENGTH, format_str, vars);
-                char_count = WriteLineToBuffer(is_stdout, dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level,
-                                               true, log_message_str) - 1;
+                char_count = WriteLineToBuffer(dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level, true,
+                                               log_message_str) - 1;
             }
         }
 
