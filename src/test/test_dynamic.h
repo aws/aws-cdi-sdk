@@ -62,7 +62,7 @@ void TestDynamicDestroy(TestDynamicHandle handle);
 bool TestDynamicPollStatsReconfigure(TestDynamicHandle handle);
 
 /**
- * Dynamically test endpoint creation/destruction by using the SDK CdiAvmTxCreateStreamEndpoint() and
+ * Dynamically test endpoint creation/destruction by using the SDK CdiAvmTxStreamEndpointCreate() and
  * CdiAvmStreamEndpointDestroy() APIs.
  *
  * @param handle Handle of the test dynamic component.

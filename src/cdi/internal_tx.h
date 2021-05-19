@@ -43,11 +43,11 @@ typedef struct {
 CdiReturnStatus TxCreateInternal(ConnectionProtocolType protocol_type, CdiTxConfigData* config_data_ptr,
                                  CdiCallback tx_cb_ptr, CdiConnectionHandle* ret_handle_ptr);
 
-/// @see CdiAvmTxCreateStreamConnection
+/// @see CdiAvmTxStreamConnectionCreate
 CdiReturnStatus TxStreamConnectionCreateInternal(CdiTxConfigData* config_data_ptr, CdiCallback tx_cb_ptr,
                                                  CdiConnectionHandle* ret_handle_ptr);
 
-/// @see CdiAvmTxCreateStream
+/// @see CdiAvmTxStreamEndpointCreate
 CdiReturnStatus TxStreamEndpointCreateInternal(CdiConnectionHandle handle, CdiTxConfigDataStream* stream_config_ptr,
                                                CdiEndpointHandle* ret_handle_ptr);
 
