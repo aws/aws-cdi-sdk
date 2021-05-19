@@ -15,7 +15,7 @@
 
 #include "adapter_efa.h"
 
-#include "adapter_efa_probe_rx.h"
+#include "adapter_efa_probe_control.h"
 #include "internal.h"
 #include "internal_log.h"
 #include "internal_tx.h"
@@ -53,7 +53,7 @@ static CdiReturnStatus EfaEndpointOpen(AdapterEndpointHandle endpoint_handle, co
 /// Forward declaration of function.
 static CdiReturnStatus EfaEndpointPoll(AdapterEndpointHandle handle);
 /// Forward declaration of function.
-static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle handle);
+static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle handle, bool reopen);
 /// Forward declaration of function.
 static CdiReturnStatus EfaEndpointStart(AdapterEndpointHandle handle);
 /// Forward declaration of function.
@@ -169,7 +169,7 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         // Transmitter.
         flags = 0;
         if (is_socket_based) {
-            node_str = endpoint_ptr->remote_ip_str;
+            node_str = EndpointManagerEndpointRemoteIpGet(endpoint_ptr->adapter_endpoint_ptr->cdi_endpoint_handle);
         } else {
             node_str = NULL;
         }
@@ -245,10 +245,16 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         if (is_transmitter) {
             CdiAdapterState* adapter_state_ptr =
                 endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr;
-            // Register the Tx buffer with libfabric.
-            ret = fi_mr_reg(endpoint_ptr->domain_ptr, adapter_state_ptr->adapter_data.ret_tx_buffer_ptr,
-                            adapter_state_ptr->adapter_data.tx_buffer_size_bytes, FI_SEND, 0, 0, 0,
-                            &endpoint_ptr->tx_state.memory_region_ptr, NULL);
+            if (0 == adapter_state_ptr->adapter_data.tx_buffer_size_bytes) {
+                SDK_LOG_GLOBAL(kLogError, "Payload transmit buffer size cannot be zero. Set tx_buffer_size_bytes when"
+                               " using CdiCoreNetworkAdapterInitialize().");
+                ret = -1;
+            } else {
+                // Register the Tx buffer with libfabric.
+                ret = fi_mr_reg(endpoint_ptr->domain_ptr, adapter_state_ptr->adapter_data.ret_tx_buffer_ptr,
+                                adapter_state_ptr->adapter_data.tx_buffer_size_bytes, FI_SEND, 0, 0, 0,
+                                &endpoint_ptr->tx_state.memory_region_ptr, NULL);
+            }
         } else if (!is_socket_based) {
             // For the EFA a packet pool must be created before marking the endpoint enabled or else packets end up in
             // a shared buffer that is never emptied and can overrun.
@@ -354,11 +360,11 @@ static void LibFabricEndpointClose(EfaEndpointState* endpoint_ptr)
  * resources that were created when the connection was created are not affected.
  *
  * @param endpoint_ptr Pointer to the adapter endpoint to stop.
- * @param do_reopen If true, re-opens the libfabric endpoint, otherwise does not re-open it.
+ * @param reopen If true re-opens the libfabric endpoint, otherwise does not re-open it.
  *
  * @return kCdiStatusOk if successful, otherwise a value that indicates the nature of the failure is returned.
  */
-static CdiReturnStatus EfaAdapterEndpointStop(EfaEndpointState* endpoint_ptr, bool do_reopen)
+static CdiReturnStatus EfaAdapterEndpointStop(EfaEndpointState* endpoint_ptr, bool reopen)
 {
     CdiReturnStatus rs = kCdiStatusOk;
 
@@ -369,7 +375,7 @@ static CdiReturnStatus EfaAdapterEndpointStop(EfaEndpointState* endpoint_ptr, bo
     // Close libfabric endpoint resources.
     LibFabricEndpointClose(endpoint_ptr);
 
-    if (do_reopen) {
+    if (reopen) {
         // Re-open the libfabric endpoint here so we can get the endpoint's address. For the EFA, this will return the
         // device GID and QPN, creating a unique value for each endpoint. See "efa_ep_addr" in the EFA provider (efa.h).
         // This is done so the GID can be sent to the remote using the control interface. The remote GID is required in
@@ -396,32 +402,43 @@ static CdiReturnStatus EfaConnectionCreate(AdapterConnectionHandle handle, int p
     EfaConnectionState* efa_con_ptr = CdiOsMemAllocZero(sizeof(*efa_con_ptr));
     if (efa_con_ptr == NULL) {
         rs = kCdiStatusNotEnoughMemory;
-    }
-
-    if (kCdiStatusOk == rs) {
+    } else {
         efa_con_ptr->adapter_con_ptr = handle;
 
-        // A single Rx control interface exists for each connection. One Tx control interface exists for each endpoint
-        // of a connection. Have the kernel choose an ephemeral port number if this is a sending connection, otherwise
-        // listen on the configured port number on the receiving connection.
-        port_number = (kEndpointDirectionReceive == handle->direction) ? port_number : 0;
-
-        EfaAdapterState* efa_adapter_state_ptr = (EfaAdapterState*)handle->adapter_state_ptr->type_specific_ptr;
-        ControlInterfaceConfigData config_data = {
-            .control_interface_adapter_handle = efa_adapter_state_ptr->control_interface_adapter_handle,
-            .msg_from_endpoint_func_ptr = ProbeRxControlMessageFromEndpoint,
-            .msg_from_endpoint_param_ptr = handle,
-            .log_handle = handle->log_handle,
-            .port_number = port_number,
-        };
-        rs = ControlInterfaceCreate(&config_data, kEndpointDirectionReceive, &efa_con_ptr->rx_control_handle);
+        // ProbePacketWorkRequests are used for sending control packets over the socket interface. One additional
+        // entry is required so a control packet can be sent while the probe packet queue is full.
+        if (!CdiPoolCreate("Send Control ProbePacketWorkRequest Pool", MAX_PROBE_CONTROL_COMMANDS_PER_CONNECTION + 1,
+                           NO_GROW_SIZE, NO_GROW_COUNT,
+                           sizeof(ProbePacketWorkRequest), true, // true= Make thread-safe
+                           &efa_con_ptr->control_work_request_pool_handle)) {
+            rs = kCdiStatusAllocationFailed;
+        }
+#ifdef DEBUG_ENABLE_POOL_DEBUGGING_EFA_PROBE
+        if (kCdiStatusOk == rs) {
+            CdiPoolDebugEnable(probe_ptr->control_work_request_pool_handle, PoolDebugCallback);
+        }
+#endif
     }
 
-    // The control interfaces are independent of the adapter endpoint, so we want to start them now.
     if (kCdiStatusOk == rs) {
-        // Start Rx control interface.
-        if (kCdiStatusOk != CdiAdapterStartEndpoint(ControlInterfaceGetEndpoint(efa_con_ptr->rx_control_handle))) {
-            rs = kCdiStatusFatal;
+        // Create a single control interface that will be shared across all endpoints associated with this
+        // connection. Each control command that is received must contain data unique to each endpoint to ensure
+        // the command is routed to the correct endpoint.
+        ControlInterfaceConfigData config_data = {
+            .control_interface_adapter_handle = EfaAdapterGetAdapterControlInterface(handle),
+            .msg_from_endpoint_func_ptr = ProbeControlMessageFromBidirectionalEndpoint,
+            .msg_from_endpoint_param_ptr = handle,
+            .log_handle = handle->log_handle,
+            .tx_dest_ip_addr_str = NULL, // Don't specify IP, so socket always uses bind().
+            // For Tx, use 0 for port so ephemeral port is generated by the OS via bind().
+            .port_number = (kEndpointDirectionSend == handle->direction) ? 0 : port_number,
+        };
+        rs = ControlInterfaceCreate(&config_data, &efa_con_ptr->control_interface_handle);
+
+        // Control interface are independent of the adapter endpoint, so start it now.
+        if (kCdiStatusOk == rs) {
+            // Start Rx control interface.
+            CdiAdapterStartEndpoint(ControlInterfaceGetEndpoint(efa_con_ptr->control_interface_handle));
         }
     }
 
@@ -446,10 +463,16 @@ static CdiReturnStatus EfaConnectionDestroy(AdapterConnectionHandle handle)
     if (adapter_con_ptr) {
         EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
         if (efa_con_ptr) {
-            // Must close the control interface before destroying resources they use, such as control_packet_fifo_handle.
-            // Close sockets if they are open (CdiAdapterCloseEndpoint checks if handle is NULL).
-            ControlInterfaceDestroy(efa_con_ptr->rx_control_handle);
-            efa_con_ptr->rx_control_handle = NULL;
+            // NOTE: The SGL entries in this pool are stored within the pool buffer, so no additional resource freeing needs
+            // to be done here.
+            CdiPoolPutAll(efa_con_ptr->control_work_request_pool_handle);
+            CdiPoolDestroy(efa_con_ptr->control_work_request_pool_handle);
+            efa_con_ptr->control_work_request_pool_handle = NULL;
+
+            if (efa_con_ptr->control_interface_handle) {
+                ControlInterfaceDestroy(efa_con_ptr->control_interface_handle);
+                efa_con_ptr->control_interface_handle = NULL;
+            }
 
             CdiOsMemFree(efa_con_ptr);
             adapter_con_ptr->type_specific_ptr = NULL;
@@ -484,11 +507,6 @@ static CdiReturnStatus EfaEndpointOpen(AdapterEndpointHandle endpoint_handle, co
         endpoint_handle->type_specific_ptr = endpoint_ptr;
         endpoint_ptr->adapter_endpoint_ptr = endpoint_handle;
         endpoint_ptr->dest_control_port = port_number;
-
-        if (kEndpointDirectionSend == endpoint_handle->adapter_con_state_ptr->direction) {
-            CdiOsStrCpy(endpoint_ptr->remote_ip_str, sizeof(endpoint_ptr->remote_ip_str),
-                        remote_address_str);
-        }
     }
 
     if (kCdiStatusOk == rs) {
@@ -542,10 +560,11 @@ static CdiReturnStatus EfaEndpointPoll(AdapterEndpointHandle endpoint_handle)
  * Reset an EFA connection for the specified adapter endpoint.
  *
  * @param endpoint_handle Handle of adapter endpoint to reset.
+ * @param reopen If true the endpoint is re-opened after resetting it, otherwise just reset it.
  *
  * @return kCdiStatusOk if successful, otherwise a value that indicates the nature of the failure is returned.
  */
-static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle endpoint_handle)
+static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle endpoint_handle, bool reopen)
 {
     // NOTE: This is only called within the SDK, so no special logging macros needed for logging.
     EfaEndpointState* endpoint_ptr = (EfaEndpointState*)endpoint_handle->type_specific_ptr;
@@ -556,9 +575,9 @@ static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle endpoint_handle)
         EfaRxEndpointReset(endpoint_ptr);
     }
 
-    EfaAdapterEndpointStop(endpoint_ptr, true); // true= re-open the libfabric endpoint
+    EfaAdapterEndpointStop(endpoint_ptr, reopen);
 
-    ProbeEndpointResetDone(endpoint_ptr->probe_endpoint_handle);
+    ProbeEndpointResetDone(endpoint_ptr->probe_endpoint_handle, reopen);
 
     return kCdiStatusOk;
 }
@@ -631,6 +650,9 @@ static CdiReturnStatus EfaAdapterShutdown(CdiAdapterHandle adapter_handle)
     if (adapter_handle != NULL) {
         EfaAdapterState* efa_adapter_state_ptr = (EfaAdapterState*)adapter_handle->type_specific_ptr;
         if (efa_adapter_state_ptr) {
+            if (efa_adapter_state_ptr->control_interface_adapter_handle) {
+                rs = NetworkAdapterDestroyInternal(efa_adapter_state_ptr->control_interface_adapter_handle);
+            }
             CdiOsMemFree(efa_adapter_state_ptr);
             adapter_handle->type_specific_ptr = NULL;
         }
@@ -638,7 +660,7 @@ static CdiReturnStatus EfaAdapterShutdown(CdiAdapterHandle adapter_handle)
         if (adapter_handle->adapter_data.ret_tx_buffer_ptr) {
             if (adapter_handle->tx_buffer_is_hugepages) {
                 CdiOsMemFreeHugePage(adapter_handle->adapter_data.ret_tx_buffer_ptr,
-                                     adapter_handle->adapter_data.tx_buffer_size_bytes);
+                                     adapter_handle->tx_buffer_allocated_size);
                 adapter_handle->tx_buffer_is_hugepages = false;
             } else {
                 CdiOsMemFree(adapter_handle->adapter_data.ret_tx_buffer_ptr);
@@ -693,12 +715,18 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
 
     efa_adapter_state_ptr->is_socket_based = is_socket_based;
 
-    if (rs == kCdiStatusOk && adapter_state_ptr->adapter_data.tx_buffer_size_bytes) {
-        void* mem_ptr = CdiOsMemAllocHugePage(adapter_state_ptr->adapter_data.tx_buffer_size_bytes);
+    uint64_t allocated_size = adapter_state_ptr->adapter_data.tx_buffer_size_bytes;
+    if (rs == kCdiStatusOk && allocated_size) {
+        // If necessary, round up to next even-multiple of hugepages byte size.
+        allocated_size = ((adapter_state_ptr->adapter_data.tx_buffer_size_bytes +
+                          CDI_HUGE_PAGES_BYTE_SIZE-1) / CDI_HUGE_PAGES_BYTE_SIZE) * CDI_HUGE_PAGES_BYTE_SIZE;
+        void* mem_ptr = CdiOsMemAllocHugePage(allocated_size);
         if (NULL == mem_ptr) {
             // Fallback using heap memory.
-            mem_ptr = CdiOsMemAlloc(adapter_state_ptr->adapter_data.tx_buffer_size_bytes);
+            allocated_size = adapter_state_ptr->adapter_data.tx_buffer_size_bytes;
+            mem_ptr = CdiOsMemAlloc(allocated_size);
             if (NULL == mem_ptr) {
+                allocated_size = 0; // Since allocation failed, set allocated size to zero.
                 rs = kCdiStatusNotEnoughMemory;
             }
         } else {
@@ -706,6 +734,7 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
             adapter_state_ptr->tx_buffer_is_hugepages = true;
         }
         adapter_state_ptr->adapter_data.ret_tx_buffer_ptr = mem_ptr;
+        adapter_state_ptr->tx_buffer_allocated_size = allocated_size;
     }
 
     // Set environment variables used by libfabric.
@@ -802,10 +831,8 @@ CdiReturnStatus EfaAdapterEndpointStart(EfaEndpointState* endpoint_ptr)
     return rs;
 }
 
-CdiAdapterHandle EfaAdapterGetAdapterControlInterface(EfaEndpointState* endpoint_ptr)
+CdiAdapterHandle EfaAdapterGetAdapterControlInterface(AdapterConnectionState* adapter_con_state_ptr )
 {
-    EfaAdapterState* efa_adapter_ptr = (EfaAdapterState*)
-        endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->type_specific_ptr;
-
+    EfaAdapterState* efa_adapter_ptr = (EfaAdapterState*)adapter_con_state_ptr->adapter_state_ptr->type_specific_ptr;
     return efa_adapter_ptr->control_interface_adapter_handle;
 }

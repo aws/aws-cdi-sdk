@@ -13,7 +13,6 @@
 
 #include "cdi_logger_api.h"
 #include "cdi_os_api.h"
-#include "cdi_test.h"
 #include "timeout.h"
 
 //*********************************************************************************************************************
@@ -146,8 +145,8 @@ static bool MultipleTimersTest(unsigned int num_timers, bool reverse)
     }
 
     CdiOsSleep(2);
-    CallBackUserData user_data[num_timers];
-    CdiSignalType signals_array[num_timers];
+    CallBackUserData user_data[MAX_TIMERS];
+    CdiSignalType signals_array[MAX_TIMERS];
 
     if (pass) {
         for (unsigned int i=0; i<num_timers; i++) {
@@ -164,7 +163,7 @@ static bool MultipleTimersTest(unsigned int num_timers, bool reverse)
 
             uint64_t curr_time_us = CdiOsGetMicroseconds();
             user_data[i].expiration_us = curr_time_us + (timeout_ms * 1000);
-            TimeoutHandle timeout_handle[num_timers];
+            TimeoutHandle timeout_handle[MAX_TIMERS];
             if (!CdiTimeoutAdd(timer_handle, &TimerCallback, (timeout_ms * 1000), &user_data[i], &timeout_handle[i])) {
                 if (i >= MAX_TIMERS) {
                     CDI_LOG_THREAD(kLogWarning, "Timeout add failed because there are too many active timers. This is not considered an error.");
@@ -190,7 +189,7 @@ static bool MultipleTimersTest(unsigned int num_timers, bool reverse)
             if (signal_index == (MAX_TIMERS -1) || signal_index == (num_timers - 1)) {
                 waiting_callbacks = false;
             }
-        } else if (signal_index == OS_SIG_TIMEOUT) {
+        } else if (signal_index == CDI_OS_SIG_TIMEOUT) {
             CDI_LOG_THREAD(kLogError, "Timeout waiting for signals from callback");
             waiting_callbacks = false;
             pass = false;
@@ -258,9 +257,9 @@ static bool TimersSetAndClear(uint32_t num_timers)
     }
 
     CdiOsSleep(2);
-    CallBackUserData user_data[num_timers];
+    CallBackUserData user_data[MAX_TIMERS];
 
-    TimeoutHandle timeout_handle[num_timers];
+    TimeoutHandle timeout_handle[MAX_TIMERS];
     if (pass) {
         for (unsigned int i=0; i<num_timers; i++) {
             int timeout_ms = 15;
@@ -319,7 +318,7 @@ static bool TimersSetAndClear(uint32_t num_timers)
 //*********************************************************************************************************************
 
 /// Main routine to test the timeout function.
-bool TestUnitTimeout(void)
+CdiReturnStatus TestUnitTimeout(void)
 {
     bool pass = true;
 
@@ -367,6 +366,5 @@ bool TestUnitTimeout(void)
         }
     }
 
-    return pass;
+    return pass ? kCdiStatusOk : kCdiStatusFatal;
 }
-

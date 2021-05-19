@@ -118,7 +118,7 @@ CDI_INTERFACE bool CdiQueuePopWait(CdiQueueHandle handle, int timeout_ms, CdiSig
  * @param abort_wait_signal_array Array of signals used to abort waiting.
  * @param num_signals Number of signals in the array.
  * @param  ret_signal_index_ptr Pointer to the returned signal index that caused the wait to abort. If a timeout
- *                              occurred, OS_SIG_TIMEOUT is returned. This is an optional parameter. Pass NULL if you
+ *                              occurred, CDI_OS_SIG_TIMEOUT is returned. This is an optional parameter. Pass NULL if you
  *                              don't care.
  * @param item_dest_ptr Pointer to buffer where to copy the item to. Size of buffer must be large enough to hold the
  *                      data. Data size was set when the queue was created (see item_byte_size). This is an optional
@@ -163,7 +163,7 @@ CDI_INTERFACE bool CdiQueuePushWait(CdiQueueHandle handle, int timeout_ms, CdiSi
  * @param abort_wait_signal_array Array of signals used to abort waiting.
  * @param num_signals Number of signals in the array.
  * @param ret_signal_index_ptr Pointer to the returned signal index that caused the wait to abort. If a timeout
- *                             occurred, OS_SIG_TIMEOUT is returned. This is an optional parameter. Pass NULL if you
+ *                             occurred, CDI_OS_SIG_TIMEOUT is returned. This is an optional parameter. Pass NULL if you
  *                             don't care.
  * @param item_ptr Address where to copy the item from.
  *

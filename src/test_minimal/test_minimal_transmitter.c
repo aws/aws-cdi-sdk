@@ -270,11 +270,13 @@ static CdiReturnStatus MakeAvmConfig(const TestConnectionInfo* connection_info_p
  * @param sgl_ptr Pointer to SGL.
  * @param timestamp_ptr Pointer to timestamp.
  * @param avm_config_ptr Pointer to the generic configuration structure to use for the stream.
+ * @param stream_identifier Stream identifer.
  *
  * @return A value from the CdiReturnStatus enumeration.
  */
 static CdiReturnStatus SendAvmPayload(TestConnectionInfo* connection_info_ptr, CdiSgList* sgl_ptr,
-                                      CdiPtpTimestamp* timestamp_ptr, CdiAvmConfig* avm_config_ptr)
+                                      CdiPtpTimestamp* timestamp_ptr, CdiAvmConfig* avm_config_ptr,
+                                      int stream_identifier)
 {
     CdiReturnStatus rs = kCdiStatusOk;
 
@@ -282,7 +284,8 @@ static CdiReturnStatus SendAvmPayload(TestConnectionInfo* connection_info_ptr, C
         .core_config_data.core_extra_data.origination_ptp_timestamp = *timestamp_ptr,
         .core_config_data.core_extra_data.payload_user_data = 0,
         .core_config_data.user_cb_param = connection_info_ptr,
-        .core_config_data.unit_size = 0
+        .core_config_data.unit_size = 0,
+        .avm_extra_data.stream_identifier = stream_identifier
     };
 
     if (kCdiStatusOk == rs) {
@@ -390,18 +393,20 @@ int main(int argc, const char** argv)
         .cloudwatch_config_ptr = NULL
     };
     CdiReturnStatus rs = CdiCoreInitialize(&core_config);
+    if (kCdiStatusOk != rs) {
+        CDI_LOG_THREAD(kLogError, "SDK core initialize failed. Error=[%d], Message=[%s]", rs,
+                       CdiCoreStatusToString(rs));
+    }
 
     //-----------------------------------------------------------------------------------------------------------------
     // CDI SDK Step 2: Register the EFA adapter.
     //-----------------------------------------------------------------------------------------------------------------
     CdiAdapterHandle adapter_handle = NULL;
     if (kCdiStatusOk == rs) {
-        // Round-up buffer size to a multiple of HUGE_PAGES_BYTE_SIZE.
-        int tx_buffer_size_bytes = ((con_info.test_settings.payload_size + HUGE_PAGES_BYTE_SIZE-1) /
-                                   HUGE_PAGES_BYTE_SIZE) * HUGE_PAGES_BYTE_SIZE;
         CdiAdapterData adapter_data = {
             .adapter_ip_addr_str = con_info.test_settings.local_adapter_ip_str,
-            .tx_buffer_size_bytes = tx_buffer_size_bytes,
+            .tx_buffer_size_bytes = con_info.test_settings.payload_size,
+            .ret_tx_buffer_ptr = NULL, // Initialize to NULL.
             .adapter_type = kCdiAdapterTypeEfa // Use EFA adapter.
         };
         rs = CdiCoreNetworkAdapterInitialize(&adapter_data, &adapter_handle);
@@ -448,7 +453,9 @@ int main(int argc, const char** argv)
         CdiOsSignalWait(con_info.connection_state_change_signal, CDI_INFINITE, NULL);
         CdiOsSignalClear(con_info.connection_state_change_signal);
     }
-    CDI_LOG_THREAD(kLogInfo, "Connected. Sending payloads...");
+    if (kCdiStatusOk == rs) {
+        CDI_LOG_THREAD(kLogInfo, "Connected. Sending payloads...");
+    }
 
     //-----------------------------------------------------------------------------------------------------------------
     // CDI SDK Step 5: Can now send the desired number of payloads. Will send at the specified rate. If we get any
@@ -457,31 +464,43 @@ int main(int argc, const char** argv)
     int payload_count = 0;
     CdiAvmConfig avm_config = { 0 };
     int payload_unit_size = 0;
+    uint64_t rate_next_start_time = 0;
 
-    // Fill Tx payload buffer with a simple pattern.
-    if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
-        const uint8_t pattern_array[5] = { 0x80, 0x04, 0x08, 0x00, 0x40 }; // Black for 10-bit 4:2:2.
-        for (int i = 0; i < con_info.test_settings.payload_size; i+= sizeof(pattern_array)) {
-            memcpy(((uint8_t*)con_info.adapter_tx_buffer_ptr)+i, pattern_array, sizeof(pattern_array));
+    if (kCdiStatusOk == rs) {
+        // Fill Tx payload buffer with a simple pattern.
+        if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
+
+            // 10-bit 4:2:2 pixel color patterns:
+            //   Black: 0x80, 0x04, 0x08, 0x00, 0x40
+            //   Blue:  0xF0, 0x0A, 0x46, 0xE0, 0xA4
+            //   Gold:  0x1C, 0x2F, 0x8A, 0x12, 0xF8
+            const uint8_t pattern_array[5] = { 0xF0, 0x0A, 0x46, 0xE0, 0xA4 }; // Blue
+            for (int i = 0; i < con_info.test_settings.payload_size; i+= sizeof(pattern_array)) {
+                memcpy(((uint8_t*)con_info.adapter_tx_buffer_ptr)+i, pattern_array, sizeof(pattern_array));
+            }
+
+            // Fill in the AVM configuration structure and payload unit size.
+            MakeAvmConfig(&con_info, &avm_config, &payload_unit_size);
+        } else {
+            memset(con_info.adapter_tx_buffer_ptr, 0x7f, con_info.test_settings.payload_size);
         }
 
-        // Fill in the AVM configuration structure and payload unit size.
-        MakeAvmConfig(&con_info, &avm_config, &payload_unit_size);
-    } else {
-        memset(con_info.adapter_tx_buffer_ptr, 0x7f, con_info.test_settings.payload_size);
+        // Setup rate period and start times.
+        con_info.rate_period_microseconds = ((1000000 * con_info.test_settings.rate_denominator) /
+                                            con_info.test_settings.rate_numerator);
+        con_info.payload_start_time = CdiOsGetMicroseconds();
+        rate_next_start_time = con_info.payload_start_time + con_info.rate_period_microseconds;
     }
-
-    // Setup rate period and start times.
-    con_info.rate_period_microseconds = ((1000000 * con_info.test_settings.rate_denominator) /
-                                        con_info.test_settings.rate_numerator);
-    con_info.payload_start_time = CdiOsGetMicroseconds();
-    uint64_t rate_next_start_time = con_info.payload_start_time + con_info.rate_period_microseconds;
 
     while (kCdiStatusOk == rs && payload_count < con_info.test_settings.num_transactions &&
            kCdiConnectionStatusConnected == con_info.connection_status && !con_info.payload_error) {
         // Setup Scatter-gather-list entry for the payload data to send. NOTE: The buffers the SGL entries point to must
         // persist until the payload callback has been made. Since we are reusing the same buffer for each payload, we
         // don't need any additional logic here.
+        //
+        // NOTE: To demonstrate minimal functionality, a single buffer is used here. Applications typically would use a
+        // buffering scheme that supports multiple buffers. This would allow buffers to be written to while additional
+        // buffers are used for data transfer.
         CdiSglEntry sgl_entry = {
             .address_ptr = con_info.adapter_tx_buffer_ptr,
             .size_in_bytes = con_info.test_settings.payload_size,
@@ -490,7 +509,7 @@ int main(int argc, const char** argv)
             .total_data_size = con_info.test_settings.payload_size,
             .sgl_head_ptr = &sgl_entry,
             .sgl_tail_ptr = &sgl_entry,
-            .internal_data_ptr = NULL,
+            .internal_data_ptr = NULL, // Initialize to NULL (not used by application).
         };
 
         // Create a PTP timestamp to send along with the payload. CDI doesn't use it, but just here as an example.
@@ -503,7 +522,8 @@ int main(int argc, const char** argv)
 
         // Send the payload.
         if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
-            rs = SendAvmPayload(&con_info, &sgl, &timestamp, &avm_config);
+            int stream_identifier = 0; // Used by AVM APIs to identify the stream within a connection.
+            rs = SendAvmPayload(&con_info, &sgl, &timestamp, &avm_config, stream_identifier);
         } else {
             rs = SendRawPayload(&con_info, &sgl, &timestamp);
         }
@@ -555,7 +575,9 @@ int main(int argc, const char** argv)
         }
     }
 
-    CDI_LOG_THREAD(kLogInfo, "All done. Sent [%d] payloads. Shutting down.", payload_count);
+    if (kCdiStatusOk == rs) {
+        CDI_LOG_THREAD(kLogInfo, "All done. Sent [%d] payloads. Shutting down.", payload_count);
+    }
 
     //-----------------------------------------------------------------------------------------------------------------
     // CDI SDK Step 6. Shutdown and clean-up CDI SDK resources.
@@ -563,12 +585,16 @@ int main(int argc, const char** argv)
     if (con_info.connection_handle) {
         CdiCoreConnectionDestroy(con_info.connection_handle);
     }
+    if (adapter_handle) {
+        CdiCoreNetworkAdapterDestroy(adapter_handle);
+    }
     CdiCoreShutdown();
 
     // Clean-up additional resources used by this application.
     CdiOsSignalDelete(con_info.connection_state_change_signal);
     CdiOsSignalDelete(con_info.payload_callback_signal);
     TestCommandLineParserDestroy(command_line_handle);
+    CdiLoggerShutdown(false); // Matches call to CdiLoggerInitialize(). NOTE: false= Normal termination.
 
     return (kCdiStatusOk == rs) ? 0 : 1;
 }

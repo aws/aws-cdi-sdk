@@ -107,18 +107,7 @@ static bool TxPollProcess(AdapterEndpointState* endpoint_state_ptr, bool is_poll
         (NULL != (packet_ptr = GetNextPacket(endpoint_state_ptr, NULL, &last_packet)));
     if (!got_packet && !CdiOsSignalReadState(adapter_con_state_ptr->poll_do_work_signal) &&
         (kEndpointTransmitQueueEmpty == queue_level || kEndpointTransmitQueueNa == queue_level)) {
-        if (is_poll) {
-            // Adapter requires polling, so the queue has been configured not to use any signals. Must use a separate
-            // signal to wait on, which is normally set/cleared at the "payload" level.
-
-            // Setup an array of signals to wait on.
-            CdiSignalType signal_array[2];
-            signal_array[0] = adapter_con_state_ptr->poll_do_work_signal;
-            signal_array[1] = notification_signal;
-            CdiOsSignalsWait(signal_array, 2, false, CDI_INFINITE, NULL);
-            // NOTE: No need to pull anything off the queue here, since it is most likely still empty. Can just pop it
-            // next time through this function.
-        } else {
+        if (!is_poll) {
             // Adapter does not require polling, so the queue has been configured to support the pop wait signal (can
             // use the queue wait API function). This greatly simplifies the logic for threads pushing data into the
             // queue, since the signaling is built in to the queue.
@@ -187,10 +176,12 @@ static void UpdateThreadUtilizationStats(CdiAdapterEndpointStats* endpoint_stats
  * @param endpoint_state_ptr Pointer to adapter endpoint state data.
  * @param is_poll If true, endpoint requires polling.
  * @param notification_signal Notification signal.
+ * @param tx_signal Tx signal.
  *
  * @return true if useful work was done, false if the function did nothing productive.
  */
-static bool RxPollProcess(AdapterEndpointState* endpoint_state_ptr, bool is_poll, CdiSignalType notification_signal)
+static bool RxPollProcess(AdapterEndpointState* endpoint_state_ptr, bool is_poll, CdiSignalType notification_signal,
+                          CdiSignalType tx_signal)
 {
     bool productive = false;
     AdapterConnectionState* adapter_con_state_ptr = endpoint_state_ptr->adapter_con_state_ptr;
@@ -198,19 +189,23 @@ static bool RxPollProcess(AdapterEndpointState* endpoint_state_ptr, bool is_poll
     if (!is_poll && !CdiOsSignalReadState(adapter_con_state_ptr->poll_do_work_signal)) {
         // Adapter does not require polling and the do work signal is not set, so wait here. The signal is normally set
         // at the "payload" level.
-        CdiSignalType signal_array[2];
+        CdiSignalType signal_array[3];
         signal_array[0] = adapter_con_state_ptr->poll_do_work_signal;
         signal_array[1] = notification_signal;
+        int signal_count = 2;
+        if (tx_signal) {
+            signal_array[2] = tx_signal;
+            signal_count++;
+        }
         uint32_t signal_index = 0;
-        CdiOsSignalsWait(signal_array, 2, false, CDI_INFINITE, &signal_index);
+        CdiOsSignalsWait(signal_array, signal_count, false, CDI_INFINITE, &signal_index);
         if (0 == signal_index) {
             // Got the do work signal, clear it since we are going to free all buffers in the free buffer queue below.
             CdiOsSignalClear(adapter_con_state_ptr->poll_do_work_signal);
         }
     }
 
-    // Free resources, if required. Probe manages freeing resources in ProbeControlProcessPacket(), so this logic is not
-    // used.
+    // Free resources, if required. Probe manages freeing resources in ProcessPacket(), so this logic is not used.
     CdiSgList sgl_packet_buffers;
     if (RxPollFreeBuffer(endpoint_state_ptr->cdi_endpoint_handle, &sgl_packet_buffers)) {
         productive = true;
@@ -228,7 +223,10 @@ static bool RxPollProcess(AdapterEndpointState* endpoint_state_ptr, bool is_poll
  */
 static void ControlInterfacePoll(AdapterConnectionState* adapter_con_state_ptr)
 {
-    bool is_transmitter = (kEndpointDirectionSend == adapter_con_state_ptr->direction);
+    bool can_transmit = (kEndpointDirectionSend == adapter_con_state_ptr->direction ||
+                         kEndpointDirectionBidirectional == adapter_con_state_ptr->direction);
+    bool can_receive = (kEndpointDirectionReceive == adapter_con_state_ptr->direction ||
+                         kEndpointDirectionBidirectional == adapter_con_state_ptr->direction);
     bool is_poll = (NULL != adapter_con_state_ptr->adapter_state_ptr->functions_ptr->Poll);
 
     AdapterEndpointState* adapter_endpoint_ptr = adapter_con_state_ptr->control_state.control_endpoint_handle;
@@ -243,22 +241,22 @@ static void ControlInterfacePoll(AdapterConnectionState* adapter_con_state_ptr)
         .busy_accumulator = 0
     };
 
-    // The control interface does not use the Endpoint Manager and must rely on the shutdown_signal. For other endpoint
-    // types that use the Endpoint Manager, they will use the EndpointManagerThreadWait() below and be blocked. As part
-    // of the Endpoint Manager's shutdown sequence, the shutdown_signal gets set, so when this thread starts running
-    // again, it will exit.
+
+    CdiSignalType tx_signal = NULL;
+    if (!is_poll && can_transmit) {
+        tx_signal = CdiQueueGetPopWaitSignal(adapter_endpoint_ptr->tx_packet_queue_handle);
+    }
+
+    // The control interface does not use the Endpoint Manager and must rely on the shutdown_signal.
     while (!CdiOsSignalReadState(adapter_con_state_ptr->shutdown_signal)) {
         load_state.top_time = CdiOsGetMicroseconds();
         bool idle = true;
 
-        if (is_transmitter) {
-            if (TxPollProcess(adapter_endpoint_ptr, is_poll, notification_signal)) {
-                idle = false;
-            }
-        } else {
-            if (RxPollProcess(adapter_endpoint_ptr, is_poll, notification_signal)) {
-                idle = false;
-            }
+        if (can_transmit && TxPollProcess(adapter_endpoint_ptr, is_poll, notification_signal)) {
+            idle = false;
+        }
+        if (can_receive && RxPollProcess(adapter_endpoint_ptr, is_poll, notification_signal, tx_signal)) {
+            idle = false;
         }
 
         // No need to poll adapter endpoint if the notification signal is set.
@@ -274,8 +272,8 @@ static void ControlInterfacePoll(AdapterConnectionState* adapter_con_state_ptr)
     }
 
     // If a receiver, ensure receiver poll processing is performed to flush Rx queues.
-    if (!is_transmitter) {
-        RxPollProcess(adapter_endpoint_ptr, is_poll, adapter_con_state_ptr->shutdown_signal);
+    if (can_receive) {
+        RxPollProcess(adapter_endpoint_ptr, is_poll, adapter_con_state_ptr->shutdown_signal, tx_signal);
     }
 }
 
@@ -291,6 +289,7 @@ static void DataPoll(AdapterConnectionState* adapter_con_state_ptr)
     // Set this thread to use the connection's log. Can now use CDI_LOG_THREAD() for logging within this thread.
     CdiLoggerThreadLogSet(adapter_con_state_ptr->log_handle);
 
+    assert(kEndpointDirectionBidirectional != adapter_con_state_ptr->direction); // Not supported
     bool is_transmitter = (kEndpointDirectionSend == adapter_con_state_ptr->direction);
     bool is_poll = (NULL != adapter_con_state_ptr->adapter_state_ptr->functions_ptr->Poll);
     EndpointManagerHandle mgr_handle = EndpointManagerConnectionToEndpointManager(
@@ -309,40 +308,53 @@ static void DataPoll(AdapterConnectionState* adapter_con_state_ptr)
         .busy_accumulator = 0
     };
 
-    // The control interface does not use the Endpoint Manager and must rely on the shutdown_signal. For other endpoint
-    // types that use the Endpoint Manager, they will use the EndpointManagerThreadWait() below and be blocked. As part
-    // of the Endpoint Manager's shutdown sequence, the shutdown_signal gets set, so when this thread starts running
-    // again, it will exit.
+    // The Endpoint Manager is used here to control suspend, restart and shutdown sequences.
     while (!CdiOsSignalReadState(adapter_con_state_ptr->shutdown_signal) &&
            !EndpointManagerIsConnectionShuttingDown(mgr_handle)) {
         // Walk through each endpoint that is part of this connection.
         CdiEndpointHandle cdi_endpoint_handle = EndpointManagerGetFirstEndpoint(mgr_handle);
+        bool all_idle = true;
         while (cdi_endpoint_handle) {
             load_state.top_time = CdiOsGetMicroseconds();
             bool idle = true;
-
             AdapterEndpointState* adapter_endpoint_ptr = EndpointManagerEndpointToAdapterEndpoint(cdi_endpoint_handle);
             // Get Endpoint Manager notification signal.
             if (EndpointManagerPoll(&cdi_endpoint_handle) && adapter_endpoint_ptr) {
                 if (is_transmitter) {
                     if (TxPollProcess(adapter_endpoint_ptr, is_poll, notification_signal)) {
+                        // Packet sent to adapter.
                         idle = false;
+                    }
+                    if (kEndpointTransmitQueueEmpty != CdiAdapterGetTransmitQueueLevel(adapter_endpoint_ptr)) {
+                        // Packets are in flight (have not received ACKs back yet), so don't want this poll thread to
+                        // sleep.
+                        all_idle = false;
                     }
                 } else {
-                    if (RxPollProcess(adapter_endpoint_ptr, is_poll, notification_signal)) {
+                    if (RxPollProcess(adapter_endpoint_ptr, is_poll, notification_signal, NULL)) {
                         idle = false;
+                        all_idle = false;
                     }
                 }
-                // No need to poll adapter endpoint if the notification signal is set.
-                if (!CdiOsSignalReadState(notification_signal)) {
-                    // Perform adapter specific poll mode processing.
-                    if (CdiAdapterPollEndpoint(adapter_endpoint_ptr) == kCdiStatusOk) {
-                        idle = false;
-                    }
+
+                // Perform adapter specific poll mode processing.
+                if (CdiAdapterPollEndpoint(adapter_endpoint_ptr) == kCdiStatusOk) {
+                    idle = false;
                 }
+
                 // Check if busy/idle state is different this time compared to last.
                 UpdateThreadUtilizationStats(adapter_endpoint_ptr->endpoint_stats_ptr, idle, &load_state);
             }
+        }
+
+        // If all the adapter endpoints of a poll mode transmitter are idle, we can sleep until there is new work to do.
+        if (all_idle && is_poll && is_transmitter &&
+            !CdiOsSignalReadState(adapter_con_state_ptr->poll_do_work_signal)) {
+            // Setup an array of signals to wait on.
+            CdiSignalType signal_array[2];
+            signal_array[0] = adapter_con_state_ptr->poll_do_work_signal;
+            signal_array[1] = notification_signal;
+            CdiOsSignalsWait(signal_array, 2, false, CDI_INFINITE, NULL);
         }
     }
 
@@ -352,7 +364,7 @@ static void DataPoll(AdapterConnectionState* adapter_con_state_ptr)
         CdiEndpointHandle cdi_endpoint_handle = EndpointManagerGetFirstEndpoint(mgr_handle);
         while (cdi_endpoint_handle) {
             AdapterEndpointState* adapter_endpoint_ptr = EndpointManagerEndpointToAdapterEndpoint(cdi_endpoint_handle);
-            RxPollProcess(adapter_endpoint_ptr, is_poll, adapter_con_state_ptr->shutdown_signal);
+            RxPollProcess(adapter_endpoint_ptr, is_poll, adapter_con_state_ptr->shutdown_signal, NULL);
             cdi_endpoint_handle = EndpointManagerGetNextEndpoint(cdi_endpoint_handle);
         }
     }
@@ -439,7 +451,8 @@ CdiReturnStatus CdiAdapterCreateConnection(CdiAdapterConnectionConfigData* confi
 
         // Remember what kind of endpoint this is.
         adapter_con_state_ptr->direction = config_data_ptr->direction;
-        if (kEndpointDirectionReceive == config_data_ptr->direction) {
+        if (kEndpointDirectionReceive == config_data_ptr->direction ||
+            kEndpointDirectionBidirectional == config_data_ptr->direction) {
             adapter_con_state_ptr->rx_state = config_data_ptr->rx_state;
         }
 
@@ -462,16 +475,23 @@ CdiReturnStatus CdiAdapterCreateConnection(CdiAdapterConnectionConfigData* confi
         }
     }
 
-    const char* thread_name_prefix_str = "PollRx";
+    const char* thread_name_prefix_str = NULL;
     if (rs == kCdiStatusOk) {
-        if (kEndpointDirectionSend == config_data_ptr->direction) {
-            // Create Tx resources.
-            thread_name_prefix_str = "PollTx";
+        switch (config_data_ptr->direction) {
+            case kEndpointDirectionSend:
+                thread_name_prefix_str = "PollTx";
+            break;
+            case kEndpointDirectionReceive:
+                thread_name_prefix_str = "PollRx";
+            break;
+            case kEndpointDirectionBidirectional:
+                thread_name_prefix_str = "PollBx";
+            break;
         }
     }
 
     if (rs == kCdiStatusOk) {
-        char thread_name_str[MAX_THREAD_NAME];
+        char thread_name_str[CDI_MAX_THREAD_NAME];
         snprintf(thread_name_str, sizeof(thread_name_str), "%s%s", thread_name_prefix_str,
                  CdiUtilityKeyEnumToString(kKeyAdapterType,
                                            config_data_ptr->cdi_adapter_handle->adapter_data.adapter_type));
@@ -564,7 +584,8 @@ CdiReturnStatus CdiAdapterOpenEndpoint(CdiAdapterEndpointConfigData* config_data
         endpoint_state_ptr->msg_from_endpoint_func_ptr = config_data_ptr->msg_from_endpoint_func_ptr;
         endpoint_state_ptr->msg_from_endpoint_param_ptr = config_data_ptr->msg_from_endpoint_param_ptr;
 
-        if (kEndpointDirectionSend == adapter_con_state_ptr->direction) {
+        if (kEndpointDirectionSend == adapter_con_state_ptr->direction ||
+            kEndpointDirectionBidirectional == adapter_con_state_ptr->direction) {
             // If the adapter does not support poll mode, then use a queue that supports a wait signal so PollThread()
             // can sleep whenever the queue is empty.
             bool is_poll = (NULL != adapter_con_state_ptr->adapter_state_ptr->functions_ptr->Poll);
@@ -642,15 +663,18 @@ CdiReturnStatus CdiAdapterStartEndpoint(AdapterEndpointHandle handle)
     return rs;
 }
 
-CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle)
+CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle, bool reopen)
 {
     CdiReturnStatus rs = kCdiStatusOk;
-    CdiAdapterState* adapter_state_ptr = handle->adapter_con_state_ptr->adapter_state_ptr;
 
-    if (NULL == handle) {
-        rs = kCdiStatusInvalidHandle;
-    } else if (adapter_state_ptr->functions_ptr->Reset) {
-        rs = adapter_state_ptr->functions_ptr->Reset(handle);
+    if (handle) {
+        CdiAdapterState* adapter_state_ptr = handle->adapter_con_state_ptr->adapter_state_ptr;
+
+        if (NULL == handle) {
+            rs = kCdiStatusInvalidHandle;
+        } else if (adapter_state_ptr->functions_ptr->Reset) {
+            rs = adapter_state_ptr->functions_ptr->Reset(handle, reopen);
+        }
     }
 
     return rs;
@@ -667,12 +691,15 @@ CdiReturnStatus CdiAdapterCloseEndpoint(AdapterEndpointHandle handle)
             CdiOsSignalSet(handle->shutdown_signal);
         }
 
-        CdiAdapterState* adapter_state_ptr = adapter_con_state_ptr->adapter_state_ptr;
-        rs = adapter_state_ptr->functions_ptr->Close(handle);
+        if (adapter_con_state_ptr && adapter_con_state_ptr->adapter_state_ptr) {
+            CdiAdapterState* adapter_state_ptr = adapter_con_state_ptr->adapter_state_ptr;
+            rs = adapter_state_ptr->functions_ptr->Close(handle);
+        }
 
         CdiQueueDestroy(handle->tx_packet_queue_handle);
         CdiOsSignalDelete(handle->shutdown_signal);
         CdiOsSignalDelete(handle->start_signal);
+        ProtocolVersionDestroy(handle->protocol_handle);
         CdiOsMemFree(handle);
     }
 
@@ -689,22 +716,26 @@ CdiReturnStatus CdiAdapterEnqueueSendPackets(const AdapterEndpointHandle handle,
 {
     // NOTE: Since the caller is the application's thread, use SDK_LOG_GLOBAL() for any logging in this function.
     CdiReturnStatus rs = kCdiStatusOk;
-    assert(handle->adapter_con_state_ptr->direction == kEndpointDirectionSend);
+    assert(handle->adapter_con_state_ptr->direction == kEndpointDirectionSend ||
+           handle->adapter_con_state_ptr->direction == kEndpointDirectionBidirectional);
 
     // Add the packet message into the Tx packet queue for processing by the PollThread() thread.
     if (!CdiQueuePush(handle->tx_packet_queue_handle, packet_list_ptr)) {
-        CDI_LOG_THREAD(kLogInfo, "Tx packet queue[%s] full.", CdiQueueGetName(handle->tx_packet_queue_handle));
+        BACK_PRESSURE_ERROR(handle->cdi_endpoint_handle->connection_state_ptr->back_pressure_state,
+                            kLogInfo, "Tx packet queue[%s] full.", CdiQueueGetName(handle->tx_packet_queue_handle));
         rs = kCdiStatusQueueFull;
     }
 
     return rs;
 }
 
-CdiReturnStatus CdiAdapterEnqueueSendPacket(const AdapterEndpointHandle handle, Packet* packet_ptr)
+CdiReturnStatus CdiAdapterEnqueueSendPacket(const AdapterEndpointHandle handle,
+                                            const struct sockaddr_in* destination_address_ptr, Packet* packet_ptr)
 {
     CdiSinglyLinkedList packet_list;
     CdiSinglyLinkedListInit(&packet_list);
     CdiSinglyLinkedListPushTail(&packet_list, &packet_ptr->list_entry);
+    packet_ptr->socket_adapter_state.address = *destination_address_ptr;
     return CdiAdapterEnqueueSendPackets(handle, &packet_list);
 }
 
@@ -713,7 +744,7 @@ CdiReturnStatus CdiAdapterFreeBuffer(const AdapterEndpointHandle handle, const C
     // NOTE: Since the caller is the application's thread, use SDK_LOG_GLOBAL() for any logging in this function.
     AdapterConnectionState* adapter_con_state_ptr = handle->adapter_con_state_ptr;
     CdiAdapterState* adapter_state_ptr = adapter_con_state_ptr->adapter_state_ptr;
-    if (adapter_con_state_ptr->direction != kEndpointDirectionReceive) {
+    if (adapter_con_state_ptr->direction == kEndpointDirectionSend) {
         return kCdiStatusWrongDirection;
     } else {
         return adapter_state_ptr->functions_ptr->RxBuffersFree(handle, sgl_ptr);

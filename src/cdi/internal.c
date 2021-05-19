@@ -41,6 +41,9 @@
 /// @brief global configuration data.
 CdiGlobalContext cdi_global_context = { 0 };
 
+/// @brief Statically allocated mutex used to make initialization of global data thread-safe.
+static CdiStaticMutexType global_context_mutex_lock = CDI_STATIC_MUTEX_INITIALIZER;
+
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -60,67 +63,42 @@ static THREAD AppCallbackPayloadThread(void* ptr)
     // Set this thread to use the connection's log. Can now use CDI_LOG_THREAD() for logging within this thread.
     CdiLoggerThreadLogSet(con_state_ptr->log_handle);
 
-    // If Rx buffering is enabled, the logic below will handle things a bit differently so setup a flag so we can easily
-    // tell which logic to use. Rx buffering dynamically changes the timeout_ms value.
-    bool is_rx_buffered = (con_state_ptr->handle_type == kHandleTypeRx &&
-                           con_state_ptr->rx_state.config_data.buffer_delay_ms);
-    uint32_t timeout_ms = CDI_INFINITE;
-
     while (!CdiOsSignalGet(con_state_ptr->shutdown_signal)) {
         // Wait for work to do. If the queue is empty, we will wait for data or the shutdown signal.
         AppPayloadCallbackData app_cb_data;
-        if (CdiQueuePopWait(con_state_ptr->app_payload_message_queue_handle, timeout_ms,
+        if (CdiQueuePopWait(con_state_ptr->app_payload_message_queue_handle, CDI_INFINITE,
                             con_state_ptr->shutdown_signal, (void**)&app_cb_data)) {
-            if (is_rx_buffered) {
-                // Add the payload to the Rx buffer list that is ordered by PTP.
-                RxBufferedPayloadAdd(con_state_ptr, &app_cb_data);
-            } else {
-                // Invoke application payload callback function.
-                if (con_state_ptr->handle_type == kHandleTypeTx) {
-                    // Tx connection. All packets in the payload have been acknowledged as being received by the receiver.
-                    // Put the Tx payload entries and payload state data back in the pool.
-                    CdiSglEntry* entry_ptr = app_cb_data.tx_payload_state_ptr->source_sgl.sgl_head_ptr;
-                    while (entry_ptr) {
-                        CdiSglEntry* next_ptr = entry_ptr->next_ptr; // Save next entry, since Put() will free its memory.
-                        CdiPoolPut(con_state_ptr->tx_state.payload_sgl_entry_pool_handle, entry_ptr);
-                        entry_ptr = next_ptr;
-                    }
-                    CdiPoolPut(con_state_ptr->tx_state.payload_state_pool_handle, app_cb_data.tx_payload_state_ptr);
-                    app_cb_data.tx_payload_state_ptr = NULL;
-                    // Notify the application.
-                    TxInvokeAppPayloadCallback(con_state_ptr, &app_cb_data);
-                } else {
-                    // Rx connection. The SGL from the queue represents a received packet. Need to reassemble it into a
-                    // payload and send the payload SGL to the application.
-                    RxInvokeAppPayloadCallback(con_state_ptr, &app_cb_data);
+            // Invoke application payload callback function.
+            if (con_state_ptr->handle_type == kHandleTypeTx) {
+                // Tx connection. All packets in the payload have been acknowledged as being received by the
+                // receiver. Put the Tx payload entries and payload state data back in the pool. We do this here on
+                // this thread to reduce the amount of work on the Tx Poll() thread.
+                CdiSglEntry* entry_ptr = app_cb_data.tx_source_sgl.sgl_head_ptr;
+                while (entry_ptr) {
+                    CdiSglEntry* next_ptr = entry_ptr->next_ptr; // Save next entry, since Put() will free its memory.
+                    CdiPoolPut(con_state_ptr->tx_state.payload_sgl_entry_pool_handle, entry_ptr);
+                    entry_ptr = next_ptr;
                 }
-                // If error message exist, return it to pool.
-                PayloadErrorFreeBuffer(con_state_ptr, &app_cb_data);
-            }
-        }
-
-        if (is_rx_buffered) {
-            // Process payloads that are being buffered and held in a list ordered by PTP.
-            if (RxBufferedPayloadGet(con_state_ptr, &timeout_ms, &app_cb_data)) {
-                // Notify application of payload that is available based on PTP time.
+                // Notify the application.
+                TxInvokeAppPayloadCallback(con_state_ptr, &app_cb_data);
+            } else {
+                // Rx connection. The SGL from the queue represents a received packet. Need to reassemble it into a
+                // payload and send the payload SGL to the application.
                 RxInvokeAppPayloadCallback(con_state_ptr, &app_cb_data);
-                // If error message exist, return it to pool.
-                PayloadErrorFreeBuffer(con_state_ptr, &app_cb_data);
             }
+            // If error message exists, return it to pool.
+            PayloadErrorFreeBuffer(con_state_ptr->error_message_pool, &app_cb_data);
         }
     }
 
     // Shutting down, so ensure queues and pools are drained.
     AppPayloadCallbackData app_cb_data;
     while (CdiQueuePop(con_state_ptr->app_payload_message_queue_handle, (void**)&app_cb_data)) {
-        PayloadErrorFreeBuffer(con_state_ptr, &app_cb_data);
+        PayloadErrorFreeBuffer(con_state_ptr->error_message_pool, &app_cb_data);
     }
     if (con_state_ptr->handle_type == kHandleTypeTx) {
         CdiPoolPutAll(con_state_ptr->tx_state.payload_state_pool_handle);
         CdiPoolPutAll(con_state_ptr->tx_state.payload_sgl_entry_pool_handle);
-    } else {
-        CdiPoolPutAll(con_state_ptr->rx_state.ordered_payload_pool_handle);
-        CdiListInit(&con_state_ptr->rx_state.ptp_ordered_payload_list);
     }
 
     return 0; // Return code not used.
@@ -164,12 +142,10 @@ static void ConnectionShutdownInternal(CdiConnectionHandle handle)
 static void AdapterShutdownInternal(CdiAdapterHandle handle)
 {
     // NOTE: No need to use the connections_list_lock here, since only one thread should be calling this function.
-
-    // Close all of the connections associated with this adapter.
-    CdiListEntry* connection_entry_ptr = NULL;
-    while (NULL != (connection_entry_ptr = CdiListPop(&handle->connections_list))) {
-        CdiConnectionHandle connection_handle = CONTAINER_OF(connection_entry_ptr, CdiConnectionState, list_entry);
-        ConnectionShutdownInternal(connection_handle);
+    if (!CdiListIsEmpty(&handle->connections_list)) {
+        SDK_LOG_GLOBAL(kLogError,
+                       "Connection list is not empty. Must use CdiCoreConnectionDestroy() for each connection before"
+                       " shutting down an adapter.");
     }
 
     // Free the lock resource.
@@ -187,7 +163,7 @@ static void AdapterShutdownInternal(CdiAdapterHandle handle)
 static void FifoDebugCallback(const CdiFifoCbData* cb_ptr)
 {
     CdiSgList* item_ptr = (CdiSgList*)cb_ptr->item_data_ptr;
-    CdiCDIPacketCommonHeader *common_hdr_ptr = (CdiCDIPacketCommonHeader *)item_ptr->sgl_head_ptr->address_ptr;
+    CdiPacketCommonHeader *common_hdr_ptr = (CdiPacketCommonHeader *)item_ptr->sgl_head_ptr->address_ptr;
 
     if (cb_ptr->is_read) {
         CDI_LOG_THREAD(kLogDebug, "FR H[%d] T[%d] P[%d] S[%d] A[%p]", cb_ptr->head_index, cb_ptr->tail_index,
@@ -199,6 +175,39 @@ static void FifoDebugCallback(const CdiFifoCbData* cb_ptr)
 }
 #endif
 
+/**
+ * @brief Cleanup global resources. NOTE: Caller must have acquired mutex_lock.
+ */
+static void CleanupGlobalResources(void)
+{
+    // Adapter list should be empty here.
+    if (!CdiListIsEmpty(&cdi_global_context.adapter_handle_list)) {
+        SDK_LOG_GLOBAL(kLogError,
+                       "Adapter list is not empty. Must use CdiCoreNetworkAdapterDestroy() for each adapter before"
+                       " shutting down the SDK.");
+    }
+    if (cdi_global_context.adapter_handle_list_lock) {
+        CdiOsCritSectionDelete(cdi_global_context.adapter_handle_list_lock);
+    }
+
+#ifdef CLOUDWATCH_METRICS_ENABLED
+#ifdef METRICS_GATHERING_SERVICE_ENABLED
+    MetricsGathererDestroy(cdi_global_context.metrics_gathering_sdk_handle);
+#endif  // METRICS_GATHERING_SERVICE_ENABLED
+
+    CloudWatchSdkMetricsDestroy(cdi_global_context.cw_sdk_handle);
+    cdi_global_context.cw_sdk_handle = NULL;
+#endif // CLOUDWATCH_METRICS_ENABLED
+
+    CdiLoggerDestroyLog(cdi_global_context.global_log_handle); // WARNING: Cannot use the logger after this.
+    cdi_global_context.global_log_handle = NULL;
+    CdiLoggerShutdown(false); // Matches call to CdiLoggerInitialize(). NOTE: false= Normal termination.
+    CdiOsMemFree(cdi_global_context.logger_handle);
+    cdi_global_context.logger_handle = NULL;
+
+    cdi_global_context.sdk_initialized = false;
+}
+
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -208,9 +217,18 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
     // NOTE: Since the caller is the application's thread, use SDK_LOG_GLOBAL() for any logging in this function.
     CdiReturnStatus rs = kCdiStatusOk;
 
-    // Create a critical section used to protect access to connections_list.
-    if (!CdiOsCritSectionCreate(&cdi_global_context.adapter_handle_list_lock)) {
-        rs = kCdiStatusNotEnoughMemory;
+    CdiOsStaticMutexLock(global_context_mutex_lock);
+
+    if (cdi_global_context.sdk_initialized) {
+        SDK_LOG_GLOBAL(kLogError, "SDK Already initialized.");
+        rs = kCdiStatusNonFatal;
+    }
+
+    if (kCdiStatusOk == rs) {
+        // Create a critical section used to protect access to connections_list.
+        if (!CdiOsCritSectionCreate(&cdi_global_context.adapter_handle_list_lock)) {
+            rs = kCdiStatusNotEnoughMemory;
+        }
     }
 
     if (kCdiStatusOk == rs) {
@@ -288,7 +306,11 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
 
     if (kCdiStatusOk == rs) {
         cdi_global_context.sdk_initialized = true;
+    } else {
+        CleanupGlobalResources();
     }
+
+    CdiOsStaticMutexUnlock(global_context_mutex_lock);
 
     return rs;
 }
@@ -349,7 +371,7 @@ CdiReturnStatus AdapterInitializeInternal(CdiAdapterData* adapter_data_ptr, CdiA
     CdiListIteratorInit(&cdi_global_context.adapter_handle_list, &list_iterator);
     CdiListEntry* entry_ptr = NULL;
     // If there are any adapters that have already been initialized, then walk through list until we reach the head or
-    // find an entry that matches the one we are currently trying to initialize.  If we do find a match, then error out
+    // find an entry that matches the one we are currently trying to initialize. If we do find a match, then error out
     // and exit.
     while (NULL != (entry_ptr = CdiListIteratorGetNext(&list_iterator))) {
         CdiAdapterHandle adapter_handle_entry = (CdiAdapterHandle)entry_ptr;
@@ -375,6 +397,8 @@ CdiReturnStatus AdapterInitializeInternal(CdiAdapterData* adapter_data_ptr, CdiA
     }
 
     if (rs == kCdiStatusOk) {
+        state_ptr->magic = kMagicAdapter;
+
         // Make a copy of the adapter's initialization data.
         state_ptr->adapter_data = *adapter_data_ptr;
 
@@ -439,6 +463,33 @@ CdiReturnStatus AdapterInitializeInternal(CdiAdapterData* adapter_data_ptr, CdiA
     return rs;
 }
 
+CdiReturnStatus NetworkAdapterDestroyInternal(CdiAdapterHandle handle)
+{
+    CdiReturnStatus rs = kCdiStatusInvalidHandle; // Default to an error, if we don't find the handle in the list.
+    CdiListIterator list_iterator;
+
+    CdiOsCritSectionReserve(cdi_global_context.adapter_handle_list_lock);
+    CdiListIteratorInit(&cdi_global_context.adapter_handle_list, &list_iterator);
+    CdiListEntry* entry_ptr = NULL;
+
+    // Walk adapter list and try to find a match.
+    while (NULL != (entry_ptr = CdiListIteratorGetNext(&list_iterator))) {
+        CdiAdapterHandle adapter_handle_entry = (CdiAdapterHandle)entry_ptr;
+        if (adapter_handle_entry == handle) {
+            // Remove it from the list and then shutdown and free resources used by the adapter.
+            CdiListRemove(&cdi_global_context.adapter_handle_list, entry_ptr);
+            AdapterShutdownInternal(handle);
+            rs = kCdiStatusOk; // Found handle, so set returned status to ok.
+            break; // Exit the loop.
+        }
+    }
+
+    CdiOsCritSectionRelease(cdi_global_context.adapter_handle_list_lock);
+
+    return rs;
+}
+
+
 CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiCoreStatsCallback stats_cb_ptr,
                                                 CdiUserCbParameter stats_user_cb_param,
                                                 const CdiStatsConfigData* stats_config_ptr)
@@ -462,18 +513,8 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
     }
 
     if (kCdiStatusOk == rs) {
-        bool is_rx_buffered = (handle->handle_type == kHandleTypeRx &&
-                               handle->rx_state.config_data.buffer_delay_ms);
-        int reserve_queue_entries = MAX_PAYLOADS_PER_CONNECTION;
-        if (is_rx_buffered) {
-            // Rx buffer delay is enabled, so we need to allocate additional queue entries.
-            reserve_queue_entries += (MAX_PAYLOADS_PER_CONNECTION * handle->rx_state.config_data.buffer_delay_ms) /
-                                     RX_BUFFER_DELAY_BUFFER_MS_DIVISOR;
-        }
-
-        // Create payload receive message queue that is used to send messages to the application via the user-registered
-        // callback.
-        if (!CdiQueueCreate("PayloadRequests AppPayloadCallbackData Queue", reserve_queue_entries,
+        // Create payload receive message queue that is used to send messages to the application callback thread.
+        if (!CdiQueueCreate("PayloadRequests AppPayloadCallbackData Queue", MAX_PAYLOADS_PER_CONNECTION,
                             FIXED_QUEUE_SIZE, FIXED_QUEUE_SIZE, sizeof(AppPayloadCallbackData),
                             kQueueSignalPopWait, // Queue can block on pops.
                             &handle->app_payload_message_queue_handle)) {
@@ -482,7 +523,7 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
     }
 
     if (kCdiStatusOk == rs) {
-        //Create a pool used to hold error message strings.
+        // Create a pool used to hold error message strings.
         int max_rx_payloads = MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
         int max_tx_payloads = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
 
@@ -538,7 +579,7 @@ CdiReturnStatus ConnectionCommonPacketMessageThreadCreate(CdiConnectionHandle ha
 
     // Start the thread which will service items from the queue.
     if (!CdiOsThreadCreate(AppCallbackPayloadThread, &handle->app_payload_message_thread_id, "PayloadMessage",
-                            handle, handle->start_signal)) {
+                           handle, handle->start_signal)) {
         rs = kCdiStatusNotEnoughMemory;
     }
 
@@ -577,28 +618,29 @@ void PayloadErrorSet(CdiConnectionState* con_state_ptr, AppPayloadCallbackData* 
     va_list vars;
     va_start(vars, format_str);
 
+    app_cb_data_ptr->payload_status_code = status_code; // Set the status code.
+
     // NOTE: No critical sections needed, since only called by a single thread for the related app_cb_data_ptr.
     if (NULL == app_cb_data_ptr->error_message_str) {
         if (!CdiPoolGet(con_state_ptr->error_message_pool, (void**)&app_cb_data_ptr->error_message_str)) {
             CDI_LOG_THREAD(kLogError, "Unable to get free entry from pool[%s].",
                            CdiPoolGetName(con_state_ptr->error_message_pool));
         } else {
-            // Generate message and set error code.
+            // Generate error message string.
             vsnprintf(app_cb_data_ptr->error_message_str, CdiPoolGetItemSize(con_state_ptr->error_message_pool),
                       format_str, vars);
-            app_cb_data_ptr->payload_status_code = status_code;
         }
     }
 
     va_end(vars);
 }
 
-void PayloadErrorFreeBuffer(CdiConnectionState* con_state_ptr, AppPayloadCallbackData* app_cb_data_ptr)
+void PayloadErrorFreeBuffer(CdiPoolHandle pool_handle, AppPayloadCallbackData* app_cb_data_ptr)
 {
     // NOTE: No critical sections needed, since only called by a single thread for the related app_cb_data_ptr.
     if (app_cb_data_ptr->error_message_str) {
-        CdiPoolPut(con_state_ptr->error_message_pool, app_cb_data_ptr->error_message_str);
-        app_cb_data_ptr->error_message_str = NULL;
+        CdiPoolPut(pool_handle, app_cb_data_ptr->error_message_str);
+        app_cb_data_ptr->error_message_str = NULL; // Pointer is no longer valid, so clear it.
     }
 }
 
@@ -643,29 +685,14 @@ CdiReturnStatus SdkShutdownInternal(void)
 {
     CdiReturnStatus rs = kCdiStatusOk;
 
-    // Walk through the cdi adapter list freeing resources used by them.
-    CdiListEntry* entry_ptr = NULL;
-    while (NULL != (entry_ptr = CdiListPop(&cdi_global_context.adapter_handle_list))) {
-        // Get pointer to the entry's parent object (CdiAdapterState).
-        CdiAdapterState* adapter_state_ptr = CONTAINER_OF(entry_ptr, CdiAdapterState, list_entry);
-        AdapterShutdownInternal(adapter_state_ptr);
+    CdiOsStaticMutexLock(global_context_mutex_lock);
+
+    if (cdi_global_context.sdk_initialized) {
+        CleanupGlobalResources();
     }
-    if (cdi_global_context.adapter_handle_list_lock) {
-        CdiOsCritSectionDelete(cdi_global_context.adapter_handle_list_lock);
-    }
+    CdiOsShutdown(); // Always cleanup/shutdown the OS API.
 
-#ifdef CLOUDWATCH_METRICS_ENABLED
-#ifdef METRICS_GATHERING_SERVICE_ENABLED
-    MetricsGathererDestroy(cdi_global_context.metrics_gathering_sdk_handle);
-#endif  // METRICS_GATHERING_SERVICE_ENABLED
-
-    CloudWatchSdkMetricsDestroy(cdi_global_context.cw_sdk_handle);
-    cdi_global_context.cw_sdk_handle = NULL;
-#endif  // CLOUDWATCH_METRICS_ENABLED
-
-    CdiLoggerDestroyLog(cdi_global_context.global_log_handle); // WARNING: Cannot use the logger after this.
-    CdiLoggerShutdown(false); // Do normal shutdown
-    CdiOsShutdown();
+    CdiOsStaticMutexUnlock(global_context_mutex_lock);
 
     return rs;
 }
@@ -796,7 +823,7 @@ void BytesToHexString(const void* data_ptr, int data_byte_count, char* dest_buff
     *dest_buffer_str = '\0';
 }
 
-void DeviceGidToString(const char* device_gid_ptr, int gid_length, char* dest_buffer_str, int dest_buffer_size)
+void DeviceGidToString(const uint8_t* device_gid_ptr, int gid_length, char* dest_buffer_str, int dest_buffer_size)
 {
     // For the EFA, the address will contain the GID (16 bytes) and QPN (2 bytes), which combine to make a unique value
     // for each endpoint. See "efa_ep_addr" in the EFA provider (efa.h). The structure is private, so we don't use it

@@ -41,8 +41,8 @@
  * \endhtmlonly
  *
  * The next figure shows an Rx Reorder List. These are the lists that are created and stored when an out of order<br>
- * list is received. They contain an SgList (with the CDI Header removed), a next pointer, a previous pointer, and a top<br>
- * and bottom sequence number. These two numbers represent the top of and bottom of this list, respectively.
+ * list is received. They contain an SgList (with the CDI Header removed), a next pointer, a previous pointer, and a
+ * top<br> and bottom sequence number. These two numbers represent the top of and bottom of this list, respectively.
  *
  * @image html "rx_reorder_list.png"
  * \htmlonly
@@ -72,8 +72,8 @@
  * \endhtmlonly
  *
  * The notation of the RxReorderList is "top-bot". E.g. An RxReorderList having 101 at the top and 230 at the bottom<br>
- * is designated as 101-230. A list containing only one element would have the number repeated. E.g. An RxReorderList with<br>
- * only element 7 would be designated 7-7.
+ * is designated as 101-230. A list containing only one element would have the number repeated. E.g. An RxReorderList
+ * with<br> only element 7 would be designated 7-7.
  *
  * @subsection specific_example Example arrival sequence: 2, 7, 6, 4, 5, 0, 1, 3.
  * This example payload consists of 8 SgLists.<br><br>
@@ -89,7 +89,8 @@
  * <hr width="900" align="left">
  * \endhtmlonly
  *
- * Sequence 7 arrives, which is out of order so a new RxReorderList is created for it and that list is attached to the right.
+ * Sequence 7 arrives, which is out of order so a new RxReorderList is created for it and that list is attached to the
+ * right.
  *
  * @image html "rx_reorder_ex_7.png"
  * \htmlonly
@@ -131,7 +132,8 @@
  * <hr width="900" align="left">
  * \endhtmlonly
  *
- * Sequence 0 arrives, which is out of order so a new RxReorderList is created for it and that list is placed to left of list 2-2.
+ * Sequence 0 arrives, which is out of order so a new RxReorderList is created for it and that list is placed to left of
+ * list 2-2.
  *
  * @image html "rx_reorder_ex_0.png"
  * \htmlonly
@@ -170,7 +172,7 @@
 
 #include <stdbool.h>
 
-#include "rx_reorder.h"
+#include "rx_reorder_packets.h"
 
 #include "cdi_core_api.h"
 #include "cdi_logger_api.h"
@@ -194,6 +196,7 @@
 /**
  * @brief Adds a scatter-gather list to a reorder list. First entry of the SGL may have an offset.
  *
+ * @param protocol_handle Handle for protocol being used.
  * @param payload_sgl_entry_pool_handle Handle for free SGL memory.
  * @param sglist_ptr list Which will be appended to.
  * @param new_sglist_ptr Pointer to entry to be added to list.
@@ -201,22 +204,24 @@
  * @param num_bytes_added_ptr Pointer to the number of bytes that were successfully added to list.
  * @return True if adding SGL list is successful.
  */
-static bool AddSgListToReorderList(CdiPoolHandle payload_sgl_entry_pool_handle, CdiSgList* sglist_ptr,
-                                   const CdiSgList* new_sglist_ptr, int initial_offset, int* num_bytes_added_ptr)
+static bool AddSgListToReorderList(CdiProtocolHandle protocol_handle, CdiPoolHandle payload_sgl_entry_pool_handle,
+                                   CdiSgList* sglist_ptr, const CdiSgList* new_sglist_ptr, int initial_offset,
+                                   int* num_bytes_added_ptr)
 {
     bool ret = true;
     *num_bytes_added_ptr = 0;
     int initial_offset_local = initial_offset;
     for (CdiSglEntry* new_sgl_ptr = new_sglist_ptr->sgl_head_ptr; new_sgl_ptr != NULL;
                       new_sgl_ptr = new_sgl_ptr->next_ptr) {
-#ifdef DEBUG_INTERNAL_SGL_ENTRIES
-        CdiCDIPacketCommonHeader* common_hdr_ptr = new_sgl_ptr->address_ptr;
-#endif
+        CdiRawPacketHeader* header_ptr = new_sgl_ptr->address_ptr;
         CdiSglEntry* payload_sgl_entry_ptr = NULL;
+        CdiPacketRxReorderInfo reorder_info;
+        ProtocolPayloadPacketRxReorderInfo(protocol_handle, header_ptr, &reorder_info);
+
         // Log warning if we get a packet with no payload, as this should never happen.
         if (new_sgl_ptr->size_in_bytes <= initial_offset_local) {
             CDI_LOG_THREAD(kLogWarning, "Got sequence[%d] on payload[%d] with no payload data.",
-                           new_sglist_ptr->sgl_head_ptr->packet_sequence_num, common_hdr_ptr->payload_num);
+                           reorder_info.packet_sequence_num, reorder_info.payload_num);
         }
         // Create a new payload SGL entry and then append it to the queue.
         if (!CdiPoolGet(payload_sgl_entry_pool_handle, (void**)&payload_sgl_entry_ptr)) {
@@ -234,10 +239,6 @@ static bool AddSgListToReorderList(CdiPoolHandle payload_sgl_entry_pool_handle, 
         payload_sgl_entry_ptr->size_in_bytes = new_sgl_ptr->size_in_bytes - initial_offset_local;
         *num_bytes_added_ptr += payload_sgl_entry_ptr->size_in_bytes;
 
-#ifdef DEBUG_INTERNAL_SGL_ENTRIES
-        payload_sgl_entry_ptr->packet_sequence_num = common_hdr_ptr->packet_sequence_num;
-        payload_sgl_entry_ptr->payload_num = common_hdr_ptr->payload_num;
-#endif
         SglAppend(sglist_ptr, payload_sgl_entry_ptr);
 
         initial_offset_local = 0; // Only the first entry will have an offset.
@@ -248,6 +249,7 @@ static bool AddSgListToReorderList(CdiPoolHandle payload_sgl_entry_pool_handle, 
 /**
  * @brief Adds an SGL list to the top of an existing reorder list. First SGL entry of SGL list may have offset.
  *
+ * @param protocol_handle Handle for protocol being used.
  * @param payload_sgl_entry_pool_handle Handle for free SGL memory.
  * @param cur_reorder_list_ptr Pointer to list which will be appended to.
  * @param new_sglist_ptr Pointer to entry to be added to list.
@@ -256,7 +258,7 @@ static bool AddSgListToReorderList(CdiPoolHandle payload_sgl_entry_pool_handle, 
  * @param num_bytes_added_ptr Pointer to the number of bytes that were successfully added to list.
  * @return True if adding SGL list is successful.
  */
-static bool AddSgListToRxReorderListTop(CdiPoolHandle payload_sgl_entry_pool_handle,
+static bool AddSgListToRxReorderListTop(CdiProtocolHandle protocol_handle, CdiPoolHandle payload_sgl_entry_pool_handle,
                                         CdiReorderList* cur_reorder_list_ptr,
                                         const CdiSgList* new_sglist_ptr, int sequence_num,
                                         int initial_offset, int* num_bytes_added_ptr)
@@ -267,7 +269,7 @@ static bool AddSgListToRxReorderListTop(CdiPoolHandle payload_sgl_entry_pool_han
     CdiSglEntry* tmp_sgl_tail_ptr = cur_reorder_list_ptr->sglist.sgl_tail_ptr;
     cur_reorder_list_ptr->sglist.sgl_head_ptr = NULL;
     cur_reorder_list_ptr->sglist.sgl_tail_ptr = NULL;
-    if (AddSgListToReorderList(payload_sgl_entry_pool_handle, &cur_reorder_list_ptr->sglist,
+    if (AddSgListToReorderList(protocol_handle, payload_sgl_entry_pool_handle, &cur_reorder_list_ptr->sglist,
                                new_sglist_ptr, initial_offset, num_bytes_added_ptr)) {
 #ifdef DEBUG_RX_REORDER_ALL
         CDI_LOG_THREAD(kLogInfo, "Got sequence[%d] and attaching to top of list [%d-%d].",
@@ -285,6 +287,7 @@ static bool AddSgListToRxReorderListTop(CdiPoolHandle payload_sgl_entry_pool_han
 /**
  * @brief Adds an SGL list to the bottom of an existing reorder list. First SGL entry of SGL list may have offset.
  *
+ * @param protocol_handle Handle for protocol being used.
  * @param payload_sgl_entry_pool_handle Handle for free SGL memory.
  * @param cur_reorder_list_ptr Pointer to list which will be appended to.
  * @param new_sglist_ptr Pointer to entry to be added to list.
@@ -293,13 +296,14 @@ static bool AddSgListToRxReorderListTop(CdiPoolHandle payload_sgl_entry_pool_han
  * @param num_bytes_added_ptr Pointer to the number of bytes that were successfully added to list.
  * @return True if adding SGL list is successful.
  */
-static bool AddSgListToRxReorderListBottom(CdiPoolHandle payload_sgl_entry_pool_handle,
+static bool AddSgListToRxReorderListBottom(CdiProtocolHandle protocol_handle,
+                                           CdiPoolHandle payload_sgl_entry_pool_handle,
                                            CdiReorderList* cur_reorder_list_ptr,
                                            const CdiSgList* new_sglist_ptr, int sequence_num,
                                            int initial_offset, int* num_bytes_added_ptr)
 {
     bool ret = true;
-    if (AddSgListToReorderList(payload_sgl_entry_pool_handle, &cur_reorder_list_ptr->sglist,
+    if (AddSgListToReorderList(protocol_handle, payload_sgl_entry_pool_handle, &cur_reorder_list_ptr->sglist,
                                new_sglist_ptr, initial_offset, num_bytes_added_ptr)) {
 #ifdef DEBUG_RX_REORDER_ALL
         CDI_LOG_THREAD(kLogInfo, "Got sequence[%d] and attaching to bottom of list [%d-%d].",
@@ -366,6 +370,7 @@ static void AttachNextRxReorderList(CdiPoolHandle reorder_entries_pool_handle, C
  * @brief Creates a new reorder list and then inserts it between two reorder lists.
  * The SGL list is added to the created reorder list. First SGL entry of SGL list may have offset.
  *
+ * @param protocol_handle Handle for protocol being used.
  * @param reorder_entries_pool_handle Handle for free rx reorder list memory.
  * @param payload_sgl_entry_pool_handle Handle for free SGL memory.
  * @param new_sglist_ptr Pointer to entry to be added to list.
@@ -377,7 +382,7 @@ static void AttachNextRxReorderList(CdiPoolHandle reorder_entries_pool_handle, C
  * @param new_reorder_list_ptr Pointer to pointer of newly created list.
  * @return True if creating reorder list and adding SGL list is successful.
  */
-static bool CreateAndInsertRxReorderList(CdiPoolHandle reorder_entries_pool_handle,
+static bool CreateAndInsertRxReorderList(CdiProtocolHandle protocol_handle, CdiPoolHandle reorder_entries_pool_handle,
                                          CdiPoolHandle payload_sgl_entry_pool_handle,
                                          const CdiSgList* new_sglist_ptr, int sequence_num,
                                          int initial_offset, int* num_bytes_added_ptr,
@@ -398,7 +403,7 @@ static bool CreateAndInsertRxReorderList(CdiPoolHandle reorder_entries_pool_hand
         (*new_reorder_list_ptr)->sglist.sgl_tail_ptr = NULL;
         (*new_reorder_list_ptr)->top_sequence_num = sequence_num;
         (*new_reorder_list_ptr)->bot_sequence_num = sequence_num;
-        if (AddSgListToReorderList(payload_sgl_entry_pool_handle, &(*new_reorder_list_ptr)->sglist,
+        if (AddSgListToReorderList(protocol_handle, payload_sgl_entry_pool_handle, &(*new_reorder_list_ptr)->sglist,
                                    new_sglist_ptr, initial_offset, num_bytes_added_ptr)) {
 #ifdef DEBUG_RX_REORDER_MIN
             CDI_LOG_THREAD(kLogInfo, "Creating new list [%d].",sequence_num);
@@ -415,6 +420,7 @@ static bool CreateAndInsertRxReorderList(CdiPoolHandle reorder_entries_pool_hand
 /**
  * @brief Walks the rxreorder list to the right, looking for a spot to place the new SGL list.
  *
+ * @param protocol_handle Handle for protocol being used.
  * @param reorder_entries_pool_handle Handle for free rx reorder list memory.
  * @param payload_sgl_entry_pool_handle Handle for free SGL memory.
  * @param num_bytes_added_ptr Pointer to the number of bytes that were successfully added to list.
@@ -424,11 +430,11 @@ static bool CreateAndInsertRxReorderList(CdiPoolHandle reorder_entries_pool_hand
  * @param initial_offset First SGL entry will have this offset applied.
  * @return True if adding SGL list is successful.
  */
-static bool ProcessList(CdiPoolHandle reorder_entries_pool_handle, CdiPoolHandle payload_sgl_entry_pool_handle,
-                        int* num_bytes_added_ptr, CdiReorderList** cur_reorder_list_ptr,
-                        const CdiSgList* new_sglist_ptr, int sequence_num, int initial_offset)
+static bool ProcessList(CdiProtocolHandle protocol_handle, CdiPoolHandle reorder_entries_pool_handle,
+                        CdiPoolHandle payload_sgl_entry_pool_handle, int* num_bytes_added_ptr,
+                        CdiReorderList** cur_reorder_list_ptr, const CdiSgList* new_sglist_ptr, int sequence_num,
+                        int initial_offset)
 {
-
     bool ret = true;
     CdiReorderList* new_reorder_list_ptr = NULL;
     CdiReorderList* tmp_reorder_list_ptr = *cur_reorder_list_ptr;
@@ -456,17 +462,18 @@ static bool ProcessList(CdiPoolHandle reorder_entries_pool_handle, CdiPoolHandle
     // at the top of the list or to the left
     if (NULL == tmp_reorder_list_ptr_prev) {
         if (sequence_num == tmp_reorder_list_ptr->top_sequence_num-1) {
-            if (AddSgListToRxReorderListTop(payload_sgl_entry_pool_handle, tmp_reorder_list_ptr, new_sglist_ptr,
-                                            sequence_num, initial_offset, num_bytes_added_ptr)) {
+            if (AddSgListToRxReorderListTop(protocol_handle, payload_sgl_entry_pool_handle, tmp_reorder_list_ptr,
+                                            new_sglist_ptr, sequence_num, initial_offset, num_bytes_added_ptr)) {
             } else {
                 ret = false;
             }
         } else {
             // List didn't belong on top of existing list, insert to the left and set
             // the payload_state pointer to this new list
-            if (CreateAndInsertRxReorderList(reorder_entries_pool_handle, payload_sgl_entry_pool_handle,
-                                             new_sglist_ptr, sequence_num, initial_offset, num_bytes_added_ptr,
-                                             NULL, tmp_reorder_list_ptr, &new_reorder_list_ptr)) {
+            if (CreateAndInsertRxReorderList(protocol_handle, reorder_entries_pool_handle,
+                                             payload_sgl_entry_pool_handle, new_sglist_ptr, sequence_num,
+                                             initial_offset, num_bytes_added_ptr, NULL, tmp_reorder_list_ptr,
+                                             &new_reorder_list_ptr)) {
                 *cur_reorder_list_ptr = new_reorder_list_ptr;
             } else {
                 ret = false;
@@ -475,8 +482,8 @@ static bool ProcessList(CdiPoolHandle reorder_entries_pool_handle, CdiPoolHandle
     } else {
         // Does this belong on the bottom of existing list?
         if (sequence_num == tmp_reorder_list_ptr_prev->bot_sequence_num+1) {
-            if (AddSgListToRxReorderListBottom(payload_sgl_entry_pool_handle, tmp_reorder_list_ptr_prev,
-                                               new_sglist_ptr, sequence_num, initial_offset,
+            if (AddSgListToRxReorderListBottom(protocol_handle, payload_sgl_entry_pool_handle,
+                                               tmp_reorder_list_ptr_prev, new_sglist_ptr, sequence_num, initial_offset,
                                                num_bytes_added_ptr)) {
                 // Check to see if next list needs attaching because something has been added to the end of this one.
                 if (tmp_reorder_list_ptr) {
@@ -493,17 +500,17 @@ static bool ProcessList(CdiPoolHandle reorder_entries_pool_handle, CdiPoolHandle
             // top of next list.
             if (NULL != tmp_reorder_list_ptr) {
                 if (sequence_num == tmp_reorder_list_ptr->top_sequence_num-1) {
-                    if (AddSgListToRxReorderListTop(payload_sgl_entry_pool_handle, tmp_reorder_list_ptr,
-                                                    new_sglist_ptr, sequence_num, initial_offset,
+                    if (AddSgListToRxReorderListTop(protocol_handle, payload_sgl_entry_pool_handle,
+                                                    tmp_reorder_list_ptr, new_sglist_ptr, sequence_num, initial_offset,
                                                     num_bytes_added_ptr)) {
                     } else {
                         ret = false;
                     }
                 } else {
                     // List didn't belong on top of existing list, insert between the two lists.
-                    if (CreateAndInsertRxReorderList(reorder_entries_pool_handle, payload_sgl_entry_pool_handle,
-                                                     new_sglist_ptr, sequence_num, initial_offset,
-                                                     num_bytes_added_ptr, tmp_reorder_list_ptr_prev,
+                    if (CreateAndInsertRxReorderList(protocol_handle, reorder_entries_pool_handle,
+                                                     payload_sgl_entry_pool_handle, new_sglist_ptr, sequence_num,
+                                                     initial_offset, num_bytes_added_ptr, tmp_reorder_list_ptr_prev,
                                                      tmp_reorder_list_ptr, &new_reorder_list_ptr)) {
                     } else {
                         ret = false;
@@ -511,9 +518,10 @@ static bool ProcessList(CdiPoolHandle reorder_entries_pool_handle, CdiPoolHandle
                 }
             } else {
                 // No next list, so create a new list to the right.
-                if (CreateAndInsertRxReorderList(reorder_entries_pool_handle, payload_sgl_entry_pool_handle,
-                                                 new_sglist_ptr, sequence_num, initial_offset, num_bytes_added_ptr,
-                                                 tmp_reorder_list_ptr_prev, NULL, &new_reorder_list_ptr)) {
+                if (CreateAndInsertRxReorderList(protocol_handle, reorder_entries_pool_handle,
+                                                 payload_sgl_entry_pool_handle, new_sglist_ptr, sequence_num,
+                                                 initial_offset, num_bytes_added_ptr, tmp_reorder_list_ptr_prev, NULL,
+                                                 &new_reorder_list_ptr)) {
                 } else {
                     ret = false;
                 }
@@ -527,8 +535,8 @@ static bool ProcessList(CdiPoolHandle reorder_entries_pool_handle, CdiPoolHandle
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-void CdiRxReorderFreeLists(CdiReorderList* reorder_list_ptr, CdiPoolHandle payload_sgl_entry_pool_handle,
-                           CdiPoolHandle reorder_entries_pool_handle)
+void RxReorderPacketFreeLists(CdiReorderList* reorder_list_ptr, CdiPoolHandle payload_sgl_entry_pool_handle,
+                              CdiPoolHandle reorder_entries_pool_handle)
 {
     while (reorder_list_ptr) {
         // First remove the SGL that is in this reorder list.
@@ -546,16 +554,16 @@ void CdiRxReorderFreeLists(CdiReorderList* reorder_list_ptr, CdiPoolHandle paylo
     }
 }
 
-bool CdiRxPayloadReorderStateInit(CdiPoolHandle payload_sgl_entry_pool_handle,
-                                  CdiPoolHandle reorder_entries_pool_handle, RxPayloadState* payload_state_ptr,
-                                  const CdiSgList* new_sglist_ptr, int initial_offset, int sequence_num)
+bool RxReorderPacketPayloadStateInit(CdiProtocolHandle protocol_handle, CdiPoolHandle payload_sgl_entry_pool_handle,
+                                     CdiPoolHandle reorder_entries_pool_handle, RxPayloadState* payload_state_ptr,
+                                     const CdiSgList* new_sglist_ptr, int initial_offset, int sequence_num)
 {
     bool ret = true;
     CdiReorderList* new_reorder_list_ptr = NULL;
     int num_bytes_added = 0;
 
     // Because this is initialization, need only create a new rxreorder list and finish.
-    if (CreateAndInsertRxReorderList(reorder_entries_pool_handle, payload_sgl_entry_pool_handle,
+    if (CreateAndInsertRxReorderList(protocol_handle, reorder_entries_pool_handle, payload_sgl_entry_pool_handle,
                                      new_sglist_ptr, sequence_num, initial_offset, &num_bytes_added,
                                      NULL, NULL, &new_reorder_list_ptr)) {
         payload_state_ptr->reorder_list_ptr = new_reorder_list_ptr;
@@ -565,30 +573,31 @@ bool CdiRxPayloadReorderStateInit(CdiPoolHandle payload_sgl_entry_pool_handle,
     }
 
     if (!ret) {
-        CdiRxReorderFreeLists(payload_state_ptr->reorder_list_ptr, payload_sgl_entry_pool_handle,
-                              reorder_entries_pool_handle);
+        RxReorderPacketFreeLists(payload_state_ptr->reorder_list_ptr, payload_sgl_entry_pool_handle,
+                                 reorder_entries_pool_handle);
+        payload_state_ptr->reorder_list_ptr = NULL; // List freed and no longer valid, so clear it.
     }
 
     return ret;
 }
 
-bool CdiRxReorder(CdiPoolHandle payload_sgl_entry_pool_handle,
-                  CdiPoolHandle reorder_entries_pool_handle,
-                  RxPayloadState* payload_state_ptr,
-                  const CdiSgList* new_sglist_ptr, int initial_offset, int sequence_num)
+bool RxReorderPacket(CdiProtocolHandle protocol_handle, CdiPoolHandle payload_sgl_entry_pool_handle,
+                     CdiPoolHandle reorder_entries_pool_handle, RxPayloadState* payload_state_ptr,
+                     const CdiSgList* new_sglist_ptr, int initial_offset, int sequence_num)
 {
     bool ret = true;
     int num_bytes_added = 0;
 
     // Search for a place to put this sequence number.
-    ret = ProcessList(reorder_entries_pool_handle, payload_sgl_entry_pool_handle,
+    ret = ProcessList(protocol_handle, reorder_entries_pool_handle, payload_sgl_entry_pool_handle,
                       &num_bytes_added, &payload_state_ptr->reorder_list_ptr, new_sglist_ptr,
                       sequence_num, initial_offset);
     if (ret) {
         payload_state_ptr->data_bytes_received += num_bytes_added;
     } else {
-        CdiRxReorderFreeLists(payload_state_ptr->reorder_list_ptr, payload_sgl_entry_pool_handle,
-                              reorder_entries_pool_handle);
+        RxReorderPacketFreeLists(payload_state_ptr->reorder_list_ptr, payload_sgl_entry_pool_handle,
+                                 reorder_entries_pool_handle);
+        payload_state_ptr->reorder_list_ptr = NULL; // List freed and no longer valid, so clear it.
     }
 
     return ret;

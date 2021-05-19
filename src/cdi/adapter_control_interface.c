@@ -76,7 +76,7 @@ AdapterEndpointHandle ControlInterfaceGetEndpoint(ControlInterfaceHandle handle)
     return state_ptr->adapter_endpoint_handle;
 }
 
-CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_data_ptr, EndpointDirection direction,
+CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_data_ptr,
                                        ControlInterfaceHandle* ret_handle_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;
@@ -95,7 +95,7 @@ CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_
             .connection_user_cb_param = NULL,      // Not used by control interface.
             .log_handle = config_data_ptr->log_handle,
             .thread_core_num = -1,
-            .direction = direction,
+            .direction = kEndpointDirectionBidirectional,
 
             // This endpoint is a control interface. This means that the Endpoint Manager is not used for managing
             // threads related to the connection.
@@ -111,8 +111,7 @@ CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_
             .connection_handle = control_ptr->adapter_connection_handle,
             .msg_from_endpoint_func_ptr = config_data_ptr->msg_from_endpoint_func_ptr,
             .msg_from_endpoint_param_ptr = config_data_ptr->msg_from_endpoint_param_ptr,
-            .remote_address_str = (kEndpointDirectionReceive == direction) ? NULL :
-                                  config_data_ptr->tx_dest_ip_addr_str,
+            .remote_address_str = config_data_ptr->tx_dest_ip_addr_str,
             .port_number = config_data_ptr->port_number,
             .endpoint_stats_ptr = NULL,       // Not used by control interface.
         };
@@ -142,7 +141,13 @@ void ControlInterfaceDestroy(ControlInterfaceHandle handle)
             CdiAdapterStopConnection(control_ptr->adapter_connection_handle);
         }
 
+        // Now that the poll thread has stopped, ok to free additional resources.
         if (control_ptr->adapter_endpoint_handle) {
+            if (control_ptr->adapter_endpoint_handle->tx_packet_queue_handle) {
+                // Flush Tx packet queue.
+                CdiQueueFlush(control_ptr->adapter_endpoint_handle->tx_packet_queue_handle);
+            }
+
             // Close endpoint.
             CdiAdapterCloseEndpoint(control_ptr->adapter_endpoint_handle);
             control_ptr->adapter_endpoint_handle = NULL;

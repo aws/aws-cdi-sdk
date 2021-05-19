@@ -217,6 +217,19 @@ static bool SetupSignalHandlers(void) {
     return true;
 }
 
+/**
+ * @brief Free logging resources used by this test application.
+ *
+ */
+static void FreeAppLoggerResources(void)
+{
+    CdiLoggerThreadLogUnset();
+    CdiLoggerDestroyLog(global_test_settings.test_app_global_log_handle);
+    global_test_settings.test_app_global_log_handle = NULL;
+    CdiLoggerDestroyLogger(test_app_logger_handle);
+    test_app_logger_handle = NULL;
+}
+
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -445,8 +458,8 @@ int main(int argc, const char **argv)
         }
 
         // Get a time string to add to the log.
-        char time_str[MAX_FORMATTED_TIMEZONE_STRING_LENGTH];
-        CdiOsGetLocalTimeString(time_str, MAX_FORMATTED_TIMEZONE_STRING_LENGTH);
+        char time_str[CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH];
+        CdiOsGetLocalTimeString(time_str, CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH);
         CDI_LOG_THREAD(kLogInfo, "-- Running CDI Test App -- %s", time_str);
 
         // Print the command line to the log.
@@ -471,51 +484,14 @@ int main(int argc, const char **argv)
 
         CdiReturnStatus rs = CdiCoreInitialize(&core_config);
         if (kCdiStatusOk != rs) {
-            CDI_LOG_THREAD(kLogError, "SDK core initialize failed. Error[%d]", rs);
+            CDI_LOG_THREAD(kLogError, "SDK core initialize failed. Error=[%d], Message=[%s]", rs,
+                           CdiCoreStatusToString(rs));
             status = kProgramExecutionStatusExitError;
             break;
         }
 
         // Print the test_settings data structure for each connection.
         PrintTestSettings(test_settings, num_connections_found);
-
-// The following runs some minimal unit testing when the respective defines are enabled.
-// Normally, this code is not run.
-#ifdef TEST_UNIT_DEBUG
-        extern bool TestUnitRxReorder(void);
-        if (TestUnitRxReorder()) {
-            CDI_LOG_THREAD(kLogInfo, "Unit test for rx_reorder passed.");
-        } else {
-            CDI_LOG_THREAD(kLogError, "Unit tests for rx_reorder failed.");
-            got_error = true;
-        }
-
-        extern bool TestUnitTimeout(void);
-        if (TestUnitTimeout()) {
-            CDI_LOG_THREAD(kLogInfo, "Unit test for timeouts passed.");
-        } else {
-            CDI_LOG_THREAD(kLogError, "Unit tests for timeouts failed.");
-            got_error = true;
-        }
-
-        extern bool TestUnitSgl(void);
-        if (TestUnitSgl()) {
-            CDI_LOG_THREAD(kLogInfo, "Unit test for scatter/gather lists passed.");
-        } else {
-            CDI_LOG_THREAD(kLogError, "Unit tests for scatter/gather lists failed.");
-            got_error = true;
-        }
-
-#ifdef DEBUG_T_DIGEST_UNIT_TEST // Set this define in configuration.h
-        extern bool CdiTestUnitTDigest(void);
-        if (CdiTestUnitTDigest()) {
-            CDI_LOG_THREAD(kLogInfo, "Unit test for t-Digest passed.");
-        } else {
-            CDI_LOG_THREAD(kLogError, "Unit tests for t-Digest failed.");
-            got_error = true;
-        }
-#endif // DEBUG_T_DIGEST_LOGGING
-#endif // TEST_UNIT_DEBUG
 
         // Run the test!  Note that we allocate the number of connections specified on the command line.
         if (!got_error) {
@@ -538,12 +514,7 @@ int main(int argc, const char **argv)
 
         TestConsoleLog(kLogInfo, "Finishing test[%d].", loop_num+1);
 
-        // Close log files and shutdown logger resources.
-        CdiLoggerThreadLogUnset();
-        CdiLoggerDestroyLog(global_test_settings.test_app_global_log_handle);
-        global_test_settings.test_app_global_log_handle = NULL;
-        CdiLoggerDestroyLogger(test_app_logger_handle);
-        test_app_logger_handle = NULL;
+        FreeAppLoggerResources(); // Close test application's log files and resources.
 
         // Reset the logger name.
         global_test_settings.base_log_filename_str[0] = '\0';
@@ -557,6 +528,10 @@ int main(int argc, const char **argv)
             CdiOsSleep(MAIN_TEST_LOOP_WAIT_TIMEOUT_MS);
         }
     }
+
+    // Ensure test application's log files and resources are freed.
+    FreeAppLoggerResources();
+    CdiLoggerShutdown(false); // Matches call to CdiLoggerInitialize(). NOTE: false= Normal termination.
 
     TestCommandLineParserDestroy(command_line_handle);
     TestConsoleDestroy(false); // false= Normal termination.

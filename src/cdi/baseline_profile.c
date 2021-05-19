@@ -210,7 +210,7 @@ CdiReturnStatus CdiAvmRegisterBaselineProfile(CdiBaselineAvmPayloadType profile_
 
     if (kCdiStatusOk == ret) {
         int count = profile_type_count_array[profile_type_idx];
-        if (count < (int)CDI_ARRAY_ELEMENT_COUNT(baseline_profile_array[profile_type_idx])) {
+        if (count < CDI_ARRAY_ELEMENT_COUNT(baseline_profile_array[profile_type_idx])) {
             baseline_profile_array[profile_type_idx][count].version = version;
             baseline_profile_array[profile_type_idx][count].vtable_api = *vtable_api_ptr;
             profile_type_count_array[profile_type_idx]++;

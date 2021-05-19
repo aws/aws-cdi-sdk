@@ -443,7 +443,7 @@ static uint32_t TDigestCalculatePercentile(TDigest* td_ptr, int percentile)
                 value_at_percentile = td_ptr->min_sample_value;
             } else {
                 // If this is the first cluster, and the number of samples is more than 2, then we interpolate as
-                // usual, but use the the min_sample_value as the left mean.
+                // usual, but use the min_sample_value as the left mean.
                 left_mean = td_ptr->min_sample_value;
                 right_mean = td_ptr->clusters[cluster_index].mean;
                 num_samples_of_interest = td_ptr->clusters[cluster_index].samples / 2;
@@ -471,7 +471,7 @@ static uint32_t TDigestCalculatePercentile(TDigest* td_ptr, int percentile)
                 value_at_percentile = td_ptr->max_sample_value;
             } else {
                 // If this is the last cluster, and the number of samples is more than 2, then we interpolate as
-                // usual, but use the the min_sample_value as the left mean.
+                // usual, but use the min_sample_value as the left mean.
                 left_mean = this_cluster_ptr->mean;
                 right_mean = td_ptr->max_sample_value;
                 num_samples_of_interest = td_ptr->clusters[cluster_index].samples / 2;

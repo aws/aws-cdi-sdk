@@ -16,6 +16,7 @@
 #include "adapter_api.h"
 #include "adapter_control_interface.h"
 #include "private.h"
+#include "protocol.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -36,9 +37,15 @@ typedef ProbeEndpointState* ProbeEndpointHandle;
  * NOTE: Any changes made here MUST also be made to "probe_mode_key_array".
  */
 typedef enum {
+    /// Probe just started. Advance to kProbeStateSendReset.
+    kProbeStateIdle,
+
     /// Use the control interface to send the kProbeCommandReset command to reset the remote connection. Must receive an
     /// ACK from the remote to confirm that it received the command.
     kProbeStateSendReset,
+
+    /// After ACK from reset has been received by Tx, send protocol version to Rx.
+    kProbeStateSendProtocolVersion,
 
     /// After the kProbeCommandReset command has been received, a request to reset the connection is sent to the
     /// Endpoint Manager. When the reset completes, probe state will advance to kProbeStateResetDone.
@@ -78,25 +85,14 @@ typedef enum {
 } ProbeState;
 
 /**
- * @brief This enumeration is used in the ProbePacketHeader structure to indicate a probe command.
- * NOTE: Any changes made here MUST also be made to "probe_command_key_array".
- */
-typedef enum {
-    kProbeCommandReset = 1, ///< Request to reset the connection.  Start with 1 so no commands have the value 0.
-    kProbeCommandPing,      ///< Request to ping the connection.
-    kProbeCommandConnected, ///< Notification that connection has been established (probe has completed).
-    kProbeCommandAck,       ///< Packet is an ACK response to a previously sent command.
-} ProbeCommand;
-
-/**
  * @brief This defines a structure that contains all of the state information for the sending side of a single flow.
  * Its contents are opaque to the calling program.
  */
 typedef struct {
     ProbeState tx_state;      ///< Current Tx probe state.
-    /// @brief When in kProbeStateEfaConnectedPing state, this is the number of pings that have been sent without
-    /// receiving an ack.
-    int ping_retry_count;
+    /// @brief When in kProbeStateEfaConnectedPing or kProbeStateSendProtocolVersion state, this is the number of
+    /// consecutive commands that have been sent without receiving an ack.
+    int send_command_retry_count;
 } TxEndpointProbeState;
 
 /**
@@ -135,9 +131,6 @@ struct ProbeEndpointState {
     /// Memory pool of send EFA work requests (ProbeEfaPacketWorkRequest).
     CdiPoolHandle efa_work_request_pool_handle;
 
-    /// Memory pool of send control work requests (ProbeControlPacketWorkRequest).
-    CdiPoolHandle control_work_request_pool_handle;
-
     /// FIFO of control interface packet CdiSgList structures.
     CdiFifoHandle control_packet_fifo_handle;
 
@@ -155,77 +148,13 @@ struct ProbeEndpointState {
     bool send_ack_command_valid;     ///< If true, the data below is valid.
     ProbeCommand send_ack_command;   ///< Command that needs to have an ACK returned.
     uint16_t send_ack_control_packet_num; ///< Packet number for returned ACK.
+    uint8_t send_ack_probe_version; ///< Probe protocol version supported by ACK receiver.
+
+    /// @brief Protocol handle of the current CDI-SDK version. See:
+    /// CDI_PROTOCOL_VERSION.CDI_PROTOCOL_MAJOR_VERSION.CDI_PROBE_VERSION
+    CdiProtocolHandle protocol_handle_sdk;
+    CdiProtocolHandle protocol_handle_v1; ///< Protocol handle version 1.0.CDI_PROBE_VERSION
 };
-
-// --------------------------------------------------------------------
-// All structures in the block below are byte packed (no byte padding).
-// --------------------------------------------------------------------
-#pragma pack(push, 1)
-
-/**
- * @brief Common header for all probe control packets.
- */
-typedef struct {
-    uint8_t senders_version_num;       ///< Sender's CDI SDK version number.
-    uint8_t senders_major_version_num; ///< Sender's CDI SDK major version number.
-    uint8_t senders_minor_version_num; ///< Sender's CDI SDK minor version number.
-
-    ProbeCommand command; ///< Sender's command
-    char senders_ip_str[MAX_IP_STRING_LENGTH];   ///< Sender's IP address.
-    char senders_gid_array[MAX_IPV6_GID_LENGTH]; ///< Sender's device GID. contains GID + QPN (see efa_ep_addr).
-    char senders_stream_name_str[MAX_STREAM_NAME_STRING_LENGTH]; ///< Sender's stream name string.
-    int senders_stream_identifier; ///< Sender's stream identifier.
-
-    /// @brief Sender's control interface source port. Sent from Tx (client) to Rx (server) so the Rx can establish a
-    /// transmit connection back to the Tx.
-    uint16_t senders_control_dest_port;
-
-    /// @brief Probe packet number that is incremented for each command sent. Value begins at zero when a new connection
-    /// is establish and is only unique to the connection.
-    uint16_t control_packet_num;
-    uint16_t checksum; ///< The checksum for this control packet.
-} ControlPacketCommonHeader;
-
-/**
- * @brief Probe command packet that is being transmitted.
- */
-typedef struct {
-    ControlPacketCommonHeader common_hdr; ///< Common header of all probe packets.
-    bool requires_ack; ///< A control flag that, when true, indicates the specified command requires ack.
-} ControlPacketCommand;
-
-/**
- * @brief Control ACK packet that is a response for a transmitted command.
- */
-typedef struct {
-    ControlPacketCommonHeader common_hdr; ///< Common header of all probe packets.
-    ProbeCommand ack_command;           ///< Command that ACK corresponds to.
-    uint16_t ack_control_packet_num;    ///< Command's control packet number that ACK corresponds to.
-} ControlPacketAck;
-
-/**
- * @brief Packet format used by probe when sending probe packets over the EFA interface.
- */
-typedef struct {
-    uint16_t packet_sequence_num; ///< Probe packet sequence number.
-    uint8_t efa_data[EFA_PROBE_PACKET_DATA_SIZE]; ///< Probe packet data.
-} EfaProbePacket;
-
-/**
- * @brief Structure used to hold a union of packets that are transmitted over the control or EFA interface.
- */
-typedef struct {
-    union {
-        ControlPacketCommand command_packet; ///< Command packet transmitted over the control interface.
-        ControlPacketAck ack_packet;         ///< ACK packet transmitted over the control interface.
-        EfaProbePacket efa_packet;           ///< Packet used for EFA probe transmitted over the EFA interface.
-    };
-} ProbePacketUnion;
-
-#pragma pack(pop)
-// --------------------------------------------------------------------
-// End of byte packed structures (no byte padding).
-// --------------------------------------------------------------------
 
 /**
  * @brief Structure used to hold a transmit packet work request. The lifespan of a work request starts when a packet is
@@ -235,7 +164,7 @@ typedef struct {
 typedef struct {
     Packet packet;          ///< The top level packet structure for the data in this work request.
     CdiSglEntry sgl_entry;  ///< The single SGL entry for the probe packet (we only use 1 for all probe packets).
-    ProbePacketUnion packet_data; ///< Data for the probe packet
+    CdiRawProbeHeader packet_data; ///< Data for the probe packet
 } ProbePacketWorkRequest;
 
 /**
@@ -253,7 +182,10 @@ typedef struct {
     ControlCommandType command_type; ///< Determines which data in the union is valid.
     union {
         ProbeState probe_state; ///< Valid if kCommandTypeStateChange. Probe state to set.
-        CdiSgList packet_sgl; ///< Valid if kCommandTypeRxPacket. Scatter-gather List for Rx packet.
+        struct {
+            CdiSgList packet_sgl; ///< Scatter-gather List for Rx packet.
+            struct sockaddr_in source_address; ///< Source address of the received packet.
+        } receive_packet; ///< Valid if kCommandTypeRxPacket.
     };
 } ControlCommand;
 
@@ -298,11 +230,12 @@ void ProbeEndpointReset(ProbeEndpointHandle handle);
  * CdiAdapterResetEndpoint(), which uses this function to notify probe that the endpoint reset is done.
  *
  * @param handle Handle of probe related to the endpoint.
- *
+* @param reopen If true re-opens the endpoint, otherwise does not re-open it.
+  *
  * @return CdiReturnStatus kCdiStatusOk if the operation was successful or a value that indicates the nature of the
  *         failure.
  */
-CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle);
+CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle, bool reopen);
 
 /**
  * The Endpoint Manager is in the final process of starting an endpoint by calling CdiAdapterStartEndpoint(), which uses
@@ -314,6 +247,13 @@ CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle);
  *         failure.
  */
 CdiReturnStatus ProbeEndpointStart(ProbeEndpointHandle handle);
+
+/**
+ * Stop a probe endpoint and wait for its thread to exit.
+ *
+ * @param handle Handle of the probe endpoint to stop.
+ */
+void ProbeEndpointStop(ProbeEndpointHandle handle);
 
 /**
  * Destroy a probe endpoint.

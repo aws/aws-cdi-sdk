@@ -63,6 +63,7 @@ typedef enum {
     kKeyLogComponent,                   ///< Key for CdiLogComponent
     kKeyLogLevel,                       ///< Key for CdiLogLevel
     kKeyConnectionStatus,               ///< Key for CdiConnectionStatus
+    kKeyTestUnit,                       ///< Key for CdiTestUnitName
 } EnumStringKeyTypes;
 
 /**

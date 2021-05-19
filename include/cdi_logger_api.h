@@ -321,10 +321,11 @@ CDI_INTERFACE void CdiLoggerDestroyLog(CdiLogHandle handle);
 CDI_INTERFACE void CdiLoggerDestroyLogger(CdiLoggerHandle logger_handle);
 
 /**
- * Shutdown the logger. Must be called once before existing the application.
+ * Shutdown the logger. Must be called once for each time CdiLoggerInitialize() has been called. An internal reference
+ * counter is maintained. When it reaches zero or the provided "force" parameter is true, the resources are freed.
  *
  * @param force Use true to forcibly shutdown the logger closing any open files. Should only be used in abnormal
- *              shutdown conditions.
+ *              shutdown conditions, otherwise should always be false.
  */
 CDI_INTERFACE void CdiLoggerShutdown(bool force);
 
@@ -333,4 +334,3 @@ CDI_INTERFACE void CdiLoggerShutdown(bool force);
 #endif
 
 #endif // CDI_LOGGER_API_API_H__
-

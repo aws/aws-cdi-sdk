@@ -36,10 +36,12 @@
  * Function to check if a Tx is valid.
  *
  * @param handle Pointer to Tx being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
  */
 static inline bool IsValidTxHandle(const CdiConnectionHandle handle)
 {
-    return handle != NULL && handle->handle_type == kHandleTypeTx && handle->magic == kMagicCon &&
+    return handle != NULL && handle->handle_type == kHandleTypeTx && handle->magic == kMagicConnection &&
            handle->adapter_state_ptr != NULL;
 }
 
@@ -47,10 +49,12 @@ static inline bool IsValidTxHandle(const CdiConnectionHandle handle)
  * Function to check if an Rx is valid.
  *
  * @param handle Pointer to Rx being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
  */
 static inline bool IsValidRxHandle(const CdiConnectionHandle handle)
 {
-    return handle != NULL && handle->handle_type == kHandleTypeRx && handle->magic == kMagicCon
+    return handle != NULL && handle->handle_type == kHandleTypeRx && handle->magic == kMagicConnection
            && handle->adapter_state_ptr != NULL;
 }
 
@@ -58,6 +62,8 @@ static inline bool IsValidRxHandle(const CdiConnectionHandle handle)
  * Function to check if a connection is valid.
  *
  * @param handle Pointer to connection being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
  */
 static inline bool IsValidConnectionHandle(const CdiConnectionHandle handle)
 {
@@ -66,13 +72,37 @@ static inline bool IsValidConnectionHandle(const CdiConnectionHandle handle)
 }
 
 /**
+ * Function to check if an endpoint is valid.
+ *
+ * @param handle Pointer to endpoint being checked.
+ */
+static inline bool IsValidEndpointHandle(const CdiEndpointHandle handle)
+{
+    return handle != NULL && handle->magic == kMagicEndpoint;
+}
+
+/**
  * Function to check if a memory handle is valid.
  *
  * @param handle Pointer to memory handle being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
  */
 static inline bool IsValidMemoryHandle(const CdiMemoryHandle handle)
 {
-    return handle != NULL && handle->magic == kMagicMem;
+    return handle != NULL && handle->magic == kMagicMemory;
+}
+
+/**
+ * Function to check if a adapter handle is valid.
+ *
+ * @param handle Pointer to adapter handle being checked.
+ *
+ * @return true if handle is valid, otherwise false is returned.
+ */
+static inline bool IsValidAdapterHandle(const CdiAdapterHandle handle)
+{
+    return handle != NULL && handle->magic == kMagicAdapter;
 }
 
 /**
@@ -113,6 +143,17 @@ int CdiGatherInternal(const CdiSgList* sgl_ptr, int offset, void* dest_data_ptr,
  * @see CdiCoreNetworkAdapterInitialize
  */
 CdiReturnStatus AdapterInitializeInternal(CdiAdapterData* adapter_data_ptr, CdiAdapterHandle* ret_handle_ptr);
+
+/**
+ * Destroy an adapter.
+ *
+ * @param handle Handle of adapter to destroy.
+ *
+ * @return CdiReturnStatus kCdiStatusOk if all went well, otherwise a value indicating why it failed.
+ *
+ * @see CdiCoreNetworkAdapterDestroy
+ */
+CdiReturnStatus NetworkAdapterDestroyInternal(CdiAdapterHandle handle);
 
 /**
  * Shuts down a connection and frees all of the resources associated with it.
@@ -197,6 +238,21 @@ CdiReturnStatus CoreStatsConfigureInternal(CdiConnectionHandle handle, const Cdi
     CdiLogger(CdiLoggerThreadLogGet(), kLogComponentGeneric, kLogError, __FUNCTION__, __LINE__ , __VA_ARGS__); }
 
 /**
+ * Macro used to generate back pressure related errors for the specified connection, with suppression. If an error has
+ * already been generated for the specified connection then future messages will be suppressed until the error condition
+ * has been resolved.
+ *
+ * @param back_pressure_state Back pressure state variable (CdiBackPressureState).
+ * @param log_level Log level for the message. The remaining parameters contain a variable length list of arguments to
+ * generate the error message (CdiLogLevel).
+ */
+#define BACK_PRESSURE_ERROR(back_pressure_state, log_level, ...) \
+    if (kCdiBackPressureNone == back_pressure_state) { \
+        back_pressure_state = kCdiBackPressureActive; \
+        CdiLogger(CdiLoggerThreadLogGet(), kLogComponentGeneric, log_level, __FUNCTION__, __LINE__, __VA_ARGS__); \
+    }
+
+/**
  * Set error message string in the specified payload callback. The error message is made available to the application
  * through the user-registered Tx/Rx payload callback functions.
  *
@@ -214,10 +270,10 @@ void PayloadErrorSet(CdiConnectionState* con_state_ptr, AppPayloadCallbackData* 
 /**
  * Free error message buffer, if it was used.
  *
- * @param con_state_ptr Pointer to connection state data (CdiConnectionState).
+ * @param pool_handle Handle for the pool to which to return the error buffer.
  * @param app_cb_data_ptr Pointer to payload callback data (AppPayloadCallbackData).
  */
-void PayloadErrorFreeBuffer(CdiConnectionState* con_state_ptr, AppPayloadCallbackData* app_cb_data_ptr);
+void PayloadErrorFreeBuffer(CdiPoolHandle pool_handle, AppPayloadCallbackData* app_cb_data_ptr);
 
 /**
  * Append a scatter-gather list entry to the tail of an SGL entry. N.B.: sgl_add_ptr should be a *single* entry
@@ -329,7 +385,7 @@ void BytesToHexString(const void* data_ptr, int data_byte_count, char* dest_buff
  * @param dest_buffer_str Address where to write the string to.
  * @param dest_buffer_size Size of destination string buffer.
  */
-void DeviceGidToString(const char* device_gid_ptr, int gid_length, char* dest_buffer_str, int dest_buffer_size);
+void DeviceGidToString(const uint8_t* device_gid_ptr, int gid_length, char* dest_buffer_str, int dest_buffer_size);
 
 /**
  * Set shutdown signal and wait for thread to exit.

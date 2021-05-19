@@ -408,8 +408,12 @@ static OptDef my_options[] =
         "For Rx connections only, specifies a file to write a stream's received data to."},
     { "X",    "new_conn",     0, NULL,               NULL,
         "Create a new connection with a single endpoint. All options that follow modify this\n"
-        "new connection until the option is used again. This option is required\n"
+        "new connection until the option is used again. This or --new_conns option is required\n"
         "to precede all connection settings."},
+    { "XS",    "new_conns",     0, NULL,               NULL,
+        "Create a new connection with multiple endpoints. All options that follow modify\n"
+        "this new connection until the option is used again. This or --new_conn option is\n"
+        "required to precede all connection settings."},
     { "S",    "new_stream",   0, NULL,               NULL,
         "Create a new stream. All options that follow modify this new stream until this\n"
         "option is used again. This --new_stream option is required to precede all stream\n"
@@ -882,7 +886,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
             TestConsoleLog(kLogInfo, "Connection[%s]: The --tx (-tx) option used, so this connection is in TX mode.",
                                      connection_name_str);
             // For single endpoint connections, make sure --remote_ip (-rip) option is provided.
-            if (test_settings_ptr->remote_adapter_ip_str == NULL) {
+            if (!test_settings_ptr->multiple_endpoints && test_settings_ptr->remote_adapter_ip_str == NULL) {
                 TestConsoleLog(kLogError, "Connection[%s]: The --remote_ip (-rip) option is required.",
                                connection_name_str);
                 arg_error = true;
@@ -890,7 +894,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
         }
 
         // For single endpoint connections, make sure --dest_port (-dpt) option is provided.
-        if (test_settings_ptr->dest_port == 0) {
+        if (!test_settings_ptr->multiple_endpoints && test_settings_ptr->dest_port == 0) {
             TestConsoleLog(kLogError, "Connection[%s]: The --dest_port (-dpt) option is required and must be non-zero.",
                                       connection_name_str);
             arg_error = true;
@@ -977,6 +981,22 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
             TestConsoleLog(kLogWarning, "Connection[%s]: The (optional) --pat_start (-pst) option not specified, so "
                                         "defaulting to 0.", connection_name_str);
             stream_settings_ptr->pattern_start = 0;
+        }
+
+        if (test_settings_ptr->multiple_endpoints) {
+            // For connections that use multiple endpoints, ensure remote IP and dest port were set.
+            if (NULL == stream_settings_ptr->remote_adapter_ip_str) {
+                TestConsoleLog(kLogError,
+                    "Connection[%s]: For --new_conns (-XS) connections, the --remote_ip (-rip) argument is required.",
+                    connection_name_str);
+                arg_error = true;
+            }
+            if (0 == stream_settings_ptr->dest_port) {
+                TestConsoleLog(kLogError,
+                    "Connection[%s]: For --new_conns (-XS) connections, the --dest_port (-dpt) argument is required "
+                    "and cannot be 0.", connection_name_str);
+                arg_error = true;
+            }
         }
     }
 
@@ -1347,9 +1367,11 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
         TestConsoleLog(kLogInfo, "    Buff Type    : %s", GetEmptyStringIfNull(CdiUtilityKeyEnumToString(kKeyBufferType,
                                                                                test_settings_ptr[i].buffer_type)));
         TestConsoleLog(kLogInfo, "    Local IP     : %s", GetEmptyStringIfNull(adapter_data_ptr->adapter_ip_addr_str));
-        TestConsoleLog(kLogInfo, "    Dest Port    : %d", test_settings_ptr[i].dest_port);
-        TestConsoleLog(kLogInfo, "    Remote IP    : %s",
-                    GetEmptyStringIfNull(test_settings_ptr[i].remote_adapter_ip_str));
+        if (!test_settings_ptr[i].multiple_endpoints) {
+            TestConsoleLog(kLogInfo, "    Dest Port    : %d", test_settings_ptr[i].dest_port);
+            TestConsoleLog(kLogInfo, "    Remote IP    : %s",
+                        GetEmptyStringIfNull(test_settings_ptr[i].remote_adapter_ip_str));
+        }
         if (test_settings_ptr[i].thread_core_num == OPTARG_INVALID_CORE) {
             TestConsoleLog(kLogInfo, "    Core         : unpinned");
         } else {
@@ -1377,6 +1399,11 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
                 TestConsoleLog(kLogInfo, "    Stream[%d]    : AVM %s", j,
                               CdiAvmKeyEnumToString(kKeyAvmPayloadType, stream_settings_ptr->avm_data_type, NULL));
                 TestConsoleLog(kLogInfo, "        Stream ID    : %d", stream_settings_ptr->stream_id);
+                if (test_settings_ptr[i].multiple_endpoints) {
+                    TestConsoleLog(kLogInfo, "        Dest Port    : %d", stream_settings_ptr->dest_port);
+                    TestConsoleLog(kLogInfo, "        Remote IP    : %s",
+                                GetEmptyStringIfNull(stream_settings_ptr->remote_adapter_ip_str));
+                }
                 TestConsoleLog(kLogInfo, "        Payload Size : %d", stream_settings_ptr->payload_size);
                 if (kCdiAvmVideo == stream_settings_ptr->avm_data_type) {
                     TestConsoleLog(kLogInfo, "        Config       : v%02d:%02d %dx%d, %s, Alpha %s, %s, Rate %d/%d, %s, %s, %s,",
@@ -1513,6 +1540,12 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 }
                 break;
             case kTestOptionReceive:
+                if (test_settings_ptr[connection_index].multiple_endpoints) {
+                    TestConsoleLog(kLogError,
+                        "For --new_conns (-XS) connections, the --rx (-rx) argument cannot be used. It is only valid "
+                        " with --tx (-tx) argument.");
+                    arg_error = true;
+                }
                 test_settings_ptr[connection_index].rx = true;
                 test_settings_ptr[connection_index].connection_protocol = TestProtocolStringToEnum(opt.args_array[0]);
                 if (CDI_INVALID_ENUM_VALUE == (int)test_settings_ptr[connection_index].connection_protocol) {
@@ -1537,12 +1570,19 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
             case kTestOptionRemoteIP:
                 if (!is_parsing_stream_option) {
                     test_settings_ptr[connection_index].remote_adapter_ip_str = opt.args_array[0];
+                    if (test_settings_ptr[connection_index].multiple_endpoints) {
+                        TestConsoleLog(kLogError,
+                                       "The --remote_ip (-rip) argument cannot be used with --new_conns (-XS) option.");
+                        arg_error = true;
+                    }
                 } else {
                     stream_settings_ptr->remote_adapter_ip_str = opt.args_array[0];
-                    TestConsoleLog(kLogError,
-                        "For --new_conn (-X) connections, the --remote_ip (-rip) argument cannot be used with "
-                        "--new_stream (-S) option.");
-                    arg_error = true;
+                    if (!test_settings_ptr[connection_index].multiple_endpoints) {
+                        TestConsoleLog(kLogError,
+                            "For --new_conn (-X) connections, the --remote_ip (-rip) argument cannot be used with "
+                            "--new_stream (-S) option.");
+                        arg_error = true;
+                    }
                 }
                 if (!arg_error && !IsIPAddrValid(opt.args_array[0])) {
                     TestConsoleLog(kLogError, "The --remote_ip (-rip) argument [%s] is invalid.", opt.args_array[0]);
@@ -1563,12 +1603,19 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 }
                 if (!is_parsing_stream_option) {
                     test_settings_ptr[connection_index].dest_port = dest_port;
+                    if (test_settings_ptr[connection_index].multiple_endpoints) {
+                        TestConsoleLog(kLogError,
+                                       "The --dest_port (-dpt) argument cannot be used with --new_conns (-XS) option.");
+                        arg_error = true;
+                    }
                 } else {
                     stream_settings_ptr->dest_port = dest_port;
-                    TestConsoleLog(kLogError,
-                        "For --new_conn (-X) connections, the --dest_port (-dpt) argument cannot be used with "
-                        "--new_stream (-S) option.");
-                    arg_error = true;
+                    if (!test_settings_ptr[connection_index].multiple_endpoints) {
+                        TestConsoleLog(kLogError,
+                            "For --new_conn (-X) connections, the --dest_port (-dpt) argument cannot be used with "
+                            "--new_stream (-S) option.");
+                        arg_error = true;
+                    }
                 }
             }
                 break;
@@ -1939,10 +1986,11 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 stream_settings_ptr->file_write_str = opt.args_array[0];
                 break;
             case kTestOptionNewConnection:
-                // If -X is used as the last option, error out.
+            case kTestOptionNewConnectionMultipleEndpoints:
+                // If -X or -XS is used as the last option, error out.
                 if (argc == opt_index) {
                     TestConsoleLog(kLogError,
-                                   "Option --new_conn (-X) found as the last argument.");
+                                   "Option --new_conn (-X) or --new_conns (-XS) found as the last argument.");
                     arg_error = true;
                 } else {
                     // Otherwise, initialize the connection variables and begin parsing options for this new connection.
@@ -1961,6 +2009,9 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                     test_settings_ptr[connection_index].connection_protocol = CDI_INVALID_ENUM_VALUE;
                     test_settings_ptr[connection_index].thread_core_num = OPTARG_INVALID_CORE;
                     test_settings_ptr[connection_index].stats_period_seconds = REFRESH_STATS_PERIOD_SECONDS;
+                    if (kTestOptionNewConnectionMultipleEndpoints == (TestOptionNames)opt.option_index) {
+                        test_settings_ptr[connection_index].multiple_endpoints = true;
+                    }
                 }
                 first_new_connection = false;
                 first_new_stream = true;
@@ -2024,7 +2075,7 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
         if (!got_global_option & first_new_connection) {
             // Make sure no non-global options were specified before we get here.
             TestConsoleLog(kLogError,
-                "You must specify --new_conn (-X) option before any connection-specific "
+                "You must specify --new_conn (-X) or --new_conns (-XS) options before any connection-specific "
                 "options[%s].", argv_ptr[current_option_index]);
             arg_error = true;
         }
@@ -2032,7 +2083,8 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
 
     // Make sure the user specified at least one connection.
     if (first_new_connection) {
-        TestConsoleLog(kLogError, "You must specify at least one connection using the --new_conn (-X) option.");
+        TestConsoleLog(kLogError, "You must specify at least one connection using the --new_conn (-X) or --new_conns "
+                       "(-XS) options.");
         arg_error = true;
     }
 

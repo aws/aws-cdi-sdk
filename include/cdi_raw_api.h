@@ -153,8 +153,8 @@ CDI_INTERFACE CdiReturnStatus CdiRawRxCreate(CdiRxConfigData* config_data_ptr, C
  * payload has been acknowledged by the remote receiver or a transmission timeout occurred.
  *
  * MEMORY NOTE: The payload_config_ptr, video_config_ptr, CdiSgList and SGL entries memory can be modified or released
- * immediately after the function returns. However, the the buffers pointed to in the SGL must not be modified or
- * released until after the CdiAvmTxCallback() has occurred.
+ * immediately after the function returns. However, the buffers pointed to in the SGL must not be modified or released
+ * until after the CdiAvmTxCallback() has occurred.
  *
  * NOTE: Newly created data structures that are passed in to this function should be properly initialized before being
  * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero

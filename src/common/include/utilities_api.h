@@ -55,7 +55,7 @@
  *
  * @return The number of elements that comprise the array variable.
  */
-#define CDI_ARRAY_ELEMENT_COUNT(array) (sizeof(array) / sizeof(array[0]))
+#define CDI_ARRAY_ELEMENT_COUNT(array) ((int)(sizeof(array) / sizeof(array[0])))
 
 /**
  * Evaluates to the smaller of the two quantities. This is implemented as a macro so that it can be used for any type

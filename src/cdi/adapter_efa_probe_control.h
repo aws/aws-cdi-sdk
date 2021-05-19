@@ -25,17 +25,6 @@
 //*********************************************************************************************************************
 
 /**
- * Calculate a checksum value for the given buffer.  Used for "probe" command and ack packets.
- * This checksum calculation is based on the TCP 16-bit checksum algorithm.
- *
- * @param buffer_ptr Pointer to the buffer requiring a checksum calculation.
- * @param size The size in bytes of the buffer.
- *
- * @return The calculated checksum value.
- */
-uint16_t ProbeControlChecksum(const uint16_t* buffer_ptr, int size);
-
-/**
  * Start the EFA connection for use for probing.
  *
  * NOTE: For a Tx connection, the remote GID must be valid before calling this function. See remote_ipv6_gid_array in
@@ -85,21 +74,18 @@ void ProbeControlQueueStateChange(ProbeEndpointState* probe_ptr, ProbeState prob
  * to an endpoint using the control interface.
  *
  * @param work_request_pool_handle Handle of work request memory pool.
- * @param packet_size Number of bytes in packet.
  *
  * @return Pointer to work request. NULL is returned if the function failed.
  */
-ProbePacketWorkRequest* ProbeControlWorkRequestGet(CdiPoolHandle work_request_pool_handle, int packet_size);
+ProbePacketWorkRequest* ProbeControlWorkRequestGet(CdiPoolHandle work_request_pool_handle);
 
 /**
- * Initialize the command packet header of a control interface packet.
+ * Set packet size of a work request.
  *
- * @param probe_ptr Pointer to probe endpoint state data.
- * @param command Probe command to set in the header.
- * @param header_ptr Pointer to the packet header to initialize.
+ * @param work_request_ptr Pointer to work request.
+ * @param packet_size Size of packet in bytes.
  */
-void ProbeControlInitPacketCommonHeader(ProbeEndpointState* probe_ptr, ProbeCommand command,
-                                        ControlPacketCommonHeader* header_ptr);
+void ProbeControlWorkRequestPacketSizeSet(ProbePacketWorkRequest* work_request_ptr, int packet_size);
 
 /**
  * Send a command using the control interface to an endpoint associated with the probe connection.
@@ -125,16 +111,15 @@ CdiReturnStatus ProbeControlSendAck(ProbeEndpointState* probe_ptr, ProbeCommand 
                                     uint16_t ack_probe_packet_num);
 
 /**
- * Process a received a control packet.
+ * Process a control packet message from a probe control interface bidirectional endpoint.
  *
- * NOTE: This function is called from ProbeControlThread().
+ * NOTE: This function is called from PollThread().
  *
- * @param probe_ptr Pointer to probe endpoint state data.
- * @param packet_sgl_ptr Pointer to control packet to process (in SGL format).
- * @param wait_timeout_ms_ptr Pointer to current wait timeout. This function may alter the contents of the value.
+ * @param param_ptr Pointer to user parameter.
+ * @param packet_ptr Pointer to packet containing the control message.
+ * @param message_type Endpoint message type.
  */
-bool ProbeControlProcessPacket(ProbeEndpointState* probe_ptr, CdiSgList* packet_sgl_ptr,
-                               uint64_t* wait_timeout_ms_ptr);
+void ProbeControlMessageFromBidirectionalEndpoint(void* param_ptr, Packet* packet_ptr, EndpointMessageType message_type);
 
 /**
  * Thread used to run the probe.

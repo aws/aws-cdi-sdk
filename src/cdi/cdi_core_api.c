@@ -58,12 +58,27 @@ CdiReturnStatus CdiCoreNetworkAdapterInitialize(CdiAdapterData* adapter_data_ptr
     CdiReturnStatus rs = kCdiStatusOk;
 
     if (!cdi_global_context.sdk_initialized) {
-        return kCdiStatusFatal;
+        return kCdiStatusNotInitialized;
     }
 
     // initialize the adapter
     if (rs == kCdiStatusOk) {
         rs = AdapterInitializeInternal(adapter_data_ptr, ret_handle_ptr);
+    }
+
+    return rs;
+}
+
+CdiReturnStatus CdiCoreNetworkAdapterDestroy(CdiAdapterHandle handle)
+{
+    CdiReturnStatus rs = kCdiStatusOk;
+
+    if (!IsValidAdapterHandle(handle)) {
+        rs = kCdiStatusInvalidHandle;
+    }
+
+    if (rs == kCdiStatusOk) {
+        rs = NetworkAdapterDestroyInternal(handle);
     }
 
     return rs;
@@ -166,7 +181,6 @@ uint64_t CdiCoreGetTaiTimeMicroseconds(void)
     return (uint64_t)ptp_time.seconds * 1000000L + (ptp_time.nanoseconds / 1000L);
 }
 
-
 const char* CdiCoreStatusToString(CdiReturnStatus status)
 {
     static const EnumStringKey key_array[] = {
@@ -200,6 +214,12 @@ const char* CdiCoreStatusToString(CdiReturnStatus status)
         { kCdiStatusCloudWatchNotEnabled,  "CloudWatch SDK not enabled"     },
         { kCdiStatusCloudWatchThrottling,  "CloudWatch throttling - retry"  },
         { kCdiStatusCloudWatchInvalidCredentials, "CloudWatch invalid credentials" },
+        { kCdiStatusInternalIdle,          "Internal poll thread is idle"   },
+        { kCdiStatusAdapterDuplicateEntry, "Duplicate adapter entry"        },
+        { kCdiStatusProfileNotSupported,   "Baseline profile not supported" },
+        { kCdiStatusProbePacketCrcError,   "Probe packet CRC error"         },
+        { kCdiStatusProbePacketInvalidSize, "Probe packet size is invalid"  },
+        { kCdiStatusRxPayloadBackPressure, "Rx back pressure"               },
         { CDI_INVALID_ENUM_VALUE,          "<invalid>"                      },
     };
 

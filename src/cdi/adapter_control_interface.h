@@ -61,12 +61,11 @@ CdiReturnStatus ControlInterfaceInitialize(const char* adapter_ip_addr_str, CdiA
  * information from the transmitter (the client) before this function can be used.
  *
  * @param config_data_ptr Pointer to control interface configuration data.
- * @param direction Interface direction (receive or send).
  * @param ret_handle_ptr Address where to write returned handle of the control interface.
  *
  * @return A value from the CdiReturnStatus enumeration.
  */
-CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_data_ptr, EndpointDirection direction,
+CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_data_ptr,
                                        ControlInterfaceHandle* ret_handle_ptr);
 
 /**

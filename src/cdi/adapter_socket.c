@@ -122,7 +122,9 @@ static THREAD SocketReceiveThread(void* arg)
         if (receive_buffer_ptr != NULL || CdiPoolGet(private_state_ptr->receive_buffer_pool,
                                                      (void**)&receive_buffer_ptr)) {
             int byte_count = kSocketMtu;
-            if (CdiOsSocketRead(private_state_ptr->socket, receive_buffer_ptr->buffer, &byte_count)) {
+            struct sockaddr_in source_address = { 0 };
+            if (CdiOsSocketReadFrom(private_state_ptr->socket, receive_buffer_ptr->buffer, &byte_count,
+                                    &source_address)) {
                 if (byte_count > 0) {
                     receive_buffer_ptr->sgl_entry.size_in_bytes = byte_count;
                     // Connection may have set this last time it was used.
@@ -140,9 +142,11 @@ static THREAD SocketReceiveThread(void* arg)
                         }
                     };
 
+                    // Set source address (sockaddr_in) in packet state.
+                    packet.socket_adapter_state.address = source_address;
                     // Pass the received packet up to the associated connection for reassembly.
                     (endpoint_state_ptr->msg_from_endpoint_func_ptr)(endpoint_state_ptr->msg_from_endpoint_param_ptr,
-                                                                     &packet);
+                                                                     &packet, kEndpointMessageTypePacketReceived);
                     receive_buffer_ptr = NULL;  // That buffer is in use, force getting a new one from the pool.
                 }
                 if (read_fail_logged) {
@@ -189,9 +193,17 @@ static bool SocketEndpointPoolItemInit(const void* context_ptr, void* item_ptr)
 
 static CdiReturnStatus SocketConnectionCreate(AdapterConnectionHandle handle, int port_number)
 {
-    (void)handle;
+    CdiReturnStatus ret = kCdiStatusOk;
     (void)port_number;
-    return kCdiStatusOk; // Nothing required here.
+
+    if (kEndpointDirectionSend == handle->direction &&
+        0 == handle->adapter_state_ptr->adapter_data.tx_buffer_size_bytes) {
+        SDK_LOG_GLOBAL(kLogError, "Payload transmit buffer size cannot be zero. Set tx_buffer_size_bytes when using"
+                       " CdiCoreNetworkAdapterInitialize().");
+        ret = kCdiStatusFatal;
+    }
+
+    return ret;
 }
 
 static CdiReturnStatus SocketConnectionDestroy(AdapterConnectionHandle handle)
@@ -215,11 +227,6 @@ static CdiReturnStatus SocketEndpointOpen(AdapterEndpointHandle endpoint_handle,
 {
     CdiReturnStatus ret = kCdiStatusOk;
 
-    if (endpoint_handle->adapter_con_state_ptr->direction == kEndpointDirectionReceive) {
-        // Pass a null string in to CdiOsSocketOpen() to request a socket for receiving.
-        remote_address_str = NULL;
-    }
-
     // Create an Internet socket which will be used for writing or reading.
     CdiSocket new_socket;
     if (CdiOsSocketOpen(remote_address_str, port_number, &new_socket)) {
@@ -233,7 +240,8 @@ static CdiReturnStatus SocketEndpointOpen(AdapterEndpointHandle endpoint_handle,
             private_state_ptr->socket = new_socket;
             private_state_ptr->destination_port_number = port_number;
 
-            if (endpoint_handle->adapter_con_state_ptr->direction == kEndpointDirectionReceive) {
+            if (endpoint_handle->adapter_con_state_ptr->direction == kEndpointDirectionReceive ||
+                endpoint_handle->adapter_con_state_ptr->direction == kEndpointDirectionBidirectional) {
                 bool pool_created = false;
                 bool thread_created = false;
 
@@ -276,7 +284,8 @@ static CdiReturnStatus SocketEndpointOpen(AdapterEndpointHandle endpoint_handle,
         ret = kCdiStatusOpenFailed;
     }
 
-    if (kCdiStatusOk == ret && endpoint_handle->adapter_con_state_ptr->direction == kEndpointDirectionSend) {
+    if (kCdiStatusOk == ret && (endpoint_handle->adapter_con_state_ptr->direction == kEndpointDirectionSend ||
+        endpoint_handle->adapter_con_state_ptr->direction == kEndpointDirectionBidirectional)) {
         // This small delay helps when using cdi_test to send to a receiver in the same invocation. No means of
         // synchronizing between the transmitting and receiving connections is available so delaying the transmitter
         // helps give the receiver a better chance of being ready before packets start flowing to it.
@@ -284,6 +293,18 @@ static CdiReturnStatus SocketEndpointOpen(AdapterEndpointHandle endpoint_handle,
     }
 
     if (kCdiStatusOk == ret) {
+        CdiProtocolVersionNumber version = {
+            .version_num = 1,
+            .major_version_num = 0,
+            .probe_version_num = 0
+        };
+        if (endpoint_handle->cdi_endpoint_handle) {
+            EndpointManagerProtocolVersionSet(endpoint_handle->cdi_endpoint_handle, &version);
+        } else {
+            // The control interface does not have a cdi_endpoint_handle, so set the protocol version directly here.
+            ProtocolVersionSet(&version, &endpoint_handle->protocol_handle);
+        }
+
         endpoint_handle->connection_status_code = kCdiConnectionStatusConnected;
 
         if (endpoint_handle->adapter_con_state_ptr->data_state.connection_cb_ptr) {
@@ -322,7 +343,8 @@ static CdiReturnStatus SocketEndpointClose(AdapterEndpointHandle endpoint_handle
 
     // SocketEndpointOpen() ensures that the private state is fully formed else the pointer is NULL.
     if (private_state_ptr != NULL) {
-        if (endpoint_state_ptr->adapter_con_state_ptr->direction == kEndpointDirectionReceive) {
+        if (kEndpointDirectionReceive == endpoint_state_ptr->adapter_con_state_ptr->direction ||
+            kEndpointDirectionBidirectional == endpoint_state_ptr->adapter_con_state_ptr->direction) {
             // Wait for receive thread to complete whatever it's doing.
             SdkThreadJoin(private_state_ptr->receive_thread_id, private_state_ptr->shutdown);
             private_state_ptr->receive_thread_id = NULL;
@@ -372,7 +394,7 @@ static CdiReturnStatus SocketEndpointSend(const AdapterEndpointHandle handle, co
     int iovcnt = 0;
     for (const CdiSglEntry* entry_ptr = packet_ptr->sg_list.sgl_head_ptr; entry_ptr != NULL;
             entry_ptr = entry_ptr->next_ptr) {
-        if (iovcnt >= (int)CDI_ARRAY_ELEMENT_COUNT(vectors)) {
+        if (iovcnt >= CDI_ARRAY_ELEMENT_COUNT(vectors)) {
             ret = kCdiStatusSendFailed;
             assert(false);
             break;
@@ -386,20 +408,25 @@ static CdiReturnStatus SocketEndpointSend(const AdapterEndpointHandle handle, co
 
     if (kCdiStatusOk == ret) {
         int byte_count = 0;
-        if (!CdiOsSocketWrite(state_ptr->socket, vectors, iovcnt, &byte_count)) {
-            ret = kCdiStatusSendFailed;
+        if (0 == packet_ptr->socket_adapter_state.address.sin_addr.s_addr) {
+            if (!CdiOsSocketWrite(state_ptr->socket, vectors, iovcnt, &byte_count)) {
+                ret = kCdiStatusSendFailed;
+            }
+        } else {
+            if (!CdiOsSocketWriteTo(state_ptr->socket, vectors, iovcnt, &packet_ptr->socket_adapter_state.address,
+                                    &byte_count)) {
+                ret = kCdiStatusSendFailed;
+            }
         }
     }
 
     // A copy of the data has been made so the application's buffer is available now. Send the message to the upper
     // layers.
-    Packet rx_packet = {
-        .sg_list = packet_ptr->sg_list,
-        .tx_state = {
-            .ack_status = (kCdiStatusOk == ret) ? kAdapterPacketStatusOk : kAdapterPacketStatusNotConnected
-        }
-    };
-    (handle->msg_from_endpoint_func_ptr)(handle->msg_from_endpoint_param_ptr, &rx_packet);
+    Packet rx_packet = *packet_ptr; // Make a copy of the packet, so we can modify ack_status.
+    rx_packet.tx_state.ack_status = (kCdiStatusOk == ret) ? kAdapterPacketStatusOk : kAdapterPacketStatusNotConnected;
+
+    (handle->msg_from_endpoint_func_ptr)(handle->msg_from_endpoint_param_ptr, &rx_packet,
+                                         kEndpointMessageTypePacketSent);
 
     return ret;
 }

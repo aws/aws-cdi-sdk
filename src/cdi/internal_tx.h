@@ -28,12 +28,11 @@
  * occurred.
  */
 typedef struct {
-    TxPayloadState* payload_state_ptr;  ///< Pointer to Tx payload state structure.
-    uint8_t payload_num;                ///< Packet payload number.
-    uint16_t packet_sequence_num;       ///< Packet sequence number.
-    uint16_t packet_payload_size;       ///< Size of payload, not including the packet header.
-    Packet packet;                      ///< The top level packet structure for the data in this work request.
-    CdiCDIPacketHeaderUnion header;   ///< The data for the packet header, entry zero in packet_sgl.
+    TxPayloadState* payload_state_ptr; ///< Pointer to Tx payload state structure.
+    uint16_t payload_num;              ///< Packet payload number.
+    uint16_t packet_payload_size;      ///< Size of payload, not including the packet header.
+    Packet packet;                     ///< The top level packet structure for the data in this work request.
+    CdiRawPacketHeader header;         ///< The data for the packet header, entry zero in packet_sgl.
 } TxPacketWorkRequest;
 
 //*********************************************************************************************************************
@@ -45,17 +44,17 @@ CdiReturnStatus TxCreateInternal(ConnectionProtocolType protocol_type, CdiTxConf
                                  CdiCallback tx_cb_ptr, CdiConnectionHandle* ret_handle_ptr);
 
 /// @see CdiAvmTxCreateStreamConnection
-CdiReturnStatus TxCreateStreamConnectionInternal(CdiTxConfigData* config_data_ptr, CdiCallback tx_cb_ptr,
+CdiReturnStatus TxStreamConnectionCreateInternal(CdiTxConfigData* config_data_ptr, CdiCallback tx_cb_ptr,
                                                  CdiConnectionHandle* ret_handle_ptr);
 
 /// @see CdiAvmTxCreateStream
-CdiReturnStatus TxCreateStreamEndpointInternal(CdiConnectionHandle handle, CdiTxConfigDataStream* stream_config_ptr,
+CdiReturnStatus TxStreamEndpointCreateInternal(CdiConnectionHandle handle, CdiTxConfigDataStream* stream_config_ptr,
                                                CdiEndpointHandle* ret_handle_ptr);
 
 /// @see CdiRawTxPayload
-CdiReturnStatus TxPayloadInternal(CdiConnectionHandle con_handle,
-                                  const CdiCoreTxPayloadConfig* core_payload_config_ptr, const CdiSgList* sgl_ptr,
-                                  int max_latency_microsecs, int extra_data_size, uint8_t* extra_data_ptr);
+CdiReturnStatus TxPayloadInternal(CdiEndpointState* endpoint_ptr, const CdiCoreTxPayloadConfig* core_payload_config_ptr,
+                                  const CdiSgList* sgl_ptr, int max_latency_microsecs, int extra_data_size,
+                                  uint8_t* extra_data_ptr);
 
 /**
  * Join Tx connection threads as part of shutting down a connection. This function waits for them to stop.
@@ -80,8 +79,9 @@ void TxEndpointDestroy(CdiEndpointHandle handle);
  *
  * @param param_ptr Pointer to connection that the packet was transmitted on as a void*.
  * @param packet_ptr Pointer to packet state data.
+ * @param message_type Endpoint message type.
  */
-void TxPacketWorkRequestComplete(void* param_ptr, Packet* packet_ptr);
+void TxPacketWorkRequestComplete(void* param_ptr, Packet* packet_ptr, EndpointMessageType message_type);
 
 /**
  * Invoke the user registered Tx callback function for a payload.

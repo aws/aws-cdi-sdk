@@ -19,6 +19,7 @@
 #include "cdi_core_api.h"
 #include "cdi_os_api.h"
 #include "private.h"
+#include "protocol.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -88,27 +89,17 @@ void EndpointManagerDestroy(EndpointManagerHandle handle);
 EndpointManagerHandle EndpointManagerConnectionToEndpointManager(CdiConnectionHandle handle);
 
 /**
- * Return stream identifier associated with the specified endpoint.
+ * Copy the specified information about the remote endpoint to the internal state data of the provided endpoint.
  *
  * @param handle Handle of endpoint.
- *
- * @return Stream identifier.
+ * @param remote_address_ptr Pointer to remote address (sockaddr_in)
+ * @param stream_name_str Pointer to endpoint stream name. If the stream name is NULL, then a '\0' will be stored.
  */
-int EndpointManagerEndpointStreamIdGet(CdiEndpointHandle handle);
+void EndpointManagerRemoteEndpointInfoSet(CdiEndpointHandle handle, const struct sockaddr_in* remote_address_ptr,
+                                          const char* stream_name_str);
 
 /**
- * Copy the specified stream name to internal state data of the provided endpoint. If the stream name is NULL, then a
- * '\0' will be stored.
- *
- * @param handle Handle of endpoint.
- * @param remote_stream_identifier Endpoint stream identifier.
- * @param remote_stream_name_str Pointer to endpoint stream name.
- */
-void EndpointManagerEndpointInfoSet(CdiEndpointHandle handle, int remote_stream_identifier,
-                                    const char* remote_stream_name_str);
-
-/**
- * Get the stream name related to the the provided endpoint. If the stream name empty, then NULL is returned.
+ * Get the stream name related to the provided endpoint. If the stream name empty, then NULL is returned.
  *
  * @param handle Handle of endpoint.
  *
@@ -117,11 +108,38 @@ void EndpointManagerEndpointInfoSet(CdiEndpointHandle handle, int remote_stream_
 const char* EndpointManagerEndpointStreamNameGet(CdiEndpointHandle handle);
 
 /**
+ * Get the remote IP address related to the provided endpoint.
+ *
+ * @param handle Handle of endpoint.
+ *
+ * @return Pointer to IP address string.
+ */
+const char* EndpointManagerEndpointRemoteIpGet(CdiEndpointHandle handle);
+
+/**
+ * Get the remote port related to the provided endpoint.
+ *
+ * @param handle Handle of endpoint.
+ *
+ * @return Remote port as integer value.
+ */
+int EndpointManagerEndpointRemotePortGet(CdiEndpointHandle handle);
+
+/**
+ * Get the remote address structure (sockaddr_in) related to the provided endpoint.
+ *
+ * @param handle Handle of endpoint.
+ *
+ * @return Pointer to remote address structure.
+ */
+const struct sockaddr_in* EndpointManagerEndpointRemoteAddressGet(CdiEndpointHandle handle);
+
+/**
  * Create resources used for a new Tx endpoint and add it to the list of endpoints managed by the specified Endpoint
  * Manager.
  *
  * @param handle Handle of Endpoint Manager.
- * @param stream_identifier Used to identify the source data stream number.
+ * @param is_multi_stream True if the Tx endpoint is going to be used by multiple Tx streams.
  * @param dest_ip_addr_str Pointer to destination IP address string.
  * @param dest_port Destination port.
  * @param stream_name_str Pointer to stream name string.
@@ -129,7 +147,7 @@ const char* EndpointManagerEndpointStreamNameGet(CdiEndpointHandle handle);
  *
  * @return kCdiStatusOk if the operation was successful or a value that indicates the nature of the failure.
  */
-CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, int stream_identifier,
+CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, bool is_multi_stream,
                                                 const char* dest_ip_addr_str, int dest_port,
                                                 const char* stream_name_str,
                                                 CdiEndpointHandle* ret_endpoint_handle_ptr);
@@ -147,6 +165,17 @@ CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, in
 CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, int dest_port,
                                                 CdiEndpointHandle* ret_endpoint_handle_ptr);
 
+/**
+ * @brief Set the protocol version for the specified endpoint. The protocol version actually used is negotiated using
+ * the specified remote version and the current version of the CDI-SDK.
+ *
+ * @param handle Handle of CDI endpoint.
+ * @param remote_version_ptr Pointer to remote protocol version data.
+ *
+ * @return kCdiStatusOk if the operation was successful or a value that indicates the nature of the failure.
+ */
+CdiReturnStatus EndpointManagerProtocolVersionSet(CdiEndpointHandle handle,
+                                                  const CdiProtocolVersionNumber* remote_version_ptr);
 /**
  * Returns the first endpoint in the list of endpoints associated with the specified Endpoint Manager.
  *

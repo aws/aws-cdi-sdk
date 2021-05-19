@@ -4,6 +4,7 @@ The AWS Cloud Digital Interface (CDI) Software Development Kit (SDK) is a set of
 
 ---
 
+- [AWS CDI SDK](#aws-cdi-sdk)
 - [Glossary](#glossary)
 - [Overview](#overview)
   - [Features](#features)
@@ -113,9 +114,9 @@ Instructions are provided in the documentation below for installing these packag
 Follow these instructions to create an EFA-enabled EC2 instance.
 
 **Note**: When launching a Linux instance, choosing **Amazon Linux 2 (AL2)** is recommended because it is optimized for running on EC2 and is the primary Linux distribution used for the majority of CDI development and testing. When launching a Windows instance, choose **Windows Server 2019**.
-To launch an EFA-enabled instance, follow steps 1-2 in the [launch an EFA-capable instance](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html) guide, with the following additions in **step 1, part 5** and **step 2, part 5**:
+To launch an EFA-enabled instance, follow the prepare and launch steps in the [launch an EFA-capable instance](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html) guide, with the additions described below. Refer to the [Install Guide Linux](INSTALL_GUIDE_LINUX.md) and [Install Guide Windows](INSTALL_GUIDE_WINDOWS.md) for additional information on installing EFA software and the AWS CDI SDK.
 
-1. During **step 1, part 5**, edit the settings for your newly created “EFA” security group.
+1. During step **Prepare an EFA-enabled security group**, when configuring **Inbound rules**, edit the settings for your newly created “EFA” security group.
     1. Select **Actions->Edit inbound security rules**
         * Select **Add Rule**
         * Under **type** select **All traffic**.
@@ -134,7 +135,7 @@ To launch an EFA-enabled instance, follow steps 1-2 in the [launch an EFA-capabl
         * Under **type** select **RDP**.
         * Under **source**, select **Anywhere**.
         * Click **Save Rules**.
-    1. Select **Actions->Edit outbound security rules**
+    2. Select **Actions->Edit outbound security rules**
         * Select **Add rule**.
         * Under **type** select **All traffic**.
         * Under **source** select **Custom**.
@@ -143,11 +144,11 @@ To launch an EFA-enabled instance, follow steps 1-2 in the [launch an EFA-capabl
         * This is an example of the outbound rules for a correctly configured security group:
 
         ![Outbound Rules](doc/outbound_rules.png)
-1. During **step 2, part 5** under **Configure Instance Details**:
+2. During step **Launch a temporary instance** under **Configure Instance Details**:
     1. Choose a VPC. AWS provides default VPCs for all accounts for all regions, but you may create a new VPC for this exercise. For more information on how to create a vpc, see [Virtual Private Clouds](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-vpc.html). If you don’t already have a subnet for the chosen VPC, you can select **Create new subnet** on this page.
-    1. If access to this instance from outside the Amazon network is needed, enable **Auto-assign public IP.**
-    1. Make sure to enable EFA by checking the **Elastic Fabric Adapter** checkbox here.
-    1. Amazon recommends putting EFA-enabled instances using AWS CDI SDK in a placement group, so select or create one under **Placement Group – Add instance to placement group.**  The **Placement Group Strategy** should be set to **cluster**.
+    2. If access to this instance from outside the Amazon network is needed, enable **Auto-assign public IP.**
+    3. Make sure to enable EFA by checking the **Elastic Fabric Adapter** checkbox here.
+    4. Amazon recommends putting EFA-enabled instances using AWS CDI SDK in a placement group, so select or create one under **Placement Group – Add instance to placement group.**  The **Placement Group Strategy** should be set to **cluster**.
 
 ## Additional OS-dependent steps
 
@@ -301,7 +302,7 @@ If there is a problem with the transmitter and receiver communication, it can ma
 
 If any of these issues occurs, check your firewall settings. There are three different locations where the packets could be filtered: EC2 Security Groups, VPC Network Access Control Lists (ACLs), or a firewall on the Linux or Windows instance itself.
 
-For socket-based communication and for the control ports for EFA-based communication, make sure that UDP traffic is allowed to access that port from the instance you are sending from. The easiest way to ensure this is to use the same security group on all EC2 instances that you have communicating with each other, and then make sure to use private IPv4 addresses instead of public ones. If you use public IP addresses, you may need to add explicit whitelisting for any IP addresses that you want to allow traffic from. Note that for the control ports for EFA, there is bidirectional communication between the instances, so make sure that the transmitter and receiver instances have ports open for each other. The security group configuration can be found in the EC2 section of the AWS console.
+For socket-based communication and for the control ports for EFA-based communication, make sure that UDP traffic is allowed to access that port from the instance you are sending from. The easiest way to ensure this is to use the same security group on all EC2 instances that you have communicating with each other, and then make sure to use private IPv4 addresses instead of public ones. If you use public IP addresses, you may need to add explicit entries for any IP addresses that you want to allow traffic from. Note that for the control ports for EFA, there is bidirectional communication between the instances, so make sure that the transmitter and receiver instances have ports open for each other. The security group configuration can be found in the EC2 section of the AWS console.
 Also, ensure that the traffic is not being blocked by network ACLs. The network ACL configuration can be found in the VPC section of the AWS console.
 
 ## Communication failure and firewall settings

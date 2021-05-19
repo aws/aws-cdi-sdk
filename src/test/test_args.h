@@ -101,6 +101,7 @@ typedef enum {
     kTestOptionFileRead,
     kTestOptionFileWrite,
     kTestOptionNewConnection,
+    kTestOptionNewConnectionMultipleEndpoints,
     kTestOptionNewStream,
     kTestOptionConnectionTimeout,
     kTestOptionLogLevel,
@@ -215,6 +216,8 @@ typedef struct {
     StreamSettings stream_settings[MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION];
     /// @brief Statistics gathering period in seconds.
     int stats_period_seconds;
+    /// @brief Connection contains multiple endpoints.
+    bool multiple_endpoints;
 } TestSettings;
 
 /**

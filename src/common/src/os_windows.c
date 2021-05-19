@@ -56,10 +56,10 @@ struct CdiThreadInfo
 {
     DWORD thread_id;                        // Thread identifier.
     HANDLE thread_handle;                   // Handle to thread.
-    char  thread_name_str[MAX_THREAD_NAME]; // Name of thread (used for informational purposes only).
+    char  thread_name_str[CDI_MAX_THREAD_NAME]; // Name of thread (used for informational purposes only).
 
     /// Thread function that will be used in ThreadFuncHelper().
-    ThreadFuncName thread_func;
+    CdiThreadFuncName thread_func;
     /// The argument given to thread_func.
     void*          thread_func_arg_ptr;
     /// Signal used to start the thread. If NULL, thread starts immediately.
@@ -117,6 +117,9 @@ struct SocketInfo
 /// @brief Declare a windows API function that resides within ntdll.lib.
 extern int NtQueryTimerResolution(PULONG MinimumResolution, PULONG Maximum_Resolution, PULONG ActualResolution);
 
+/// @brief Statically allocated mutex used to make initialization of profile data thread-safe.
+static CdiStaticMutexType mutex_lock = CDI_STATIC_MUTEX_INITIALIZER;
+
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
@@ -125,7 +128,7 @@ extern int NtQueryTimerResolution(PULONG MinimumResolution, PULONG Maximum_Resol
 WSADATA wsaData;
 
 /// Array of data used to hold signal handlers.
-static SignalHandlerInfo signal_handler_function_array[MAX_SIGNAL_HANDLERS];
+static CdiSignalHandlerInfo signal_handler_function_array[CDI_MAX_SIGNAL_HANDLERS];
 
 /// Number of signal handlers in signal_handler_function_array.
 static int signal_handler_count = 0;
@@ -213,7 +216,7 @@ static void* ThreadFuncHelper(void* thread_ptr)
     CdiThreadInfo* thread_info_ptr = (CdiThreadInfo*)thread_ptr;
 
     // Set any signal handlers that have been set for this thread.
-    for (int i = 0; i < MAX_SIGNAL_HANDLERS; i++) {
+    for (int i = 0; i < CDI_MAX_SIGNAL_HANDLERS; i++) {
         signal(signal_handler_function_array[i].signal_num, (_crt_signal_t)signal_handler_function_array[i].func_ptr);
     }
 
@@ -273,8 +276,9 @@ static time_t ConvertSystemTime(SYSTEMTIME* time_sys_ptr)
  * Initializes the Winsock2 library. Call this at the start of any function that creates a new communications socket.
  * The function ensures that the library is only really inialized once.
  */
-bool InitializeWinsock(void)
+static bool InitializeWinsock(void)
 {
+    CdiOsStaticMutexLock(mutex_lock);
     if (!winsock_initialized) {
         int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
         if (iResult != 0) {
@@ -282,6 +286,7 @@ bool InitializeWinsock(void)
         }
         winsock_initialized = true;
     }
+    CdiOsStaticMutexUnlock(mutex_lock);
     return winsock_initialized;
 }
 
@@ -295,11 +300,11 @@ void CdiOsUseLogger(void)
 }
 
 // -- Threads --
-bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr)
+bool CdiOsSignalHandlerSet(int signal_num, CdiSignalHandlerFunction func_ptr)
 {
     bool ret = true;
 
-    if (signal_handler_count >= MAX_SIGNAL_HANDLERS) {
+    if (signal_handler_count >= CDI_MAX_SIGNAL_HANDLERS) {
         return false;
     }
 
@@ -311,7 +316,7 @@ bool CdiOsSignalHandlerSet(int signal_num, SignalHandlerFunction func_ptr)
     return ret;
 }
 
-bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr, const char* thread_name_str,
+bool CdiOsThreadCreatePinned(CdiThreadFuncName thread_func, CdiThreadID* thread_id_out_ptr, const char* thread_name_str,
                              void* thread_func_arg_ptr, CdiSignalType start_signal, int cpu_affinity)
 {
     bool return_val = true;
@@ -366,7 +371,7 @@ bool CdiOsThreadCreatePinned(ThreadFuncName thread_func, CdiThreadID* thread_id_
 
     if (return_val) {
         if (NULL != thread_name_str) {
-            strcpy_s(thread_info_ptr->thread_name_str, MAX_THREAD_NAME, thread_name_str);
+            strcpy_s(thread_info_ptr->thread_name_str, CDI_MAX_THREAD_NAME, thread_name_str);
         }
         else {
             thread_info_ptr->thread_name_str[0] = '\0';
@@ -770,7 +775,7 @@ bool CdiOsSignalsWait(CdiSignalType *signal_array, uint8_t num_signals, bool wai
         switch (dwWaitResult) {
         case WAIT_TIMEOUT:
             if (ret_signal_index_ptr) {
-                *ret_signal_index_ptr = OS_SIG_TIMEOUT;
+                *ret_signal_index_ptr = CDI_OS_SIG_TIMEOUT;
             }
             break;
 
@@ -1142,10 +1147,10 @@ int CdiOsGetLocalTimeString(char* time_str, int max_string_len)
     hour_diff = (int)((difftime(now, time_utc_t)) / 3600);
 
     // Determine the timezone offset to append to the date/time string. 'Z' is designated for UTC.
-    char time_zone_str[MAX_FORMATTED_TIMEZONE_STRING_LENGTH] = {0};
+    char time_zone_str[CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH] = {0};
 
     if (hour_diff == 0) {
-        snprintf(time_zone_str, MAX_FORMATTED_TIMEZONE_STRING_LENGTH, "Z");
+        snprintf(time_zone_str, CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH, "Z");
     } else {
 
         // Certain sections of the globe have a 30min offset.
@@ -1153,7 +1158,7 @@ int CdiOsGetLocalTimeString(char* time_str, int max_string_len)
             min_offset = 30;
         }
 
-        snprintf(time_zone_str, MAX_FORMATTED_TIMEZONE_STRING_LENGTH, "%+03d:%02d", hour_diff, min_offset);
+        snprintf(time_zone_str, CDI_MAX_FORMATTED_TIMEZONE_STRING_LENGTH, "%+03d:%02d", hour_diff, min_offset);
     }
 
     return snprintf(time_str, max_string_len, "[%.4d-%.2d-%.2dT%.2d:%.2d:%.2d%s] ",
@@ -1192,7 +1197,8 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
                             ret = true;
                         } else {
                             int code = WSAGetLastError();
-                            ERROR_MESSAGE("bind failed. Port[%d] might be in use by another application. Code[%d]", port_number, code);
+                            ERROR_MESSAGE("bind failed. Port[%d] might be in use by another application. Code[%d]",
+                                          port_number, code);
                         }
                     } else {
                         ret = true;
@@ -1216,10 +1222,10 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
     return ret;
 }
 
-bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr)
+bool CdiOsSocketGetPort(CdiSocket socket_handle, int* port_number_ptr)
 {
     assert(port_number_ptr != NULL);
-    SocketInfo* info_ptr = (SocketInfo*)s;
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
 
     struct sockaddr_in sin;
     int len = sizeof(sin);
@@ -1231,25 +1237,32 @@ bool CdiOsSocketGetPort(CdiSocket s, int* port_number_ptr)
     }
 }
 
-bool CdiOsSocketClose(CdiSocket s)
+bool CdiOsSocketClose(CdiSocket socket_handle)
 {
-    SocketInfo* info_ptr = (SocketInfo*)s;
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
     bool ret = closesocket(info_ptr->s) == 0;
     CdiOsMemFree(info_ptr);
     return ret;
 }
 
-bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
+bool CdiOsSocketRead(CdiSocket socket_handle, void* buffer_ptr, int* byte_count_ptr)
+{
+    return (CdiOsSocketReadFrom(socket_handle, buffer_ptr, byte_count_ptr, NULL));
+}
+
+bool CdiOsSocketReadFrom(CdiSocket socket_handle, void* buffer_ptr, int* byte_count_ptr,
+                         struct sockaddr_in* source_address_ptr)
 {
     assert(NULL != byte_count_ptr);
 
     bool ret = false;
-    SocketInfo* info_ptr = (SocketInfo*)s;
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
 
     WSAPOLLFD pollfd = {
         .fd = info_ptr->s,
         .events = POLLIN
     };
+
     int rv = WSAPoll(&pollfd, 1, 10);
     if (rv > 0) {
         WSABUF wsabuf = {
@@ -1257,12 +1270,20 @@ bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
             .buf = buffer_ptr
         };
         DWORD flags = 0;
-        rv = WSARecv(info_ptr->s, &wsabuf, 1, byte_count_ptr, &flags, NULL, NULL);
+        socklen_t addrlen = (source_address_ptr) ? sizeof(*source_address_ptr) : 0;
+        rv = WSARecvFrom(info_ptr->s, &wsabuf, 1, byte_count_ptr, &flags, source_address_ptr, &addrlen, NULL, NULL);
         if (rv == 0) {
             ret = true;
         } else {
             int code = WSAGetLastError();
-            ERROR_MESSAGE("WSARecv failed. Code[%d]", code);
+            // Bidirectional sockets will cause a WSAECONNRESET error whenever SendTo issued without a connected
+            // destination, even for UDP sockets. So, just ignore it and retry according to MSDN. Zero bytes received
+            // will be returned.
+            if (WSAECONNRESET == code) {
+                ret = true;
+            } else {
+                ERROR_MESSAGE("WSARecvFrom failed. Code[%d]", code);
+            }
         }
     } else if (rv == 0) {
         *byte_count_ptr = 0;  // indicates a timeout condition
@@ -1271,14 +1292,22 @@ bool CdiOsSocketRead(CdiSocket s, void* buffer_ptr, int* byte_count_ptr)
         int code = WSAGetLastError();
         ERROR_MESSAGE("WSAPoll failed. Code[%d]", code);
     }
+
     return ret;
 }
 
-bool CdiOsSocketWrite(CdiSocket s, struct iovec* iov, int iovcnt, int* byte_count_ptr)
+bool CdiOsSocketWrite(CdiSocket socket_handle, struct iovec* iov, int iovcnt, int* byte_count_ptr)
 {
-    // Windows has a slightly different idea of an iovec.
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
+
+    return CdiOsSocketWriteTo(socket_handle, iov, iovcnt, &info_ptr->addr, byte_count_ptr);
+}
+
+bool CdiOsSocketWriteTo(CdiSocket socket_handle, struct iovec* iov, int iovcnt,
+                        const struct sockaddr_in* destination_address_ptr, int* byte_count_ptr)
+{
     WSABUF wsabufs[10];
-    SocketInfo* info_ptr = (SocketInfo*)s;
+    SocketInfo* info_ptr = (SocketInfo*)socket_handle;
 
     if (iovcnt > CDI_ARRAY_ELEMENT_COUNT(wsabufs)) {
         return false;
@@ -1288,7 +1317,8 @@ bool CdiOsSocketWrite(CdiSocket s, struct iovec* iov, int iovcnt, int* byte_coun
             wsabufs[i].len = iov[i].iov_len;
         }
 
-        return WSASendTo(info_ptr->s, wsabufs, iovcnt, byte_count_ptr, 0, &info_ptr->addr, sizeof(info_ptr->addr),
+        struct sockaddr* addr_ptr = (destination_address_ptr) ? destination_address_ptr : &info_ptr->addr;
+        return WSASendTo(info_ptr->s, wsabufs, iovcnt, byte_count_ptr, 0, addr_ptr, sizeof(*addr_ptr),
                          NULL, NULL) == 0;
     }
 }
@@ -1306,6 +1336,10 @@ bool CdiOsEnvironmentVariableSet(const char* name_str, const char* value_str)
 
 void CdiOsShutdown()
 {
-    WSACleanup();
-    winsock_initialized = false;
+    CdiOsStaticMutexLock(mutex_lock);
+    if (winsock_initialized) {
+        WSACleanup();
+        winsock_initialized = false;
+    }
+    CdiOsStaticMutexUnlock(mutex_lock);
 }

@@ -94,7 +94,7 @@ static void FreePayloadResources(TestConnectionInfo* connection_info_ptr, TestTx
         // If payload buffer exists, return it to the memory pool.
         if (user_data_ptr->tx_payload_sgl_ptr) {
             CdiPoolPut(user_data_ptr->tx_pool_handle, user_data_ptr->tx_payload_sgl_ptr);
-            user_data_ptr->tx_payload_sgl_ptr = NULL;
+            user_data_ptr->tx_payload_sgl_ptr = NULL; // Pointer is no longer valid, so clear it.
         }
 
         CdiPoolPut(connection_info_ptr->tx_user_data_pool_handle, user_data_ptr);
@@ -296,8 +296,14 @@ static CdiReturnStatus TestTxSendPayload(TestConnectionInfo* connection_info_ptr
             payload_cfg_data.core_config_data.unit_size = stream_settings_ptr->unit_size;
 
             CdiAvmConfig* avm_config_ptr = send_config ? &stream_settings_ptr->avm_config : NULL;
-            rs = CdiAvmTxPayload(connection_info_ptr->connection_handle, &payload_cfg_data, avm_config_ptr,
-                                 sgl_ptr, test_settings_ptr->tx_timeout);
+
+            if (test_settings_ptr->multiple_endpoints) {
+                CdiAvmEndpointTxPayload(connection_info_ptr->tx_stream_endpoint_handle_array[stream_index],
+                                        &payload_cfg_data, avm_config_ptr, sgl_ptr, test_settings_ptr->tx_timeout);
+            } else {
+                rs = CdiAvmTxPayload(connection_info_ptr->connection_handle, &payload_cfg_data, avm_config_ptr,
+                                     sgl_ptr, test_settings_ptr->tx_timeout);
+            }
         }
     }
     // Convert any errors into a CdiReturnStatus enum.
@@ -339,6 +345,9 @@ static bool TestTxTrySendStreamPayload(TestConnectionInfo* connection_info_ptr, 
     // The connection may be interrupted at any time, so ensure we are connected to remote target before attempting to
     // send a payload.
     CdiConnectionStatus status = connection_info_ptr->connection_status;
+    if (connection_info_ptr->test_settings_ptr->multiple_endpoints) {
+        status = connection_info_ptr->connection_status_stream_array[stream_index];
+    }
     if (kCdiConnectionStatusConnected != status) {
         got_error = !TestWaitForConnection(connection_info_ptr, GetGlobalTestSettings()->connection_timeout_seconds);
     }
@@ -431,7 +440,7 @@ static void WaitForTxPayloadsToComplete(TestConnectionInfo* connection_info_ptr,
         CdiOsSignalClear(connection_info_ptr->payload_done_signal);
         if (0 != signal_index) {
             // Wait was aborted (signal_index=1) or timed-out (signal_index=OS_SIG_TIMEOUT).
-            if (OS_SIG_TIMEOUT == signal_index) {
+            if (CDI_OS_SIG_TIMEOUT == signal_index) {
                 TEST_LOG_CONNECTION(kLogWarning, "Wait timed-out after [%u]ms.", timeout_ms);
             }
             break;
@@ -488,13 +497,15 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
         uint64_t rate_next_start_time = CdiOsGetMicroseconds() + rate_period_microseconds;
         int stream_index = 0;
         while ((stream_index < test_settings_ptr->number_of_streams) && !got_error) {
-            bool got_queued = false;
-            got_error = !TestTxTrySendStreamPayload(connection_info_ptr, stream_index, payload_id,
-                                                    rate_next_start_time, ptp_rate_count, &got_queued);
-            if (!got_error) {
-                // Payload was successfully queued, so increment the payload counter. We will do this until we have
-                // sent the requested total number of payloads. NOTE: Payloads for all stream indexes are always sent.
-                payload_count++;
+            if (TestDynamicIsEndpointEnabled(connection_info_ptr->test_dynamic_handle, stream_index)) {
+                bool got_queued = false;
+                got_error = !TestTxTrySendStreamPayload(connection_info_ptr, stream_index, payload_id,
+                                                        rate_next_start_time, ptp_rate_count, &got_queued);
+                if (!got_error) {
+                    // Payload was successfully queued, so increment the payload counter. We will do this until we have
+                    // sent the requested total number of payloads. NOTE: Payloads for all stream indexes are always sent.
+                    payload_count++;
+                }
             }
             stream_index++; // Advance to next stream index.
         }
@@ -546,6 +557,13 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
         if (!got_error) {
             // Test dynamic statistics reconfiguration, if enabled.
             got_error = !TestDynamicPollStatsReconfigure(connection_info_ptr->test_dynamic_handle);
+        }
+#endif
+
+#ifdef ENABLE_TEST_INTERNAL_DYNAMIC_ENDPOINT
+        if (!got_error) {
+            // Test dynamic endpoints.
+            got_error = !TestDynamicEndpoints(connection_info_ptr->test_dynamic_handle);
         }
 #endif
     }
@@ -877,6 +895,20 @@ THREAD TestTxCreateThread(void* arg_ptr)
         if (kTestProtocolRaw == test_settings_ptr->connection_protocol) {
             got_error = (kCdiStatusOk != CdiRawTxCreate(&connection_info_ptr->config_data.tx, TestRawTxCallback,
                                                         &connection_info_ptr->connection_handle));
+        } else if (test_settings_ptr->multiple_endpoints) {
+            got_error = (kCdiStatusOk != CdiAvmTxStreamConnectionCreate(&connection_info_ptr->config_data.tx,
+                                                                        TestAvmTxCallback,
+                                                                        &connection_info_ptr->connection_handle));
+            int stream_count = test_settings_ptr->number_of_streams;
+            for (int i = 0; i < stream_count && !got_error; i++) {
+                StreamSettings* stream_settings_ptr = &test_settings_ptr->stream_settings[i];
+                CdiTxConfigDataStream stream_config = { 0 };
+                stream_config.dest_ip_addr_str = stream_settings_ptr->remote_adapter_ip_str;
+                stream_config.dest_port = stream_settings_ptr->dest_port;
+                stream_config.stream_name_str = NULL;
+                got_error = (kCdiStatusOk != CdiAvmTxStreamEndpointCreate(connection_info_ptr->connection_handle,
+                    &stream_config, &connection_info_ptr->tx_stream_endpoint_handle_array[i]));
+            }
         } else {
             got_error = (kCdiStatusOk != CdiAvmTxCreate(&connection_info_ptr->config_data.tx, TestAvmTxCallback,
                                                         &connection_info_ptr->connection_handle));

@@ -61,4 +61,24 @@ void TestDynamicDestroy(TestDynamicHandle handle);
  */
 bool TestDynamicPollStatsReconfigure(TestDynamicHandle handle);
 
+/**
+ * Dynamically test endpoint creation/destruction by using the SDK CdiAvmTxCreateStreamEndpoint() and
+ * CdiAvmStreamEndpointDestroy() APIs.
+ *
+ * @param handle Handle of the test dynamic component.
+ *
+ * @return true if successful, otherwise false is returned.
+ */
+bool TestDynamicEndpoints(TestDynamicHandle handle);
+
+/**
+ * Determine if dynamic endpoint is enabled or not.
+ *
+ * @param handle Handle of the test dynamic component.
+ * @param stream_index Zero-based index of the stream to check.
+ *
+ * @return true If enabled is enabled, otherwise false is returned.
+ */
+bool TestDynamicIsEndpointEnabled(TestDynamicHandle handle, int stream_index);
+
 #endif // TEST_DYNAMIC_H__

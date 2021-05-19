@@ -5,6 +5,10 @@
       <Configuration>Debug_DLL</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug_Unit|x64">
+      <Configuration>Debug_Unit</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
@@ -29,6 +33,7 @@
     <ClInclude Include="..\include\cdi_log_enums.h" />
     <ClInclude Include="..\include\cdi_queue_api.h" />
     <ClInclude Include="..\include\cdi_raw_api.h" />
+    <ClInclude Include="..\include\cdi_test_unit_api.h" />
     <ClInclude Include="..\include\cdi_utility_api.h" />
     <ClInclude Include="..\src\cdi\adapter_api.h" />
     <ClInclude Include="..\src\cdi\adapter_control_interface.h" />
@@ -45,20 +50,36 @@
     <ClInclude Include="..\src\cdi\payload.h" />
     <ClInclude Include="..\src\cdi\private.h" />
     <ClInclude Include="..\src\cdi\private_avm.h" />
-    <ClInclude Include="..\src\cdi\rx_reorder.h" />
+    <ClInclude Include="..\src\cdi\protocol.h" />
+    <ClInclude Include="..\src\cdi\receive_buffer.h" />
+    <ClInclude Include="..\src\cdi\rx_reorder_packets.h" />
+    <ClInclude Include="..\src\cdi\rx_reorder_payloads.h" />
     <ClInclude Include="..\src\cdi\statistics.h" />
     <ClInclude Include="..\src\cdi\timeout.h" />
     <ClInclude Include="..\src\cdi\t_digest.h" />
     <ClInclude Include="..\src\common\include\fifo_api.h" />
-    <ClInclude Include="..\src\common\include\list_api.h" />
     <ClInclude Include="..\include\cdi_os_api.h" />
     <ClInclude Include="..\include\cdi_pool_api.h" />
+    <ClInclude Include="..\src\common\include\list_api.h" />
     <ClInclude Include="..\src\common\include\singly_linked_list_api.h" />
     <ClInclude Include="..\src\common\include\utilities_api.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\cdi\baseline_profiles_1_00.c" />
     <ClCompile Include="..\src\cdi\baseline_profiles_2_00.c" />
+    <ClCompile Include="..\src\cdi\cdi_test_unit_api.c" />
+    <ClCompile Include="..\src\cdi\protocol.c" />
+    <ClCompile Include="..\src\cdi\protocol_v1.c" />
+    <ClCompile Include="..\src\cdi\protocol_v2.c" />
+    <ClCompile Include="..\src\cdi\receive_buffer.c" />
+    <ClCompile Include="..\src\cdi\rx_reorder_packets.c" />
+    <ClCompile Include="..\src\cdi\rx_reorder_payloads.c" />
+    <ClCompile Include="..\src\cdi\test_unit_list.c" />
+    <ClCompile Include="..\src\cdi\test_unit_rx_reorder_packets.c" />
+    <ClCompile Include="..\src\cdi\test_unit_rx_reorder_payloads.c" />
+    <ClCompile Include="..\src\cdi\test_unit_sgl.c" />
+    <ClCompile Include="..\src\cdi\test_unit_timeout.c" />
+    <ClCompile Include="..\src\cdi\test_unit_t_digest.c" />
     <ClCompile Include="..\src\common\src\queue.c" />
     <ClCompile Include="..\src\cdi\adapter.c" />
     <ClCompile Include="..\src\cdi\adapter_control_interface.c" />
@@ -84,11 +105,9 @@
     <ClCompile Include="..\src\cdi\internal_tx.c" />
     <ClCompile Include="..\src\cdi\payload.c" />
     <ClCompile Include="..\src\cdi\cdi_utility_api.c" />
-    <ClCompile Include="..\src\cdi\rx_reorder.c" />
     <ClCompile Include="..\src\cdi\statistics.c" />
     <ClCompile Include="..\src\cdi\timeout.c" />
     <ClCompile Include="..\src\cdi\t_digest.c" />
-    <ClCompile Include="..\src\cdi\t_digest_unit_test.c" />
     <ClCompile Include="..\src\common\src\fifo.c" />
     <ClCompile Include="..\src\common\src\list.c" />
     <ClCompile Include="..\src\common\src\logger.c" />
@@ -108,6 +127,12 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>NotSet</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Unit|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
@@ -137,6 +162,9 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Unit|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -149,6 +177,10 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Unit|x64'">
+    <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+    <TargetName>$(ProjectName)_unit</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'">
     <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
@@ -166,6 +198,20 @@
     <ClCompile>
       <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Lib>
+      <AdditionalDependencies>aws-cpp-sdk-core.lib;ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Lib>
+    <Lib>
+      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Unit|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;TEST_UNIT_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>

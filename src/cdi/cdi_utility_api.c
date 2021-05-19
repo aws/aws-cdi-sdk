@@ -17,6 +17,7 @@
 
 #include "cdi_baseline_profile_api.h"
 #include "cdi_core_api.h"
+#include "cdi_test_unit_api.h"
 #include "cdi_os_api.h"
 
 //*********************************************************************************************************************
@@ -109,6 +110,7 @@ const EnumStringKey* CdiUtilityKeyGetArray(EnumStringKeyTypes key_type) {
         case kKeyLogComponent:                key_array_ptr = log_component_key_array; break;
         case kKeyLogLevel:                    key_array_ptr = log_level_key_array; break;
         case kKeyConnectionStatus:            key_array_ptr = connection_status_key_array; break;
+        case kKeyTestUnit:                    key_array_ptr = TestUnitGetKeyArray(); break;
     }
     assert(NULL != key_array_ptr);
     return key_array_ptr;

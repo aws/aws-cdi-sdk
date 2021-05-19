@@ -98,7 +98,7 @@ bool CdiFifoCreate(const char* name_str, int item_count, int item_byte_size, Cdi
 
     if (ret) {
         // Allocate memory for the FIFO item buffers.
-        state_ptr->item_array = (uint8_t *)CdiOsMemAllocZero(item_count * item_byte_size);
+        state_ptr->item_array = (uint8_t*)CdiOsMemAllocZero(item_count * item_byte_size);
         if (NULL == state_ptr->item_array) {
             ret = false;
         }
@@ -153,7 +153,7 @@ bool CdiFifoRead(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait_
             uint32_t signal_index;
             CdiOsSignalsWait(signal_array, signal_count, false, timeout_ms, &signal_index);
             if (0 != signal_index) {
-                // Wait was aborted (signal_index=1) or timed-out (signal_index=OS_SIG_TIMEOUT).
+                // Wait was aborted (signal_index=1) or timed-out (signal_index=CDI_OS_SIG_TIMEOUT).
                 ret = false;
                 break;
             }
@@ -214,7 +214,7 @@ bool CdiFifoWrite(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait
             uint32_t signal_index;
             CdiOsSignalsWait(signal_array, signal_count, false, timeout_ms, &signal_index);
             if (0 != signal_index) {
-                // Wait was aborted (signal_index=1) or timed-out (signal_index=OS_SIG_TIMEOUT).
+                // Wait was aborted (signal_index=1) or timed-out (signal_index=CDI_OS_SIG_TIMEOUT).
                 ret = false;
                 break;
             }

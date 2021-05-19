@@ -20,6 +20,9 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
+/// @brief Forward declaration of structure to create pointers.
+typedef struct CdiRawProbeHeader CdiRawProbeHeader;
+
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -31,15 +34,16 @@
  *
  * @param param_ptr Pointer to probe endpoint state data (ProbeEndpointState*).
  * @param packet_ptr Pointer to packet.
+ * @param message_type Endpoint message type.
  */
-void ProbeRxEfaMessageFromEndpoint(void* param_ptr, Packet* packet_ptr);
+void ProbeRxEfaMessageFromEndpoint(void* param_ptr, Packet* packet_ptr, EndpointMessageType message_type);
 
 /**
- * Process a control packet completion message from the receiver probe control interface endpoint.
+ * Process a control packet completion message received from an endpoint.
  *
  * NOTE: This function is called from SocketReceiveThread().
  *
- * @param param_ptr Pointer to probe endpoint state data (ProbeEndpointState*).
+ * @param param_ptr Pointer to probe endpoint state data (AdapterEndpointState*).
  * @param packet_ptr Pointer to packet containing the control message.
  */
 void ProbeRxControlMessageFromEndpoint(void* param_ptr, Packet* packet_ptr);
@@ -50,13 +54,14 @@ void ProbeRxControlMessageFromEndpoint(void* param_ptr, Packet* packet_ptr);
  * NOTE: This function is called from ProbeControlThread().
  *
  * @param probe_ptr Pointer to probe endpoint state data.
- * @param common_hdr_ptr Pointer to control message command header.
+ * @param probe_hdr_ptr Pointer to control message header.
+ * @param source_address_ptr Pointer to source address structure (sockaddr_in).
  * @param wait_timeout_ms_ptr Pointer to current wait timeout. This function may alter the contents of the value.
  *
  * @return True if new probe state has been set, otherwise false is returned.
  */
-bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr, const ControlPacketCommonHeader* common_hdr_ptr,
-                                 uint64_t* wait_timeout_ms_ptr);
+bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecodedProbeHeader* probe_hdr_ptr,
+                                 const struct sockaddr_in* source_address_ptr, uint64_t* wait_timeout_ms_ptr);
 
 /**
  * Called when the wait timeout period has expired. Time to process the current Rx probe state.

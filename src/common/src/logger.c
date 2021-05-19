@@ -19,9 +19,9 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#include "list_api.h"
 #include "cdi_core_api.h"
 #include "cdi_os_api.h"
+#include "list_api.h"
 #include "singly_linked_list_api.h"
 
 //*********************************************************************************************************************
@@ -113,7 +113,12 @@ struct MultilineLogBufferState {
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
 
-static bool initialized = false;                ///< If true, this module has been initialized.
+/// @brief Statically allocated mutex used to make initialization of logger data thread-safe.
+static CdiStaticMutexType logger_context_mutex_lock = CDI_STATIC_MUTEX_INITIALIZER;
+
+/// @brief Logger module initialization reference count. If zero, logger has not been initialized. If 1 or greater,
+/// logger has been initialized.
+static int initialization_ref_count = 0;
 
 static CdiCsID log_state_list_lock = NULL;      ///< Lock used to protect multi-thread access to the log state list.
 static CdiList log_state_list;                  ///< List of log state objects (CdiLogState).
@@ -446,29 +451,19 @@ static bool CreateCommonLog(CdiLoggerHandle logger_handle, CdiConnectionHandle c
  * string cannot exceed buffer_size characters in length. It will overwrite the last character if char_count is at the
  * end of the buffer.
  *
- * @param is_stdout If true, add "\n\r" to line ending, otherwise only add "\n".
  * @param log_msg_str Pointer to log message string.
  * @param buffer_size Size of log message buffer in bytes.
  * @param char_count Offset to place the linefeed and new '\0'.
  *
  * @return Adjusted character count.
  */
-static int AppendLineEnding(bool is_stdout, char* log_msg_str, int buffer_size, int char_count)
+static int AppendLineEnding(char* log_msg_str, int buffer_size, int char_count)
 {
-    if (is_stdout) {
-        // Insert carriage return and line feed onto log string and replace string terminator character.
-        if (char_count >= (buffer_size - 3)) {
-            char_count = buffer_size-3;
-        }
-        log_msg_str[char_count++] = '\n';
-        log_msg_str[char_count++] = '\r';
-    } else {
-        // Insert line feed onto log string and replace string terminator character.
-        if (char_count >= (buffer_size - 2)) {
-            char_count = buffer_size-2;
-        }
-        log_msg_str[char_count++] = '\n';
+    // Insert line feed onto log string and replace string terminator character.
+    if (char_count >= (buffer_size - 2)) {
+        char_count = buffer_size-2;
     }
+    log_msg_str[char_count++] = '\n';
     log_msg_str[char_count++] = '\0';
 
     return char_count;
@@ -477,15 +472,14 @@ static int AppendLineEnding(bool is_stdout, char* log_msg_str, int buffer_size, 
 /**
  * Write a single log message line to the specified log.
  *
- * @param is_stdout If true, format for using "\n\r", otherwise use "\n".
  * @param dest_log_buffer_str Log handle. If NULL, stdout is used.
  * @param dest_buffer_size Size of destination buffer in bytes.
  * @param log_level log level of this log message.
  * @param multiline True if this message is part of a multiline message.
  * @param log_str Pointer to log message string to write.
  */
-static int WriteLineToBuffer(bool is_stdout, char* dest_log_buffer_str, int dest_buffer_size, CdiLogLevel log_level,
-                             bool multiline, char* log_str)
+static int WriteLineToBuffer(char* dest_log_buffer_str, int dest_buffer_size, CdiLogLevel log_level, bool multiline,
+                             char* log_str)
 {
     int char_count = 0;
 
@@ -535,7 +529,7 @@ static int WriteLineToBuffer(bool is_stdout, char* dest_log_buffer_str, int dest
     char_count += CdiOsStrCpy(dest_log_buffer_str + char_count, dest_buffer_size - char_count, log_str);
 
     // Insert new line onto log string and replace string terminator character.
-    return AppendLineEnding(is_stdout, dest_log_buffer_str, dest_buffer_size, char_count);
+    return AppendLineEnding(dest_log_buffer_str, dest_buffer_size, char_count);
 }
 
 /**
@@ -630,8 +624,7 @@ static void WriteLineToLog(CdiLogHandle handle, CdiLogLevel log_level, bool mult
     }
 
     char final_log_str[MAX_LOG_STRING_LENGTH];
-    int char_count = WriteLineToBuffer(CDI_STDOUT == file_handle, final_log_str, sizeof(final_log_str), log_level,
-                                       multiline, log_str);
+    int char_count = WriteLineToBuffer(final_log_str, sizeof(final_log_str), log_level, multiline, log_str);
 
     OutputToFileHandle(file_handle, log_level, final_log_str, char_count - 1); // -1 excludes terminating '\0'
 }
@@ -681,7 +674,9 @@ bool CdiLoggerInitialize(void)
 {
     bool ret = true;
 
-    if (!initialized) {
+    CdiOsStaticMutexLock(logger_context_mutex_lock);
+
+    if (0 == initialization_ref_count) {
         // Initialize log state list.
         CdiListInit(&log_state_list);
 
@@ -733,11 +728,16 @@ bool CdiLoggerInitialize(void)
 
         if (ret) {
             CdiOsUseLogger();
-            initialized = true;
         } else {
             CdiLoggerShutdown(false); // Do normal shutdown.
         }
     }
+
+    if (ret) {
+        initialization_ref_count++;
+    }
+
+    CdiOsStaticMutexUnlock(logger_context_mutex_lock);
 
     return ret;
 }
@@ -745,26 +745,24 @@ bool CdiLoggerInitialize(void)
 bool CdiLoggerCreate(CdiLogLevel default_log_level, CdiLoggerHandle* ret_logger_handle_ptr)
 {
     bool ret = true;
-
-    if (!initialized) {
-        return false;
-    }
-
     CdiLoggerState* logger_state_ptr = NULL;
-    logger_state_ptr = (CdiLoggerState*)CdiOsMemAllocZero(sizeof(CdiLoggerState));
-    if (NULL == logger_state_ptr) {
+
+    CdiOsStaticMutexLock(logger_context_mutex_lock);
+
+    if (0 == initialization_ref_count) {
         ret = false;
-    }
-
-    if (ret) {
-        logger_state_ptr->default_log_level = default_log_level;
-    }
-
-    if (!ret) {
-        CdiLoggerDestroyLogger(logger_state_ptr);
+    } else {
+        logger_state_ptr = (CdiLoggerState*)CdiOsMemAllocZero(sizeof(CdiLoggerState));
+        if (NULL == logger_state_ptr) {
+            ret = false;
+        } else {
+            logger_state_ptr->default_log_level = default_log_level;
+        }
     }
 
     *ret_logger_handle_ptr = (CdiLoggerHandle)logger_state_ptr;
+
+    CdiOsStaticMutexUnlock(logger_context_mutex_lock);
 
     return ret;
 }
@@ -926,7 +924,6 @@ void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str,
         } else {
             // For file or stdout log.
             char log_message_str[MAX_LOG_STRING_LENGTH];
-            bool is_stdout = kLogMethodStdout == state_ptr->log_handle->log_method;
 
             if (0 == state_ptr->line_count) {
                 // For first line, optionally generate function name and source code line number information.
@@ -935,14 +932,14 @@ void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str,
 
                 // Then, format the line with a timestamp and log level string, writing it to the multiline buffer.
                 // This will add a trailing linefeed. We don't want to include the trailing '\0' (so -1 on count).
-                char_count = WriteLineToBuffer(is_stdout, dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level,
-                                               false, log_message_str) - 1;
+                char_count = WriteLineToBuffer(dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level, false,
+                                               log_message_str) - 1;
             } else {
                 // Not first line. Don't generate function name, source code line number or timestamp. This will add a
                 // trailing linefeed. We don't want to include the trailing '\0' (so -1 on count).
                 vsnprintf(log_message_str, MAX_LOG_STRING_LENGTH, format_str, vars);
-                char_count = WriteLineToBuffer(is_stdout, dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level,
-                                               true, log_message_str) - 1;
+                char_count = WriteLineToBuffer(dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level, true,
+                                               log_message_str) - 1;
             }
         }
 
@@ -1102,6 +1099,8 @@ CdiReturnStatus CdiLoggerComponentEnableGlobal(CdiLogComponent component, bool e
         stdout_log_handle->component_state_array[component].log_enable = enable;
     }
 
+    CdiOsCritSectionReserve(log_state_list_lock); // Lock access to the logger list.
+
     CdiListIterator list_iterator;
     CdiListIteratorInit(&log_state_list, &list_iterator);
 
@@ -1110,6 +1109,8 @@ CdiReturnStatus CdiLoggerComponentEnableGlobal(CdiLogComponent component, bool e
     while (NULL != (state_ptr = ListGetNextEntry(&list_iterator))) {
         state_ptr->component_state_array[component].log_enable = enable;
     }
+
+    CdiOsCritSectionRelease(log_state_list_lock); // Done with access to the logger list.
 
     return kCdiStatusOk;
 }
@@ -1124,6 +1125,8 @@ CdiReturnStatus CdiLoggerLevelSetGlobal(CdiLogComponent component, CdiLogLevel l
         stdout_log_handle->component_state_array[component].log_level = level;
     }
 
+    CdiOsCritSectionReserve(log_state_list_lock); // Lock access to the logger list.
+
     CdiListIterator list_iterator;
     CdiListIteratorInit(&log_state_list, &list_iterator);
 
@@ -1132,6 +1135,8 @@ CdiReturnStatus CdiLoggerLevelSetGlobal(CdiLogComponent component, CdiLogLevel l
     while (NULL != (state_ptr = ListGetNextEntry(&list_iterator))) {
         state_ptr->component_state_array[component].log_level = level;
     }
+
+    CdiOsCritSectionRelease(log_state_list_lock); // Done with access to the logger list.
 
     return kCdiStatusOk;
 }
@@ -1184,7 +1189,11 @@ void CdiLoggerDestroyLogger(CdiLoggerHandle logger_handle)
 
 void CdiLoggerFlushAllFileLogs(void)
 {
-    if (initialized) {
+    CdiOsStaticMutexLock(logger_context_mutex_lock);
+
+    if (initialization_ref_count) {
+        CdiOsCritSectionReserve(log_state_list_lock); // Lock access to the logger list.
+
         if (!CdiListIsEmpty(&log_state_list)) {
             CdiListIterator list_iterator;
             CdiListIteratorInit(&log_state_list, &list_iterator);
@@ -1199,19 +1208,39 @@ void CdiLoggerFlushAllFileLogs(void)
                 }
             }
         }
+        CdiOsCritSectionRelease(log_state_list_lock); // Done with access to the logger list.
     }
+    CdiOsStaticMutexUnlock(logger_context_mutex_lock);
 }
 
 void CdiLoggerShutdown(bool force)
 {
-    CdiLoggerThreadLogUnset();
+    bool do_shutdown = force;
 
-    // If stdout log handle exists, just remove it from our list so we can still use it for stdout in this function.
-    if (stdout_log_handle) {
-        CdiListRemove(&log_state_list, &stdout_log_handle->list_entry);
+    CdiOsStaticMutexLock(logger_context_mutex_lock);
+
+    if (force) {
+        // Forcing shutdown, so force reference counter to zero.
+        initialization_ref_count = 0;
+    } else if (initialization_ref_count) {
+        if (0 == --initialization_ref_count) {
+            // Reference count is zero, so ok to perform the shutdown.
+            do_shutdown = true;
+        }
     }
 
-    if (initialized) {
+    if (do_shutdown) {
+        CdiLoggerThreadLogUnset();
+
+        if (log_state_list_lock) {
+            CdiOsCritSectionReserve(log_state_list_lock); // Lock access to the logger list.
+        }
+
+        // If stdout log handle exists, just remove it from our list so we can still use it for stdout in this function.
+        if (stdout_log_handle) {
+            CdiListRemove(&log_state_list, &stdout_log_handle->list_entry);
+        }
+
         if (!CdiListIsEmpty(&log_state_list)) {
             // This list should have been empty.
             CdiListIterator list_iterator;
@@ -1234,34 +1263,37 @@ void CdiLoggerShutdown(bool force)
                     }
                 }
             }
-
             if (!force) {
                 assert(false);
             }
         }
-        initialized = false;
+
+        if (log_state_list_lock) {
+            CdiOsCritSectionRelease(log_state_list_lock); // Done with access to the logger list.
+            CdiOsCritSectionDelete(log_state_list_lock);
+            log_state_list_lock = NULL;
+        }
+
+        CdiOsCritSectionDelete(multiline_free_list_lock);
+        multiline_free_list_lock = NULL;
+
+        // Free memory of multiline log buffers.
+        MultilineLogBufferState* state_ptr = NULL;
+        while (NULL != (state_ptr = (MultilineLogBufferState*)CdiSinglyLinkedListPopHead(&multiline_free_list))) {
+            CdiOsMemFree(state_ptr);
+        }
+
+        if (log_thread_data_valid) {
+            CdiOsThreadFreeData(log_thread_data);
+            log_thread_data_valid = false;
+        }
+
+        // Now that are done using the stdout logger, it is safe to destroy the stdout handle.
+        if (stdout_log_handle) {
+            CdiOsMemFree(stdout_log_handle);
+            stdout_log_handle = NULL;
+        }
     }
 
-    CdiOsCritSectionDelete(log_state_list_lock);
-    log_state_list_lock = NULL;
-
-    CdiOsCritSectionDelete(multiline_free_list_lock);
-    multiline_free_list_lock = NULL;
-
-    // Free memory of multiline log buffers.
-    MultilineLogBufferState* state_ptr = NULL;
-    while (NULL != (state_ptr = (MultilineLogBufferState*)CdiSinglyLinkedListPopHead(&multiline_free_list))) {
-        CdiOsMemFree(state_ptr);
-    }
-
-    if (log_thread_data_valid) {
-        CdiOsThreadFreeData(log_thread_data);
-        log_thread_data_valid = false;
-    }
-
-    // Now that are done using the stdout logger, it is safe to destroy the stdout handle.
-    if (stdout_log_handle) {
-        CdiOsMemFree(stdout_log_handle);
-        stdout_log_handle = NULL;
-    }
+    CdiOsStaticMutexUnlock(logger_context_mutex_lock);
 }

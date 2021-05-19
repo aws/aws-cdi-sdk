@@ -209,3 +209,57 @@ bool TestDynamicPollStatsReconfigure(TestDynamicHandle handle)
 
     return ret;
 }
+
+bool TestDynamicEndpoints(TestDynamicHandle handle)
+{
+    bool ret = true;
+    TestDynamicState* state_ptr = (TestDynamicState*)handle;
+    TestConnectionInfo* connection_info_ptr = state_ptr->connection_info_ptr;
+    TestSettings* test_settings_ptr = connection_info_ptr->test_settings_ptr;
+    EndpointData* data_ptr = &state_ptr->endpoint_data;
+
+    if (test_settings_ptr->multiple_endpoints) {
+        uint64_t current_time_ms = CdiOsGetMilliseconds();
+        if (0 == data_ptr->state_change_time_ms) {
+            // First time.
+            data_ptr->state_change_time_ms = current_time_ms + ENDPOINT_ENABLED_TIME_MS;
+            data_ptr->test_state = kEndpointEnabled;
+        } else if (current_time_ms >= data_ptr->state_change_time_ms) {
+            int i = 0;
+            StreamSettings* stream_settings_ptr = &test_settings_ptr->stream_settings[i];
+
+            if (kEndpointEnabled == data_ptr->test_state) {
+                CDI_LOG_THREAD(kLogInfo, "Destroying endpoint Stream ID[%d]", stream_settings_ptr->stream_id);
+                CdiAvmStreamEndpointDestroy(connection_info_ptr->tx_stream_endpoint_handle_array[i]);
+                connection_info_ptr->tx_stream_endpoint_handle_array[i] = NULL;
+                data_ptr->state_change_time_ms = current_time_ms + ENDPOINT_DISABLED_TIME_MS;
+                data_ptr->test_state = kEndpointDisabled;
+            } else {
+                CDI_LOG_THREAD(kLogInfo, "Creating endpoint Stream ID[%d]", stream_settings_ptr->stream_id);
+                CdiTxConfigDataStream stream_config = { 0 };
+                stream_config.dest_ip_addr_str = stream_settings_ptr->remote_adapter_ip_str;
+                stream_config.dest_port = stream_settings_ptr->dest_port;
+                stream_config.stream_name_str = NULL;
+                ret = (kCdiStatusOk == CdiAvmTxStreamEndpointCreate(connection_info_ptr->connection_handle,
+                    &stream_config, &connection_info_ptr->tx_stream_endpoint_handle_array[i]));
+                data_ptr->state_change_time_ms = current_time_ms + ENDPOINT_ENABLED_TIME_MS;
+                data_ptr->test_state = kEndpointEnabled;
+            }
+        }
+    }
+
+    return ret;
+}
+
+bool TestDynamicIsEndpointEnabled(TestDynamicHandle handle, int stream_index)
+{
+    bool ret = true;
+    TestDynamicState* state_ptr = (TestDynamicState*)handle;
+    TestConnectionInfo* connection_info_ptr = state_ptr->connection_info_ptr;
+
+    if (connection_info_ptr->test_settings_ptr->multiple_endpoints) {
+        ret = (NULL != connection_info_ptr->tx_stream_endpoint_handle_array[stream_index]);
+    }
+
+    return ret;
+}

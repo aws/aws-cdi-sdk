@@ -49,6 +49,15 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
 void RxConnectionDestroyInternal(CdiConnectionHandle con_handle);
 
 /**
+ * @brief Create dynamically allocated memory pools for the specified endpoint.
+ *
+ * @param handle Handle of endpoint to create dynamic memory pools.
+ *
+ * @return kCdiStatusOk if the connection was successfully created, otherwise a value indicating why it failed.
+ */
+CdiReturnStatus RxEndpointCreateDynamicPools(CdiEndpointHandle handle);
+
+/**
  * Destroy resources associated with the specified endpoint.
  *
  * @param handle Handle of endpoint to destroy.
@@ -61,8 +70,26 @@ void RxEndpointDestroy(CdiEndpointHandle handle);
  *
  * @param param_ptr Pointer to connection that the packet was received on as a void*.
  * @param packet_ptr Pointer to the received packet.
+ * @param message_type Endpoint message type.
  */
-void RxPacketReceive(void* param_ptr, Packet* packet_ptr);
+void RxPacketReceive(void* param_ptr, Packet* packet_ptr, EndpointMessageType message_type);
+
+/**
+ * Send the payload on to the next stage because it is complete or determined to be in error.
+ *
+ * @param endpoint_ptr Pointer to endpoint state structure.
+ * @param send_payload_state_ptr Pointer to the payload state for the completed payload.
+ */
+void RxSendPayload(CdiEndpointState* endpoint_ptr, RxPayloadState* send_payload_state_ptr);
+
+/**
+ * Free payload resources.
+ *
+ * @param endpoint_ptr Pointer to connection state structure.
+ * @param payload_state_ptr Pointer to payload structure being updated.
+ * @param free_memory_state
+ */
+void RxFreePayloadResources(CdiEndpointState* endpoint_ptr, RxPayloadState* payload_state_ptr, bool free_memory_state);
 
 /**
  * Invoke the user registered Tx callback function for a payload.
@@ -101,27 +128,5 @@ bool RxPollFreeBuffer(void* param_ptr, CdiSgList* ret_packet_buffer_sgl_ptr);
  * @param endpoint_ptr Pointer to endpoint to free resources.
  */
 void RxEndpointFlushResources(CdiEndpointState* endpoint_ptr);
-
-/**
- * If Rx buffering is enabled, this API is used to add a Rx payload to a list of payloads ordered by PTP. The
- * RxBufferedPayloadGet() function is then used to process the received payloads in PTP order.
- *
- * @param con_state_ptr Pointer to connection state data.
- * @param app_cb_data_ptr Pointer to application payload data to add to the Rx list.
- */
-void RxBufferedPayloadAdd(CdiConnectionState* con_state_ptr, AppPayloadCallbackData* app_cb_data_ptr);
-
-/**
- * Return a payload if one is ready to be sent to the application. The next time to call the function must be within the
- * timeout returned in ret_timeout_ms_ptr.
- *
- * @param con_state_ptr Pointer to connection state data.
- * @param ret_timeout_ms_ptr Address where to write returned timeout to use for next blocking wait operation.
- * @param ret_app_cb_data_ptr Address where to write returned application payload data.
- *
- * @return true if got a payload (data is written to ret_app_cb_data_ptr), otherwise false is returned.
- */
-bool RxBufferedPayloadGet(CdiConnectionState* con_state_ptr, uint32_t* ret_timeout_ms_ptr,
-                          AppPayloadCallbackData* ret_app_cb_data_ptr);
 
 #endif  // CDI_INTERNAL_RX_H__

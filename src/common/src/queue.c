@@ -223,14 +223,14 @@ static inline bool WaitForSignals(CdiSinglyLinkedListEntry* volatile* entry_chan
     // allow one extra signal for the "wait_signal".
     int num_actual_signals = num_signals + 1; // Account for "wait_signal".
 
-    if (num_actual_signals > MAX_WAIT_MULTIPLE) {
-        CDI_LOG_THREAD(kLogError, "Maximum number[%d] of wait signals exceed[%d].", MAX_WAIT_MULTIPLE,
+    if (num_actual_signals > CDI_MAX_WAIT_MULTIPLE) {
+        CDI_LOG_THREAD(kLogError, "Maximum number[%d] of wait signals exceed[%d].", CDI_MAX_WAIT_MULTIPLE,
                        num_actual_signals);
         ret = false;
     } else {
         // Since this logic is only used if we need to wait for a queue item, ok to execute this loop. In most
         // cases, the number of signals is only going to be 1 or 2.
-        CdiSignalType signal_ptr[MAX_WAIT_MULTIPLE];
+        CdiSignalType signal_ptr[CDI_MAX_WAIT_MULTIPLE];
         signal_ptr[0] = wait_signal;
         for (int i = 0; i < num_signals; i++) {
             signal_ptr[i+1] = cancel_wait_signal_array[i];
@@ -240,8 +240,8 @@ static inline bool WaitForSignals(CdiSinglyLinkedListEntry* volatile* entry_chan
         while (*entry_change_ptr == entry_static_ptr) {
             CdiOsSignalsWait(signal_ptr, num_actual_signals, false, timeout_ms, &signal_index);
             if (0 != signal_index) {
-                // Wait was aborted (not set by "wait_signal") or timed-out (signal_index=OS_SIG_TIMEOUT).
-                if (OS_SIG_TIMEOUT != signal_index) {
+                // Wait was aborted (not set by "wait_signal") or timed-out (signal_index=CDI_OS_SIG_TIMEOUT).
+                if (CDI_OS_SIG_TIMEOUT != signal_index) {
                     // Was not a timeout. Decrement signal index so the index matches the signal_array parameter.
                     signal_index--;
                 }

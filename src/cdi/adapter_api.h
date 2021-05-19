@@ -41,6 +41,15 @@ typedef struct {
             AdapterPacketAckStatus ack_status; ///< Status of the packet.
         } tx_state;
     };
+
+    union {
+        /// @brief Data used by socket type adapters.
+        struct SocketAdapterState {
+            /// @brief Socket address. If packet is being transmitted, this contains the address of the sender,
+            /// otherwise it contains the packet destination address.
+            struct sockaddr_in address;
+        } socket_adapter_state;
+    };
 } Packet;
 
 /**
@@ -48,7 +57,8 @@ typedef struct {
  */
 typedef enum {
     kEndpointDirectionSend,    ///< Endpoint can send packets to its remote host.
-    kEndpointDirectionReceive  ///< Endpoint can receive packets from its remote host.
+    kEndpointDirectionReceive, ///< Endpoint can receive packets from its remote host.
+    kEndpointDirectionBidirectional, ///< Endpoint can send packets to and receive from the remote host.
 } EndpointDirection;
 
 /**
@@ -70,12 +80,22 @@ typedef enum {
 } EndpointTransmitQueueLevel;
 
 /**
+ * Enumeration of possible values used to specify the type of message generated from an endpoint using the
+ * MessageFromEndpoint callback function.
+ */
+typedef enum {
+    kEndpointMessageTypePacketSent, ///< Packet was sent.
+    kEndpointMessageTypePacketReceived ///< Packet was received.
+} EndpointMessageType;
+
+/**
  * @brief Prototype of function used to process packet messages from the endpoint.
  *
  * @param param_ptr A pointer to data used by the function.
- * @param packet_ptr A pointer to packet ACK state data.
+ * @param packet_ptr A pointer to packet state data.
+ * @param message_type Endpoint message type.
  */
-typedef void (*MessageFromEndpoint)(void* param_ptr, Packet* packet_ptr);
+typedef void (*MessageFromEndpoint)(void* param_ptr, Packet* packet_ptr, EndpointMessageType message_type);
 
 /**
  * @brief Structure used to hold adapter endpoint state.
@@ -109,7 +129,9 @@ struct AdapterEndpointState {
     CdiSignalType start_signal;
     CdiSignalType shutdown_signal; ///< Signal used to shutdown adapter endpoint threads.
 
-    void* type_specific_ptr;              ///< Adapter specific endpoint data.
+    CdiProtocolHandle protocol_handle; ///< Handle of protocol being used. Value is NULL if none configured.
+
+    void* type_specific_ptr; ///< Adapter specific endpoint data.
 };
 
 /// Forward declaration to create pointer to adapter endpoint state when used.
@@ -234,7 +256,7 @@ struct AdapterVirtualFunctionPtrTable {
 
     /// @brief Reset an open endpoint.
     /// @see CdiAdapterResetEndpoint
-    CdiReturnStatus (*Reset)(AdapterEndpointHandle handle);
+    CdiReturnStatus (*Reset)(AdapterEndpointHandle handle, bool reopen);
 
     /// @brief Start an open endpoint.
     /// @see CdiAdapterStartEndpoint
@@ -252,6 +274,9 @@ struct AdapterVirtualFunctionPtrTable {
 struct CdiAdapterState {
     /// Used to store an instance of this object in a list using this element as the list item.
     CdiListEntry list_entry;
+
+    /// Set to kMagicAdapter when allocated, checked at every API function to help ensure validity.
+    uint32_t magic;
 
     /// @brief Copy of the adapter's IP address string. "adapter_data.adapter_ip_addr_str" (see below) points to this
     /// value.
@@ -283,6 +308,10 @@ struct CdiAdapterState {
 
     /// @brief If true, tx_buffer_ptr is using hugepages, otherwise it is using heap memory.
     bool tx_buffer_is_hugepages;
+
+    /// @brief Size in bytes of Tx payload buffer allocated. Pointer to buffer is in CdiAdapterData.ret_tx_buffer_ptr.
+    /// NOTE: The allocation may be larger than requested, due to rounding.
+    uint64_t tx_buffer_allocated_size;
 };
 
 /**
@@ -313,7 +342,7 @@ typedef struct {
     /// -1 to disable pinning the thread to a specific core.
     int thread_core_num;
 
-    /// @brief Valid if direction = kEndpointDirectionReceive.
+    /// @brief Valid if direction = kEndpointDirectionReceive or kEndpointDirectionBidirectional.
     RxAdapterConnectionState rx_state;
 
     /// @brief Indicates the type of transmission data this endpoint supports.
@@ -423,7 +452,7 @@ CdiReturnStatus CdiAdapterOpenEndpoint(CdiAdapterEndpointConfigData* config_data
  *
  * @param handle The handle of the endpoint to started.
  *
- * @return CdiCdiReturnStatus kCdiStatusOk upon successful open otherwise an indication of the failure.
+ * @return CdiReturnStatus kCdiStatusOk upon successful open otherwise an indication of the failure.
  */
 CdiReturnStatus CdiAdapterStartEndpoint(AdapterEndpointHandle handle);
 
@@ -431,10 +460,11 @@ CdiReturnStatus CdiAdapterStartEndpoint(AdapterEndpointHandle handle);
  * Reset an endpoint and free its resources.
  *
  * @param handle The handle of the endpoint to reset.
+ * @param reopen If true the endpoint is re-opened after resetting it, otherwise just reset it.
  *
- * @return CdiCdiReturnStatus kCdiStatusOk upon success otherwise an indication of the failure.
+ * @return CdiReturnStatus kCdiStatusOk upon success otherwise an indication of the failure.
  */
-CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle);
+CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle, bool reopen);
 
 /**
  * Close an endpoint and free its resources.
@@ -474,12 +504,14 @@ EndpointTransmitQueueLevel CdiAdapterGetTransmitQueueLevel(AdapterEndpointHandle
  * MEMORY NOTE: The Packet structure is not copied, it is merely referenced. Its storage must come from a pool.
  *
  * @param handle The handle of the endpoint through which to send the packet.
+ * @param destination_address_ptr Pointer to destination address data (sockaddr_in).
  * @param packet_ptr The address of the packet to enqueue for sending to the connected endpoint.
  *
  * @return CdiReturnStatus kCdiStatusOk if the packet was successfully queued for sending or a value
  *         that indicates the nature of the failure.
  */
-CdiReturnStatus CdiAdapterEnqueueSendPacket(const AdapterEndpointHandle handle, Packet* packet_ptr);
+CdiReturnStatus CdiAdapterEnqueueSendPacket(const AdapterEndpointHandle handle,
+                                            const struct sockaddr_in* destination_address_ptr, Packet* packet_ptr);
 
 /**
  * Add a list of packets to the send packet queue. The packets will be sent to the remote host for the specified

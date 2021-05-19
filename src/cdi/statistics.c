@@ -224,7 +224,7 @@ static THREAD StatsThread(void* ptr)
             // Got shutdown or thread exit signal, so exit.
             break;
         } else {
-            // Got timeout (OS_SIG_TIMEOUT). Send latest stats to all registered callbacks.
+            // Got timeout (CDI_OS_SIG_TIMEOUT). Send latest stats to all registered callbacks.
             args_ptr->send_stats_message_ptr(stats_state_ptr, args_ptr->metrics_destination_idx);
             interval_counter++;
             uint64_t next_start_time = base_time + (interval_counter * args_ptr->stats_period_ms) +
@@ -462,7 +462,7 @@ void StatsGatherPayloadStatsFromConnection(CdiEndpointState* endpoint_ptr, bool 
 
     bool payload_late = false;
     if (payload_ok) {
-        if (elapsed_time > max_latency_microsecs) {
+        if (max_latency_microsecs != 0 && elapsed_time > max_latency_microsecs) {
             payload_late = true;
             CDI_LOG_THREAD(kLogWarning,
                            "Connection[%s] Stream[%s] Payload[%lu] was late by[%llu] microseconds. Max[%llu]",

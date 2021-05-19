@@ -4,9 +4,9 @@
  * @section intro_sec Introduction
  *
  * The AWS Cloud Digital Interface (CDI) SDK is the library which implements the low-latency reliable transport
- * of data between EC2 instances within the Amazon network. The SDK takes care of the complex task of ensuring that
- * large amounts of data is seamlessly transferred across the AWS network using complex, multi-path technology to
- * ensure lossless quality without the need for extensive network buffering and delay.
+ * of data between systems in the cloud including AWS Media Services and Amazon EC2 instances. The SDK takes care of
+ * the complex task of ensuring that large amounts of data are seamlessly transferred across the AWS network using
+ * multi-path technology to ensure lossless quality without the need for extensive network buffering and delay.
  *
  * The SDK consists of two main API layers, depending on the desired level of functionality, and a common core layer.
  * The CDI Audio, Video and Metadata (CDI-AVM) layer takes care of transferring multi-stream, modern video signals
@@ -207,10 +207,15 @@
  * @page internal_arch_page Internal Architecture
  * @tableofcontents
  *
- * @section int_arch_overview Internal Architecture Overview
+ * @section int_arch_overview RAW Internal Architecture Overview
  *
- * The diagram shown below provides a overview of the internal architecture.
+ * The diagram shown below provides a overview of the RAW internal architecture.
  * @image html "internal_architecture.jpg"
+ *
+ * @section avm_int_arch AVM Multiple Endpoint Internal Architecture Overview
+ *
+ * The diagram shown below provides a overview of the AVM multiple endpoint internal architecture.
+ * @image html "multi_endpoint_architecture.jpg"
  *
  * @endcond
 */
