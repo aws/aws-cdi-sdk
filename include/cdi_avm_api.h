@@ -257,9 +257,10 @@ CDI_INTERFACE CdiReturnStatus CdiAvmTxCreate(CdiTxConfigData* config_data_ptr, C
  * Create an instance of an AVM transmitter that uses multiple stream endpoints. A stream identifier value is used to
  * uniquely identify each stream. Payloads are transmitted using the CdiAvmEndpointTxPayload() API function, which
  * contains the stream identifier. The value determines which matching endpoint to use to transmit the payload. This API
- * function only creates instance data for the connection. Use the CdiAvmTxCreateStream() and CdiAvmStreamDestroy() API
- * functions to dynamically create and destroy stream endpoints associated with this connection. When the instance is no
- * longer needed, use the CdiCoreConnectionDestroy() API function to free-up resources that are being used by it.
+ * function only creates instance data for the connection. Use the CdiAvmTxStreamEndpointCreate() and
+ * CdiAvmStreamEndpointDestroy() API functions to dynamically create and destroy stream endpoints associated with this
+ * connection. When the instance is no longer needed, use the CdiCoreConnectionDestroy() API function to free-up
+ * resources that are being used by it.
  *
  * NOTE: Newly created data structures that are passed in to this function should be properly initialized before being
  * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
@@ -270,7 +271,7 @@ CDI_INTERFACE CdiReturnStatus CdiAvmTxCreate(CdiTxConfigData* config_data_ptr, C
  *                        its contents are not needed after this function returns. NOTE: Within the structure,
  *                        dest_ip_addr_str and dest_port are only used for generating the name of the connection if one
  *                        was not provided. The IP and port are defined as part of the configuration data passed to
- *                        CdiAvmTxCreateStream(), when creating streams.
+ *                        CdiAvmTxStreamConnectionCreate(), when creating streams.
  * @param tx_cb_ptr Address of the user function to call whenever a payload has been transmitted or a transmit timeout
  *                  error has occurred.
  * @param ret_handle_ptr Pointer to returned connection handle. The handle is used as a parameter to other API functions
@@ -289,7 +290,7 @@ CDI_INTERFACE CdiReturnStatus CdiAvmTxStreamConnectionCreate(CdiTxConfigData* co
  * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
  * before setting the desired members to the actual values required.
  *
- * @param handle Stream connection handle returned by a previous call to CdiAvmTxCreateStreamConnection().
+ * @param handle Stream connection handle returned by a previous call to CdiAvmTxStreamConnectionCreate().
  * @param stream_config_ptr Pointer to stream configuration data. Copies of the data in this structure are made as
  *                          needed.
  * @param ret_handle_ptr Pointer to returned endpoint handle. The handle is used as a parameter to other API functions
@@ -304,7 +305,7 @@ CDI_INTERFACE CdiReturnStatus CdiAvmTxStreamEndpointCreate(CdiConnectionHandle h
 /**
  * Destroy a specific AVM stream endpoint and free resources that were created for it.
  *
- * @param handle Connection handle returned by the CdiAvmTxCreateStream() API function.
+ * @param handle Connection handle returned by the CdiAvmTxStreamEndpointCreate() API function.
  *
  * @return A value from the CdiReturnStatus enumeration.
  */
