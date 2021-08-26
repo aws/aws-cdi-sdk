@@ -67,6 +67,9 @@ typedef enum {
     /// When EFA probe completes, probe state will advance to kProbeStateEfaConnected.
     kProbeStateEfaProbe,
 
+    /// The EFA Rx has received all the probe packets and now the TX is waiting to receive all the probe packet ACKs.
+    kProbeStateEfaTxProbeAcks,
+
     /// The EFA connection is ready for use by the application. We will send an occasional "ping" using to the
     /// remote Rx (server) connection using the control interface to ensure the Rx's connection has not been
     /// reset and to ensure the control interface is working.
@@ -86,21 +89,24 @@ typedef enum {
 
 /**
  * @brief This defines a structure that contains all of the state information for the sending side of a single flow.
- * Its contents are opaque to the calling program.
  */
 typedef struct {
     ProbeState tx_state;      ///< Current Tx probe state.
     /// @brief When in kProbeStateEfaConnectedPing or kProbeStateSendProtocolVersion state, this is the number of
     /// consecutive commands that have been sent without receiving an ack.
     int send_command_retry_count;
+    int packets_acked_count; ///< Number of probe packets that have been acked.
+    int packets_ack_wait_count; ///< Number of times have waited for probe packets ACKs to arrive.
 } TxEndpointProbeState;
 
 /**
- * @brief This defines a structure that contains all of the state information for the sending side of a single flow.
- * Its contents are opaque to the calling program.
+ * @brief This defines a structure that contains all of the state information for the receiving side of a single flow.
  */
 typedef struct {
     ProbeState rx_state;        ///< Current Rx probe state.
+    /// @brief When in kProbeStateIdle or kProbeStateSendReset state, this is the number of consecutive reset commands
+    /// that have been sent without receiving any commands back.
+    int send_reset_retry_count;
     int packets_received_count; ///< Number of probe packets that have been received.
     int pings_received_count;   ///< Number of pings that have been received.
 } RxEndpointProbeState;

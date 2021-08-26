@@ -24,6 +24,9 @@
 /// @brief Enable to debug packet sequences. NOTE: This generates a lot of debug output.
 //#define DEBUG_PACKET_SEQUENCES
 
+/// @brief Enable to debug poll thread sleep time. NOTE: This generates a lot of debug output.
+//#define DEBUG_POLL_THREAD_SLEEP_TIME
+
 /// @brief Enable to debug Tx packet SGL entry pool free item count.
 //#define DEBUG_TX_PACKET_SGL_ENTRY_POOL_FREE_COUNT
 
@@ -189,6 +192,10 @@
 /// @brief Size of control interface transfer buffer size in bytes.
 #define CONTROL_INTERFACE_TX_BUFFER_SIZE_BYTES  (4096)
 
+/// @brief This value is used by the receiver to define how many times a reset command is sent without receiving any
+/// responses before destroying the Rx endpoint.
+#define RX_RESET_COMMAND_MAX_RETRIES             (3)
+
 /// @brief Defines how often a reset command is sent to the remote target using the control interface. The value is in
 /// milliseconds.
 #define SEND_RESET_COMMAND_FREQUENCY_MSEC       (2000)
@@ -220,7 +227,14 @@
 /// @brief Defines the number of EFA interface probe packets that must be successfully transmitted before advancing to
 /// the connected mode.
 #define EFA_PROBE_PACKET_COUNT                  (1000)
-///
+
+/// @brief Defines how long the transmitter should wait for all the probe packet ACKs to be received after the
+/// transmitter has received the kProbeCommandConnected command from the receiver.
+#define EFA_TX_PROBE_ACK_TIMEOUT                (100)
+
+/// @brief Defines how many times to retry EFA_TX_PROBE_ACK_TIMEOUT before going into connection reset mode.
+#define EFA_TX_PROBE_ACK_MAX_RETRIES            (5)
+
 /// @brief Defines how long to wait for the EFA interface probe to complete before changing to connection reset mode.
 /// The value is in milliseconds.
 #define EFA_PROBE_MONITOR_TIMEOUT_MSEC          (3000)
@@ -239,7 +253,7 @@
 //*********************************************************************************************************************
 //********************************************* SETTINGS FOR CLOUDWATCH ***********************************************
 //*********************************************************************************************************************
-
+#ifndef CDI_NO_MONITORING
 /// When defined, publishing metrics to CloudWatch can be enabled through the API. This macro must also be defined to
 /// use the metrics gathering service.
 #define CLOUDWATCH_METRICS_ENABLED
@@ -260,5 +274,6 @@
 
 /// This macro enables sending metrics to the AWS CDI metrics gathering service.
 #define METRICS_GATHERING_SERVICE_ENABLED
+#endif // CDI_NO_MONITORING
 
 #endif // CDI_CONFIGURATION_H__

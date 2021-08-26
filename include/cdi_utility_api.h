@@ -34,10 +34,6 @@
 #define CDI_INVALID_ENUM_VALUE  (-1)
 /// Used to define the maximum length of an audio group enum string.
 #define MAX_AUDIO_GROUP_STR_SIZE (10)
-/// Number of nanoseconds in a second.
-#define NANOSECONDS_PER_SECOND   (1000000000UL)
-/// Deprecated use NANOSECONDS_PER_SECONDS instead.
-#define NANOSECONDS_TO_SECONDS   NANOSECONDS_PER_SECOND
 
 /// @brief Forward structure declaration to create pointer to PTP timestamp.
 typedef struct CdiPtpTimestamp CdiPtpTimestamp;
@@ -48,7 +44,7 @@ typedef struct CdiPtpTimestamp CdiPtpTimestamp;
 typedef struct {
         int enum_value;       ///< Enumerated value.
         const char* name_str; ///< Corresponding string representation.
-} EnumStringKey;
+} CdiEnumStringKey;
 
 /**
  * @brief Enums used to indicate which key-value array a function is to access.
@@ -58,13 +54,13 @@ typedef struct {
 typedef enum {
     kKeyAdapterType,                    ///< Key for CdiAdapterTypeSelection
     kKeyBufferType,                     ///< Key for CdiBufferType
-    kKeyConnectionProtocolType,         ///< Key for ConnectionProtocolType
+    kKeyConnectionProtocolType,         ///< Key for CdiConnectionProtocolType
     kKeyLogMethod,                      ///< Key for CdiLogMethod
     kKeyLogComponent,                   ///< Key for CdiLogComponent
     kKeyLogLevel,                       ///< Key for CdiLogLevel
     kKeyConnectionStatus,               ///< Key for CdiConnectionStatus
     kKeyTestUnit,                       ///< Key for CdiTestUnitName
-} EnumStringKeyTypes;
+} CdiEnumStringKeyType;
 
 /**
  * @brief This enumeration is used in the CdiConnectionState structure to indicate what connection layer is being
@@ -73,7 +69,7 @@ typedef enum {
 typedef enum {
     kProtocolTypeRaw, ///< Raw connection
     kProtocolTypeAvm, ///< Audio, Video and Metadata (AVM) connection
-} ConnectionProtocolType;
+} CdiConnectionProtocolType;
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
@@ -87,11 +83,11 @@ extern "C"
 /**
  * Function used to get a pointer to a key-value array of a type specified by key_type.
  *
- * @param key_type Enum from EnumStringKeyTypes which indicates which key-value array to return.
+ * @param key_type Enum from CdiEnumStringKeyType which indicates which key-value array to return.
  *
  * @return Pointer to returned string. If no match was found, NULL is returned.
  */
-CDI_INTERFACE const EnumStringKey* CdiUtilityKeyGetArray(EnumStringKeyTypes key_type);
+CDI_INTERFACE const CdiEnumStringKey* CdiUtilityKeyGetArray(CdiEnumStringKeyType key_type);
 
 /**
  * Convert an enum value to a string.
@@ -101,7 +97,7 @@ CDI_INTERFACE const EnumStringKey* CdiUtilityKeyGetArray(EnumStringKeyTypes key_
  *
  * @return Pointer to returned string. If no match was found, NULL is returned.
  */
-CDI_INTERFACE const char* CdiUtilityEnumValueToString(const EnumStringKey* key_array, int enum_value);
+CDI_INTERFACE const char* CdiUtilityEnumValueToString(const CdiEnumStringKey* key_array, int enum_value);
 
 /**
  * Convert a string to a matching enum value.
@@ -111,27 +107,27 @@ CDI_INTERFACE const char* CdiUtilityEnumValueToString(const EnumStringKey* key_a
  *
  * @return Returned enumerated value. If no match was found, CDI_INVALID_ENUM_VALUE is returned.
  */
-CDI_INTERFACE int CdiUtilityStringToEnumValue(const EnumStringKey* key_array, const char* name_str);
+CDI_INTERFACE int CdiUtilityStringToEnumValue(const CdiEnumStringKey* key_array, const char* name_str);
 
 /**
  * Function used to convert an enum value to a string.
  *
- * @param key_type Enum from EnumStringKeyTypes which indicates which key-value array to search for enum_value.
+ * @param key_type Enum from CdiEnumStringKeyType which indicates which key-value array to search for enum_value.
  * @param enum_value Value to convert to a string.
  *
  * @return Pointer to returned string. If no match was found, NULL is returned.
  */
-CDI_INTERFACE const char* CdiUtilityKeyEnumToString(EnumStringKeyTypes key_type, int enum_value);
+CDI_INTERFACE const char* CdiUtilityKeyEnumToString(CdiEnumStringKeyType key_type, int enum_value);
 
 /**
  * Function used to convert a string to a matching enum value.
  *
- * @param key_type Enum from EnumStringKeyTypes which indicates which key-value array to search for name_str.
+ * @param key_type Enum from CdiEnumStringKeyType which indicates which key-value array to search for name_str.
  * @param name_str Pointer to string name of enumerated value.
  *
  * @return Returned enumerated value. If no match was found, CDI_INVALID_ENUM_VALUE is returned.
  */
-CDI_INTERFACE int CdiUtilityKeyStringToEnum(EnumStringKeyTypes key_type, const char* name_str);
+CDI_INTERFACE int CdiUtilityKeyStringToEnum(CdiEnumStringKeyType key_type, const char* name_str);
 
 /**
  * @brief Function used to convert a PTP timestamp into an RTP timestamp.

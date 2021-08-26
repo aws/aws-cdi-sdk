@@ -14,7 +14,7 @@
  */
 
 #include <stdbool.h>
-#include <stddef.h>
+#include <stdint.h>
 
 #include "cdi_avm_api.h"
 #include "cdi_baseline_profile_api.h"

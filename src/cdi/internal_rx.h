@@ -42,7 +42,7 @@ typedef struct RxPayloadWorkRequestState* RxPayloadWorkRequestHandle;
  *
  * @return kCdiStatusOk if the connection was successfully created, otherwise a value indicating why it failed.
  */
-CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConfigData* config_data_ptr,
+CdiReturnStatus RxCreateInternal(CdiConnectionProtocolType protocol_type, CdiRxConfigData* config_data_ptr,
                                   CdiCallback rx_cb_ptr, CdiConnectionHandle* ret_handle_ptr);
 
 /// @see CdiCoreConnectionDestroy
@@ -92,7 +92,7 @@ void RxSendPayload(CdiEndpointState* endpoint_ptr, RxPayloadState* send_payload_
 void RxFreePayloadResources(CdiEndpointState* endpoint_ptr, RxPayloadState* payload_state_ptr, bool free_memory_state);
 
 /**
- * Invoke the user registered Tx callback function for a payload.
+ * Invoke the user registered Rx callback function for a payload.
  *
  * @param con_state_ptr Pointer to connection state data.
  * @param app_cb_data_ptr Pointer to application callback data.

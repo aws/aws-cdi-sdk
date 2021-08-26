@@ -30,7 +30,12 @@
 #endif  // METRICS_GATHERING_SERVICE_ENABLED
 
 #include "cdi_logger_api.h"
+#include <regex>
+
 #undef GetMessage                   // workaround for AWSError method GetMessage()
+
+/// @brief Filter out the following string from ERROR status, convert to WARNING status.
+#define AWS_CREDENTIAL_ERROR_STRING "Failed to find credential process's profile: default"
 
 using namespace Aws::CloudWatch::Model;
 
@@ -141,7 +146,7 @@ public:
      *
      * @param config_ptr Pointer to configuration data.
      */
-    UserMetrics(const CloudWatchConfigData* config_ptr);
+    UserMetrics(const CdiCloudWatchConfigData* config_ptr);
 
     /**
      * Send the specified set of statistics to CloudWatch.
@@ -293,11 +298,17 @@ void CdiCloudWatchLogging::ProcessFormattedStatement(Aws::String&& statement)
     Aws::String str(statement);
     str.erase(std::remove(str.begin(), str.end(), '\n'), str.end());
     str.erase(std::remove(str.begin(), str.end(), '\r'), str.end());
+
+    // Filter AWS SDK "ERROR" message for failing credentials, convert to "WARNING".
+    std::size_t found = str.find(AWS_CREDENTIAL_ERROR_STRING);
+    if (found != Aws::String::npos)
+        str = std::regex_replace(str, std::regex("\\[ERROR\\]"), "[WARNING]");
+
     // Write to the CDI logger, but add a prefix to identify this message as being from AWS SDK.
     CDI_LOG_THREAD(kLogInfo, "AWS-SDK: [%s].", str.c_str());
 }
 
-UserMetrics::UserMetrics(const CloudWatchConfigData* config_ptr) :
+UserMetrics::UserMetrics(const CdiCloudWatchConfigData* config_ptr) :
     m_namespace_str(config_ptr->namespace_str),
     m_dimension_domain_str(config_ptr->dimension_domain_str)
 {
@@ -621,7 +632,7 @@ CdiReturnStatus MetricsGatherer::Send(const CloudWatchTransferStats* stats_ptr)
 //****************************************** START OF PUBLIC C FUNCTIONS **********************************************
 //*********************************************************************************************************************
 
-CdiReturnStatus CloudWatchSdkMetricsCreate(const CloudWatchConfigData* config_ptr,
+CdiReturnStatus CloudWatchSdkMetricsCreate(const CdiCloudWatchConfigData* config_ptr,
                                            CloudWatchSdkMetricsHandle* ret_handle_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;

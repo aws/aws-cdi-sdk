@@ -33,7 +33,7 @@ typedef struct CdiLogState CdiLogState;
 
 #define MAX_LOG_TIME_STRING_LENGTH             (64) ///< Maximum length of log time string.
 #define MAX_LOG_FILENAME_LENGTH                (1024) ///< Maximum length of log filename string.
-#define MULTILINE_LOG_MESSAGE_BUFFER_GROW_SIZE (20*MAX_LOG_STRING_LENGTH) ///< Maximum grow length of log buffer.
+#define MULTILINE_LOG_MESSAGE_BUFFER_GROW_SIZE (20*CDI_MAX_LOG_STRING_LENGTH) ///< Maximum grow length of log buffer.
 //
 /// @brief Forward declaration to create pointer to logger state when used.
 typedef struct CdiLoggerState CdiLoggerState;
@@ -102,7 +102,7 @@ struct CdiLogState {
 /**
  * @brief Structure used to hold a buffer for a multiline log message.
  */
-struct MultilineLogBufferState {
+struct CdiMultilineLogBufferState {
     CdiSinglyLinkedListEntry list_entry; ///< Used so this object can be stored in a list.
     char* buffer_ptr;                    ///< Pointer to log buffer.
     int buffer_size;                     ///< Size of log buffer.
@@ -132,7 +132,7 @@ static CdiThreadData log_thread_data = 0;       ///< Data used to hold pointer t
 /// Lock used to protect multi-thread access to multiline_free_list.
 static CdiCsID multiline_free_list_lock = NULL;
 
-/// List of pointers to multiline free log line structures (MultilineLogBufferState).
+/// List of pointers to multiline free log line structures (CdiMultilineLogBufferState).
 static CdiSinglyLinkedList multiline_free_list = { 0 };
 
 /// Array of global, default component state data.
@@ -179,7 +179,7 @@ static CdiLogHandle GetLogHandleToUse(CdiLogHandle handle)
  *
  * @return bool True if successfully grew buffer, otherwise false.
  */
-static bool LogBufferGrow(MultilineLogBufferState* state_ptr)
+static bool LogBufferGrow(CdiMultilineLogBufferState* state_ptr)
 {
     bool ret = true;
 
@@ -215,17 +215,17 @@ static bool LogBufferGrow(MultilineLogBufferState* state_ptr)
 /**
  * Get a log buffer from the dynamic pool.
  *
- * @return MultilineLogBufferState* Pointer to returned log buffer. If NULL, unable to allocate memory.
+ * @return CdiMultilineLogBufferState* Pointer to returned log buffer. If NULL, unable to allocate memory.
  */
-static MultilineLogBufferState* LogBufferGet(void)
+static CdiMultilineLogBufferState* LogBufferGet(void)
 {
     CdiOsCritSectionReserve(multiline_free_list_lock); // Lock access to multiline_free_list
-    MultilineLogBufferState* state_ptr = (MultilineLogBufferState*)CdiSinglyLinkedListPopHead(&multiline_free_list);
+    CdiMultilineLogBufferState* state_ptr = (CdiMultilineLogBufferState*)CdiSinglyLinkedListPopHead(&multiline_free_list);
     CdiOsCritSectionRelease(multiline_free_list_lock); // Unlock access to multiline_free_list
 
     if (state_ptr == NULL) {
         // Grow the list.
-        state_ptr = (MultilineLogBufferState*)CdiOsMemAllocZero(sizeof(MultilineLogBufferState));
+        state_ptr = (CdiMultilineLogBufferState*)CdiOsMemAllocZero(sizeof(CdiMultilineLogBufferState));
         if (NULL == state_ptr) {
             // To prevent recursive logging, using stdout here.
             CDI_LOG_HANDLE(stdout_log_handle, kLogError, "Failed to allocate memory for a new multiline log buffer.");
@@ -250,7 +250,7 @@ static MultilineLogBufferState* LogBufferGet(void)
  *
  * @param log_buffer_ptr Pointer to log buffer to return to pool.
  */
-static void LogBufferPut(MultilineLogBufferState* log_buffer_ptr)
+static void LogBufferPut(CdiMultilineLogBufferState* log_buffer_ptr)
 {
     CdiOsCritSectionReserve(multiline_free_list_lock); // Lock access to multiline_free_list
     CdiSinglyLinkedListPushHead(&multiline_free_list, &log_buffer_ptr->list_entry);
@@ -555,7 +555,7 @@ static int LogToBuffer(CdiLogHandle handle, const char* function_name_str, int l
 
     if (kLogMethodCallback == handle->log_method) {
         // Using callback log. Format the log message string before invoking the user-registered callback.
-        char_count = vsnprintf(dest_log_msg_buffer_str, MAX_LOG_STRING_LENGTH, format_str, vars);
+        char_count = vsnprintf(dest_log_msg_buffer_str, CDI_MAX_LOG_STRING_LENGTH, format_str, vars);
         // Return value is negative if there was a formatting error.
         if (char_count < 0) {
             char_count = 0;
@@ -563,7 +563,7 @@ static int LogToBuffer(CdiLogHandle handle, const char* function_name_str, int l
     } else {
         // Using file log or stdout. Add function name and source line if the function name exists.
         if (function_name_str) {
-            char_count = snprintf(dest_log_msg_buffer_str, MAX_LOG_STRING_LENGTH, "[%s:%d] ", function_name_str,
+            char_count = snprintf(dest_log_msg_buffer_str, CDI_MAX_LOG_STRING_LENGTH, "[%s:%d] ", function_name_str,
                                   line_number);
             // Return value is negative if there was a formatting error.
             if (char_count < 0) {
@@ -572,8 +572,8 @@ static int LogToBuffer(CdiLogHandle handle, const char* function_name_str, int l
         }
 
         // Add formatted string to log message string.
-        int vs_count = vsnprintf(dest_log_msg_buffer_str + char_count, MAX_LOG_STRING_LENGTH - char_count, format_str,
-                                     vars);
+        int vs_count = vsnprintf(dest_log_msg_buffer_str + char_count,
+                                 CDI_MAX_LOG_STRING_LENGTH - char_count, format_str, vars);
         // Return value is negative if there was a formatting error.
         if (vs_count > 0) {
             char_count += vs_count;
@@ -623,7 +623,7 @@ static void WriteLineToLog(CdiLogHandle handle, CdiLogLevel log_level, bool mult
         file_handle = handle->file_data_ptr->file_handle;
     }
 
-    char final_log_str[MAX_LOG_STRING_LENGTH];
+    char final_log_str[CDI_MAX_LOG_STRING_LENGTH];
     int char_count = WriteLineToBuffer(final_log_str, sizeof(final_log_str), log_level, multiline, log_str);
 
     OutputToFileHandle(file_handle, log_level, final_log_str, char_count - 1); // -1 excludes terminating '\0'
@@ -863,7 +863,7 @@ void CdiLogger(CdiLogHandle handle, CdiLogComponent component, CdiLogLevel log_l
 
     // Check if logging is enabled.
     if (CdiLoggerIsEnabled(handle, component, log_level)) {
-        char log_message_str[MAX_LOG_STRING_LENGTH];
+        char log_message_str[CDI_MAX_LOG_STRING_LENGTH];
         va_list vars;
         va_start(vars, format_str);
         LogToBuffer(handle, function_name_str, line_number, format_str, vars, log_message_str);
@@ -892,7 +892,7 @@ void CdiLoggerMultilineBegin(CdiLogHandle handle, CdiLogComponent component, Cdi
         state_ptr->component = component;
         state_ptr->log_level = log_level;
 
-        CdiOsStrCpy(state_ptr->function_name_str, MAX_LOG_FUNCTION_NAME_STRING_LENGTH, function_name_str);
+        CdiOsStrCpy(state_ptr->function_name_str, CDI_MAX_LOG_FUNCTION_NAME_STRING_LENGTH, function_name_str);
         state_ptr->line_number = line_number;
         state_ptr->buffer_state_ptr = LogBufferGet();
     }
@@ -904,7 +904,7 @@ void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str,
     if (state_ptr->logging_enabled) {
         // Ensure we have enough space to add another log message.
         if (state_ptr->buffer_state_ptr->buffer_size - state_ptr->buffer_state_ptr->current_write_index <
-            MAX_LOG_STRING_LENGTH) {
+            CDI_MAX_LOG_STRING_LENGTH) {
             if (!LogBufferGrow(state_ptr->buffer_state_ptr)) {
                 return; // Error is logged in LogBufferGrow().
             }
@@ -923,7 +923,7 @@ void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str,
             char_count++;
         } else {
             // For file or stdout log.
-            char log_message_str[MAX_LOG_STRING_LENGTH];
+            char log_message_str[CDI_MAX_LOG_STRING_LENGTH];
 
             if (0 == state_ptr->line_count) {
                 // For first line, optionally generate function name and source code line number information.
@@ -932,13 +932,13 @@ void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str,
 
                 // Then, format the line with a timestamp and log level string, writing it to the multiline buffer.
                 // This will add a trailing linefeed. We don't want to include the trailing '\0' (so -1 on count).
-                char_count = WriteLineToBuffer(dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level, false,
+                char_count = WriteLineToBuffer(dest_buffer_str, CDI_MAX_LOG_STRING_LENGTH, state_ptr->log_level, false,
                                                log_message_str) - 1;
             } else {
                 // Not first line. Don't generate function name, source code line number or timestamp. This will add a
                 // trailing linefeed. We don't want to include the trailing '\0' (so -1 on count).
-                vsnprintf(log_message_str, MAX_LOG_STRING_LENGTH, format_str, vars);
-                char_count = WriteLineToBuffer(dest_buffer_str, MAX_LOG_STRING_LENGTH, state_ptr->log_level, true,
+                vsnprintf(log_message_str, CDI_MAX_LOG_STRING_LENGTH, format_str, vars);
+                char_count = WriteLineToBuffer(dest_buffer_str, CDI_MAX_LOG_STRING_LENGTH, state_ptr->log_level, true,
                                                log_message_str) - 1;
             }
         }
@@ -1278,8 +1278,8 @@ void CdiLoggerShutdown(bool force)
         multiline_free_list_lock = NULL;
 
         // Free memory of multiline log buffers.
-        MultilineLogBufferState* state_ptr = NULL;
-        while (NULL != (state_ptr = (MultilineLogBufferState*)CdiSinglyLinkedListPopHead(&multiline_free_list))) {
+        CdiMultilineLogBufferState* state_ptr = NULL;
+        while (NULL != (state_ptr = (CdiMultilineLogBufferState*)CdiSinglyLinkedListPopHead(&multiline_free_list))) {
             CdiOsMemFree(state_ptr);
         }
 

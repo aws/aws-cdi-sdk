@@ -15,6 +15,7 @@
 // headers.
 
 #include "test_control.h"
+#include "curses.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -22,6 +23,7 @@
 
 #include "cdi_logger_api.h"
 #include "cdi_test.h"
+#include "curses.h"
 #include "run_test.h"
 #include "test_console.h"
 #include "utilities_api.h"
@@ -164,7 +166,24 @@ bool TestWaitForConnection(TestConnectionInfo* connection_info_ptr, int timeout_
                                       connection_info_ptr->config_data.tx.connection_name_str :
                                       connection_info_ptr->config_data.rx.connection_name_str;
     if (ret) {
-        TEST_LOG_CONNECTION(kLogInfo, "Connection[%s] established.", connection_name_str);
+        if (GetGlobalTestSettings()->all_connected_signal) {
+            int num_connections = CdiOsAtomicInc32(&GetGlobalTestSettings()->num_connections_established);
+            if (num_connections >= GetGlobalTestSettings()->total_num_connections) {
+                // All connections have been established, so ok to continue on with test.
+                TEST_LOG_CONNECTION(kLogInfo, "Final connection[%s] established. Starting transfer...",
+                                    connection_name_str, GetGlobalTestSettings()->total_num_connections);
+                CdiOsSignalSet(GetGlobalTestSettings()->all_connected_signal);
+            } else {
+                // Wait for all connections to be established.
+                TEST_LOG_CONNECTION(kLogInfo, "Connection[%s] established. Waiting for [%d] other connections.",
+                                    connection_name_str,
+                                    GetGlobalTestSettings()->total_num_connections - num_connections);
+                signal_array[0] = GetGlobalTestSettings()->all_connected_signal;
+                CdiOsSignalsWait(signal_array, 2, false, time_to_wait_ms, NULL);
+            }
+        } else {
+            TEST_LOG_CONNECTION(kLogInfo, "Connection[%s] established.", connection_name_str);
+        }
     } else {
         TEST_LOG_CONNECTION(kLogError, "Unable to establish connection[%s] within timeout period.", connection_name_str);
     }
@@ -207,6 +226,7 @@ void TestStatisticsCallback(const CdiCoreStatsCbData* cb_data_ptr)
 {
     TestConnectionInfo* connection_info_ptr = cb_data_ptr->stats_user_cb_param;
 
+    connection_info_ptr->total_poll_thread_load = 0;
     for (int i = 0; i < cb_data_ptr->stats_count; i++) {
         CdiTransferStats* transfer_stats_ptr = &cb_data_ptr->transfer_stats_array[i];
         const CdiPayloadCounterStats* counter_stats_ptr = &transfer_stats_ptr->payload_counter_stats;
@@ -223,10 +243,16 @@ void TestStatisticsCallback(const CdiCoreStatsCbData* cb_data_ptr)
             connection_info_ptr->transfer_time_max_overall = interval_stats_ptr->transfer_time_max;
         }
 
+        connection_info_ptr->total_poll_thread_load += endpoint_stats_ptr->poll_thread_load;
+        int total_load = 0;
+        for (int i = 0; i < GetGlobalTestSettings()->total_num_connections; i++) {
+            total_load += GetGlobalTestSettings()->connection_info_array[i].total_poll_thread_load;
+        }
+
         // NOTE: Could choose not to update stats if currently not connected (use
         // connection_info_ptr->connection_status).
         TestConsoleStats(0, connection_num+STATS_WINDOW_STATIC_HEIGHT-1, A_NORMAL,
-                        "|%8u |%7u |%5u |%6lu |%6lu |%6lu |%6lu |%6lu |%6lu |%6lu |%6u |  %3u |    %4u    |  %4u   |",
+                        "|%8u |%7u |%5u |%6lu |%6lu |%6lu |%6lu |%6lu |%6lu |%6lu |%6u | %3u(%2u) | %4u  |  %4u   |",
                         counter_stats_ptr->num_payloads_transferred,
                         counter_stats_ptr->num_payloads_dropped,
                         counter_stats_ptr->num_payloads_late,
@@ -238,7 +264,7 @@ void TestStatisticsCallback(const CdiCoreStatsCbData* cb_data_ptr)
                         interval_stats_ptr->transfer_time_P99,
                         interval_stats_ptr->transfer_time_max,
                         interval_stats_ptr->transfer_count,
-                        endpoint_stats_ptr->poll_thread_load / 100,
+                        endpoint_stats_ptr->poll_thread_load / 100, total_load / 100,
                         endpoint_stats_ptr->dropped_connection_count,
                         endpoint_stats_ptr->probe_command_retry_count);
 
@@ -485,13 +511,13 @@ bool TestCreateConnectionLogFiles(TestConnectionInfo* connection_info_ptr, CdiLo
     const char* config_data_connection_name_str = connection_info_ptr->test_settings_ptr->tx ?
                                             connection_info_ptr->config_data.tx.connection_name_str :
                                             connection_info_ptr->config_data.rx.connection_name_str;
-    char connection_name_str[MAX_CONNECTION_NAME_STRING_LENGTH] = {0};
+    char connection_name_str[CDI_MAX_CONNECTION_NAME_STRING_LENGTH] = {0};
 
     // If the user did not supply a connection name, create a connection name using the index number.
     if ((NULL == config_data_connection_name_str) || (0 == strlen(config_data_connection_name_str))) {
-        snprintf(connection_name_str, MAX_CONNECTION_NAME_STRING_LENGTH, "%d", connection_info_ptr->my_index);
+        snprintf(connection_name_str, CDI_MAX_CONNECTION_NAME_STRING_LENGTH, "%d", connection_info_ptr->my_index);
     } else {
-        CdiOsStrCpy(connection_name_str, MAX_CONNECTION_NAME_STRING_LENGTH, config_data_connection_name_str);
+        CdiOsStrCpy(connection_name_str, CDI_MAX_CONNECTION_NAME_STRING_LENGTH, config_data_connection_name_str);
     }
 
     // If no log filename, then skip all this.
@@ -599,8 +625,8 @@ CdiPtpTimestamp GetPtpTimestamp(const TestConnectionInfo* connection_info_ptr,
     duration_ns += stream_info_ptr->connection_start_time.nanoseconds;
 
     CdiPtpTimestamp timestamp = {
-        .seconds = stream_info_ptr->connection_start_time.seconds + duration_ns / NANOSECONDS_PER_SECOND,
-        .nanoseconds = duration_ns % NANOSECONDS_PER_SECOND
+        .seconds = stream_info_ptr->connection_start_time.seconds + duration_ns / CDI_NANOSECONDS_PER_SECOND,
+        .nanoseconds = duration_ns % CDI_NANOSECONDS_PER_SECOND
     };
 
     return timestamp;

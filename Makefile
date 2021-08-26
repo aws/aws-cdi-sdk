@@ -8,9 +8,13 @@ top.sdk := $(abspath $(CURDIR)/)
 top.build := $(top.sdk)/build
 
 ### The AWS SDK is a required dependency of the CDI SDK by default for the metrics gathering service and for publishing
-### metrics to CloudWatch. If the #defines of both CLOUDWATCH_METRICS_ENABLED and METRICS_GATHERING_SERVICE_ENABLED are
-### commented out in src/cdi/configuration.h, this requirement can be removed by commenting out the following line.
-require_aws_sdk := yes
+### metrics to CloudWatch. This requirement can be removed by building with NO_MONITORING=y (not recommended).
+ifeq ($(NO_MONITORING),)
+    require_aws_sdk := yes
+else
+    require_aws_sdk := no
+endif
+require_aws_sdk_build := $(require_aws_sdk)
 
 #-----------------------------------------------------------------------------
 # Get product name and version information from text file.
@@ -29,11 +33,18 @@ product_major_version := $(word 3,$(name_and_version_string))
 product_minor_version := $(word 4,$(name_and_version_string))
 product_version_name := "$(product_version)_$(product_major_version)_$(product_minor_version)"
 
+libcdisdk_version_string := $(shell head libcdisdk.vers -n 1 | cut -d' ' -f 1)
+expected_libcdisdk_version_string := VERS_$(product_version).$(product_major_version)
+
+ifneq ($(libcdisdk_version_string),$(expected_libcdisdk_version_string))
+    $(error Release version in libcdisdk.vers does not match code)
+endif
+
 # Enable, if desired to see console output.
 # $(info Name=$(product_name))
-# $(info Version=$(product_version))
-# $(info Major=$(product_major_version))
-# $(info Minor=$(product_minor_version))
+#$(info Version=$(product_version))
+#$(info Major=$(product_major_version))
+#$(info Minor=$(product_minor_version))
 
 # top level directories for library and test program
 top.src := $(top.sdk)/src
@@ -53,7 +64,7 @@ include_dir.common := $(top.common)/include
 ## optional sanitizer settings
 cc_major_version := $(shell $(CC) -dumpversion | cut -c1)
 sanitize_styles.4 := -fsanitize=address
-sanitize_styles.7 := -fsanitize=address -fsanitize=leak -fsanitize=bounds-strict -fstack-check
+sanitize_styles.7 := -fsanitize=address -fsanitize=leak -fsanitize=bounds-strict -fstack-check -fno-omit-frame-pointer
 sanitize_opts := $(if $(filter y%,$(SANITIZE)),$(sanitize_styles.$(cc_major_version)))
 # SANITIZE=y implies DEBUG=y
 ifneq ($(sanitize_opts),)
@@ -71,9 +82,11 @@ endif
 ifeq ($(DEBUG), y)
     config := debug
     config_libfabric := debug
+    config_aws_sdk := Debug
 else
     config := release
     config_libfabric := release
+    config_aws_sdk := Release
 endif
 
 ## outputs from compilation process
@@ -113,9 +126,15 @@ top.cdi := $(top.src)/cdi
 # all of the directories with C source files in them
 src_dir.cdi := $(top.cdi)
 src_dir.common := $(top.common)/src
+src_dir.test := $(top.src)/test
 src_dir.test_common := $(top.test_common)/src
 src_dir.test_minimal := $(top.test_minimal)
 src_dir.test_unit := $(top.test_unit)
+ifeq ($(require_aws_sdk),yes)
+src_extensions := c cpp
+else
+src_extensions := c
+endif
 
 # directories with header files
 include_dir.cdi := $(top.cdi)
@@ -123,7 +142,7 @@ include_dirs.cdi := $(foreach dir,sdk cdi common,$(include_dir.$(dir)))
 include_dirs.libfabric := $(top.libfabric)/include $(build_dir.libfabric)
 
 # generate various lists for building SDK library
-srcs.cdi := $(foreach ext,c cpp,$(wildcard $(src_dir.cdi)/*.$(ext)))
+srcs.cdi := $(foreach ext,$(src_extensions),$(wildcard $(src_dir.cdi)/*.$(ext)))
 srcs.cdi += queue.c fifo.c list.c logger.c os_linux.c pool.c
 objs.cdi := $(addprefix $(build_dir.obj)/,$(patsubst %.cpp,%.o,$(patsubst %.c,%.o,$(notdir $(srcs.cdi)))))
 headers.cdi := $(foreach dir,$(include_dirs.cdi),$(wildcard $(dir)/*.h))
@@ -131,14 +150,13 @@ include_opts.cdi := $(foreach proj,cdi libfabric,$(addprefix -I,$(include_dirs.$
 depends.cdi := $(patsubst %.o,%.d,$(objs.cdi))
 
 # the end goal of building the SDK library
-libsdk := $(build_dir.lib)/libcdisdk.so.2.0
+libsdk := $(build_dir.lib)/libcdisdk.so.$(product_version).$(product_major_version)
 
 # the end goal of building the libfabric shared library
 libfabric := $(build_dir.lib)/libfabric.so.1
 
 ## test program definitions
 # test specific source files are all in one directory
-src_dir.test := $(top.src)/test
 include_dir.test := $(src_dir.test)
 include_dir.test_common := $(top.test_common)/include
 include_dirs.test := $(foreach dir,sdk test common test_common,$(include_dir.$(dir)))
@@ -160,7 +178,7 @@ headers.test_unit := $(foreach dir,$(include_dirs.test_unit),$(wildcard $(dir)/*
 depends.test_unit := $(patsubst %.o,%.d,$(objs.test_unit))
 
 # the end goal of building cdi_test_unit program
-test_program_unit := $(build_dir.bin)/cdi_test_unit
+test_unit_program := $(build_dir.bin)/cdi_test_unit
 
 # generate lists for building cdi_test_min_tx programs
 srcs.test_min_tx := $(src_dir.test_minimal)/test_minimal_transmitter.c $(wildcard $(src_dir.test_common)/*.c)
@@ -169,7 +187,7 @@ headers.test_min_tx := $(foreach dir,$(include_dirs.test_min_tx),$(wildcard $(di
 depends.test_min_tx := $(patsubst %.o,%.d,$(objs.test_min_tx))
 
 # the end goal of building cdi_test_min_tx program
-test_program_min_tx := $(build_dir.bin)/cdi_test_min_tx
+test_min_tx_program := $(build_dir.bin)/cdi_test_min_tx
 
 # generate lists for building cdi_test_min_rx program
 srcs.test_min_rx := $(src_dir.test_minimal)/test_minimal_receiver.c $(wildcard $(src_dir.test_common)/*.c)
@@ -178,7 +196,7 @@ headers.test_min_rx := $(foreach dir,$(include_dirs.test_min_rx),$(wildcard $(di
 depends.test_min_rx := $(patsubst %.o,%.d,$(objs.test_min_rx))
 
 # the end goal of building cdi_test_min_rx program
-test_program_min_rx := $(build_dir.bin)/cdi_test_min_rx
+test_min_rx_program := $(build_dir.bin)/cdi_test_min_rx
 
 # all of the header files, used only for "headers" target
 headers.all := $(foreach dir,cdi test test_common test_min_tx test_min_rx test_unit,$(headers.$(dir)))
@@ -196,15 +214,19 @@ else
     COMMON_COMPILER_FLAG_ADDITIONS += -O3 -DNDEBUG
 endif
 
+ifneq ($(NO_MONITORING),)
+    COMMON_COMPILER_FLAG_ADDITIONS += -DCDI_NO_MONITORING
+endif
+
 CFLAGS += $(COMMON_COMPILER_FLAG_ADDITIONS) --std=c99
 CXXFLAGS += $(COMMON_COMPILER_FLAG_ADDITIONS) --std=c++11
 
 # additional flags to pass to the linker to create cdi_test* programs
 # The only libraries needed here are those that present new dependencies beyond what libcdisdk.so already requires.
-# An rpath is specified so cdi_test can find libcdisdk.so.2 in the same directory as cdi_test or in a sibling directory
+# An rpath is specified so cdi_test can find libcdisdk.so.x in the same directory as cdi_test or in a sibling directory
 # named lib.
-CDI_LDFLAGS = $(LDFLAGS) -L$(build_dir.lib) -lcdisdk -lfabric $(EXTRA_LD_LIBS) -lncurses -lm $(aws_sdk_library_flags) \
-	   -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib
+CDI_LDFLAGS = $(LDFLAGS) -L$(build_dir.lib) -lcdisdk -lfabric $(EXTRA_LD_LIBS) -lm $(aws_sdk_library_flags)
+CDI_TEST_LDFLAGS = -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib -lncurses -ltinfo
 
 # docs go into the build directory but are not specific to release/debug
 build_dir.doc := $(top.build)/documentation
@@ -220,6 +242,17 @@ ifneq ($(strip $(V)), 0)
     test_logging := --show-job-log
 endif
 
+# Determine CMake executable
+ifneq ($(shell command -v cmake3),)
+    CMAKE := $(shell command -v cmake3)
+else
+    CMAKE := $(shell command -v cmake)
+endif
+
+ifeq ($(CMAKE),)
+    $(error CMake not found. See INSTALL instructions.)
+endif
+
 # default build target
 .PHONY : all
 all : libfabric libsdk test docs docs_api $(EXTRA_ALL_TARGETS)
@@ -230,7 +263,7 @@ lib : libfabric libsdk
 
 # Ensure that the location of the AWS SDK source code tree was specified unless explicitly opted out. Define and augment
 # some variables needed for building and linking to the AWS SDK.
-ifeq ($(require_aws_sdk),yes)
+ifeq ($(require_aws_sdk_build),yes)
     ifneq ($(real_build_goals),)
         ifeq ($(AWS_SDK),)
             $(error AWS_SDK must be specified.)
@@ -240,18 +273,19 @@ ifeq ($(require_aws_sdk),yes)
                 $(error AWS_SDK does not point to the root of the AWS SDK.)
             else
                 libaws := $(foreach component,monitoring core cdi,$(build_dir.lib64)/libaws-cpp-sdk-$(component).so)
-
+                aws_sdk_library_flags = -L$(build_dir.lib) -L$(build_dir.lib)64
                 # add necessary flags for compiler and linker
                 CXXFLAGS += -I$(build_dir)/include
-                CDI_LDFLAGS += -laws-checksums -laws-c-event-stream
-
-                aws_sdk_library_flags = -L$(build_dir.lib) -L$(build_dir.lib)64 -laws-cpp-sdk-cdi -laws-cpp-sdk-core \
-                                        -laws-cpp-sdk-monitoring -lstdc++
                 aws_h := $(build_dir)/include/aws/core/Aws.h
                 cdi_sdk_src := $(AWS_SDK_ABS)/aws-cpp-sdk-cdi
             endif
         endif
     endif
+endif
+
+ifeq ($(require_aws_sdk),yes)
+    CDI_LDFLAGS += -laws-checksums -laws-c-event-stream
+    aws_sdk_library_flags += -laws-cpp-sdk-cdi -laws-cpp-sdk-core -laws-cpp-sdk-monitoring -lstdc++
 endif
 
 .PHONY : help
@@ -281,7 +315,9 @@ help ::
 # NOTE: the vpath function does not support ambiguity of files with the same name in different directories. Therefore
 # all .c files used in this project MUST have unique names.
 vpath %.c $(foreach proj,cdi common test test_common test_minimal test_unit,$(src_dir.$(proj)))
+ifeq ($(require_aws_sdk),yes)
 vpath %.cpp $(src_dir.cdi)
+endif
 
 # rule to create the various build output directories
 $(foreach d,obj lib bin doc packages libfabric results image libaws,$(build_dir.$(d))) :
@@ -321,11 +357,15 @@ $(libfabric) : $(libfabric_config_h) | $(build_dir.lib)
 # rule to create the SDK library file
 .PHONY : libsdk
 libsdk : $(libsdk)
+ifeq ($(require_aws_sdk),yes)
 $(libsdk) : $(libfabric_config_h) $(objs.cdi) $(libfabric) $(libaws) | $(build_dir.lib)
+else
+$(libsdk) : $(libfabric_config_h) $(objs.cdi) $(libfabric) | $(build_dir.lib)
+endif
 	@echo "GCC version is" $(GCCVERSION)
 	$(Q)$(CC) -shared -o $@ -Wl,-z,defs,-soname=$(basename $(notdir $@)),--version-script,libcdisdk.vers \
 		$(objs.cdi) -L$(build_dir.lib) $(aws_sdk_library_flags) \
-		-lfabric -ldl -lrt $(EXTRA_CC_LIBS) -lnl-3 -lm $(EXTRA_LD_LIBS) -lpthread -lc \
+		-lfabric -ldl -lrt $(EXTRA_CC_LIBS) -lm $(EXTRA_LD_LIBS) -lpthread -lc \
 		$(ASAN_LIBS) -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib
 	$(Q)ln -fs $@ $(basename $@)
 	$(Q)ln -fs $@ $(basename $(basename $@))
@@ -339,7 +379,7 @@ endif
 # rule to build the AWS SDK
 $(aws_h) $(libaws) : $(cdi_sdk_src) | $(build_dir.libaws)
 	$(Q)cd $(build_dir.libaws) \
-	    && cmake -j $$(nproc) -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_ONLY="monitoring;cdi" \
+	    && $(CMAKE) -j $$(nproc) -DCMAKE_BUILD_TYPE=$(config_aws_sdk) -DBUILD_ONLY="monitoring;cdi" \
 	           -DCMAKE_INSTALL_PREFIX=$(build_dir) $(AWS_SDK_ABS) \
                -DCMAKE_VERBOSE_MAKEFILE=TRUE \
 	           -DAUTORUN_UNIT_TESTS=FALSE \
@@ -350,9 +390,6 @@ ifneq ($(aws_h),)
 		$(Q)touch $(aws_h)
 endif
 
-# Define a dependency to cause the AWS SDK to get built prior to trying to compile cw_metrics.cpp.
-$(build_dir.obj)/cloudwatch_sdk_metrics.o : $(aws_h)
-
 # rule to build a .d file from a .c file; relies on vpath to find the source file
 $(build_dir.obj)/%.d : %.c | $(build_dir.obj)
 	$(Q)$(CC) $(CFLAGS) -MM -MF $@ -MT $(patsubst %.d,%.o,$@) $<
@@ -361,6 +398,10 @@ $(build_dir.obj)/%.d : %.c | $(build_dir.obj)
 $(build_dir.obj)/%.o : %.c | $(build_dir.obj)
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
+ifeq ($(require_aws_sdk),yes)
+# Define a dependency to cause the AWS SDK to get built prior to trying to compile cw_metrics.cpp.
+$(build_dir.obj)/cloudwatch_sdk_metrics.o : $(aws_h)
+
 # rule to build a .d file from a .c file; relies on vpath to find the source file
 $(build_dir.obj)/%.d : %.cpp | $(build_dir.obj)
 	$(Q)$(CXX) $(CXXFLAGS) -MM -MF $@ -MT $(patsubst %.d,%.o,$@) $<
@@ -368,25 +409,26 @@ $(build_dir.obj)/%.d : %.cpp | $(build_dir.obj)
 # rule to build a .o file from a .c file; relies on vpath to find the source file
 $(build_dir.obj)/%.o : %.cpp | $(build_dir.obj)
 	$(Q)$(CXX) $(CXXFLAGS) -c -o $@ $<
+endif
 
 # rules for building the test programs
 .PHONY : test
-test : $(test_program) $(test_program_min_tx) $(test_program_min_rx) $(test_program_unit)
+test : $(test_program) $(test_min_tx_program) $(test_min_rx_program) $(test_unit_program)
 $(test_program) : $(objs.test) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
-	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test) $(CDI_LDFLAGS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test) $(CDI_LDFLAGS) $(CDI_TEST_LDFLAGS)
 
-$(test_program_min_tx) : $(objs.test_min_tx) $(libsdk) | $(build_dir.bin)
+$(test_min_tx_program) : $(objs.test_min_tx) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
-	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_min_tx) $(CDI_LDFLAGS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_min_tx) $(CDI_LDFLAGS) $(CDI_TEST_LDFLAGS)
 
-$(test_program_min_rx) : $(objs.test_min_rx) $(libsdk) | $(build_dir.bin)
+$(test_min_rx_program) : $(objs.test_min_rx) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
-	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_min_rx) $(CDI_LDFLAGS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_min_rx) $(CDI_LDFLAGS) $(CDI_TEST_LDFLAGS)
 
-$(test_program_unit) : $(objs.test_unit) $(libsdk) | $(build_dir.bin)
+$(test_unit_program) : $(objs.test_unit) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
-	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_unit) $(CDI_LDFLAGS)
+	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_unit) $(CDI_LDFLAGS) $(CDI_TEST_LDFLAGS)
 
 # how to build the docs
 docs_dir.docs := $(build_dir.doc)/all
@@ -429,10 +471,11 @@ headers : $(headers.cdi)
 # Clean removes the build directory tree. Cleanall also invokes "make clean" in the libfabric folder.
 .PHONY : clean cleanall
 clean ::
-	$(Q)$(RM) -r $(top.build)
+	$(Q)$(RM) -rf $(top.build)/debug
+	$(Q)$(RM) -rf $(top.build)/release
 
 cleanall :: clean
-	$(Q)$(RM) -r $(top.libfabric)/build $(libfabric_config_h)
+	$(Q)$(RM) -r $(top.libfabric)/build/* $(libfabric_config_h)
 
 $(depends.cdi) : $(libfabric_config_h) $(aws_h)
 

@@ -54,10 +54,9 @@ static const int packet_buffer_alignment = 8;
  */
 static bool PostRxBuffer(EfaEndpointState* endpoint_state_ptr, const struct iovec* msg_iov_ptr, bool more_to_post)
 {
-    bool ret = true;
-
+    void *desc = fi_mr_desc(endpoint_state_ptr->rx_state.memory_region_ptr);
     struct fi_msg msg = {
-        .desc = fi_mr_desc(endpoint_state_ptr->rx_state.memory_region_ptr),
+        .desc = &desc,
         .msg_iov = msg_iov_ptr,
         .iov_count = 1,
         .addr = FI_ADDR_UNSPEC,
@@ -66,16 +65,22 @@ static bool PostRxBuffer(EfaEndpointState* endpoint_state_ptr, const struct iove
     };
 
     const uint64_t flags = FI_RECV | (more_to_post ? FI_MORE : 0);
-    const ssize_t fi_ret = fi_recvmsg(endpoint_state_ptr->endpoint_ptr, &msg, flags);
-    if (-FI_EAGAIN == fi_ret) {
-        CDI_LOG_THREAD(kLogError, "Got -FI_EAGAIN from fi_recvmsg(). This is not expected.");
-        ret = false; // Return an error.
-    } else if (0 != fi_ret) {
-        CDI_LOG_THREAD(kLogError, "Got[%d] from fi_recvmsg().", fi_ret);
-        ret = false; // Return an error.
+    const int max_num_tries = 5;
+    int num_tries = 0;
+    ssize_t fi_ret = 0;
+    do {
+        fi_ret = fi_recvmsg(endpoint_state_ptr->endpoint_ptr, &msg, flags);
+        if (0 == fi_ret || -FI_EAGAIN != fi_ret) {
+            break;
+        }
+    } while (++num_tries != max_num_tries);
+
+    if (0 != fi_ret) {
+        CDI_LOG_THREAD(kLogError, "Got [%ld (%s)] from fi_recvmsg(), tried [%d] times.",
+            fi_ret, fi_strerror(-fi_ret), num_tries);
     }
 
-    return ret;
+    return 0 == fi_ret;
 }
 
 /**
@@ -141,7 +146,7 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
             // EfaRxEndpointOpen().
         }
     } else if (fi_ret < 0 && fi_ret != -FI_EAGAIN) {
-        CDI_LOG_THREAD(kLogError, "Got[%d] from fi_cq_read().", fi_ret);
+        CDI_LOG_THREAD(kLogError, "Got[%d (%s)] from fi_cq_read().", fi_ret, fi_strerror(-fi_ret));
     }
     return ret;
 }
@@ -188,10 +193,10 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
                                       & ~(packet_buffer_alignment - 1));
 
         // Register the newly allocated and aligned region with libfabric.
-        if (0 == fi_mr_reg(endpoint_state_ptr->domain_ptr, mem_ptr, aligned_packet_size * packet_count,
+        int fi_ret = fi_mr_reg(endpoint_state_ptr->domain_ptr, mem_ptr, aligned_packet_size * packet_count,
                            FI_SEND | FI_RECV | FI_MULTI_RECV, 0, 0, 0,
-                           &endpoint_state_ptr->rx_state.memory_region_ptr, NULL)) {
-
+                           &endpoint_state_ptr->rx_state.memory_region_ptr, NULL);
+        if (0 == fi_ret) {
             // Give fragments of allocated memory to libfabric for receiving packet data into.
             struct iovec msg_iov = {
                 .iov_len = packet_size
@@ -206,8 +211,8 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
                 mem_ptr += aligned_packet_size;
             }
         } else {
-            CDI_LOG_THREAD(kLogError, "Libfabric failed to register allocated aligned memory. This could be caused by "
-                           "insufficient ulimit locked memory.");
+            CDI_LOG_THREAD(kLogError, "Libfabric failed to register allocated aligned memory [%d (%s)]. This could be "
+                           "caused by insufficient ulimit locked memory.", fi_ret, fi_strerror(-fi_ret));
         }
     }
 
@@ -236,7 +241,10 @@ static void FreePacketPool(EfaEndpointState* endpoint_state_ptr)
 {
     if (NULL != endpoint_state_ptr->rx_state.allocated_buffer_ptr) {
         // Unregister the region from libfabric.
-        fi_close(&endpoint_state_ptr->rx_state.memory_region_ptr->fid);
+        int rs = fi_close(&endpoint_state_ptr->rx_state.memory_region_ptr->fid);
+        if (0 != rs) {
+            CDI_LOG_THREAD(kLogError, "Got[%d (%s)] from fi_flose().", rs, fi_strerror(-rs));
+        }
 
         if (endpoint_state_ptr->rx_state.allocated_buffer_was_from_heap) {
             CdiOsMemFree(endpoint_state_ptr->rx_state.allocated_buffer_ptr);
@@ -342,7 +350,7 @@ CdiReturnStatus EfaRxEndpointRxBuffersFree(const AdapterEndpointHandle handle, c
             // NOTE: This function is called from PollThread(), so no need to use libfabric's FI_THREAD_SAFE option.
             // Access to libfabric functions such as fi_recvmsg() and fi_cq_read() use PollThread().
             if (!PostRxBuffer(endpoint_state_ptr, &msg_iov, NULL != sgl_entry_ptr->next_ptr)) {
-                // Something terribly wrong in libfabric. Notify the probe component so it can start the connection
+                // Something went terribly wrong in libfabric. Notify the probe component so it can start the connection
                 // reset process.
                 ProbeEndpointError(endpoint_state_ptr->probe_endpoint_handle);
                 rs = kCdiStatusNotConnected;
@@ -368,7 +376,7 @@ CdiReturnStatus EfaRxPacketPoolCreate(EfaEndpointState* endpoint_state_ptr)
         endpoint_state_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->maximum_payload_bytes;
 
     if (!CreatePacketPool(endpoint_state_ptr, max_payload_size, reserve_packets)) {
-        rs =  kCdiStatusNotEnoughMemory;
+        rs = kCdiStatusNotEnoughMemory;
     }
 
     return rs;

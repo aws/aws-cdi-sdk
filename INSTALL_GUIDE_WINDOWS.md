@@ -16,6 +16,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
   - [Build the AWS CDI SDK](#build-the-aws-cdi-sdk)
   - [(Optional) Disable the display of performance metrics to your Amazon CloudWatch account](#optional-disable-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
 - [Build the HTML documentation](#build-the-html-documentation)
+- [Creating additional instances](#creating-additional-instances)
 - [Running the Windows test application](#running-the-windows-test-application)
   - [Allow test applications in Windows firewall](#allow-test-applications-in-windows-firewall)
   - [Help](#help)
@@ -31,7 +32,7 @@ Follow the steps in [create an EFA-enabled instance](README.md#create-an-efa-ena
 
 # Connecting to Windows and activating
 
-Connect to your EC2 instance using Remote Destop.
+Connect to your EC2 instance using Remote Desktop.
 Refer to **step 2** in the [AWS Windows Guide](https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/EC2_GetStarted.html).
 If Windows activation fails, see [these instructions](https://aws.amazon.com/premiumsupport/knowledge-center/windows-activation-fails/).
 
@@ -110,13 +111,14 @@ Completed installation.
 
     **Note**: After installing Doxygen, the Powershell window needs to be closed and reopened before the ```doxygen``` command will be recognized.
 
-1. Install Microsoft Visual Studio 2019 with Chocolatey from Powershell:
+1. Install Microsoft Visual Studio 2019 and native desktop (C/C++) components with Chocolatey from Powershell:
 
     ```powershell
     choco install visualstudio2019community -y
+    choco install visualstudio2019-workload-nativedesktop -y
     ```
 
-    **Note**: This command can take some time to complete and will not provide an indication of progress.
+    **Note**: These commands can take some time to complete and will not provide an indication of progress.
 
 1. To install Microsoft Visual Studio using a web browser, navigate to the [Visual Studio download page](https://visualstudio.microsoft.com/downloads/) and then follow this procedure:
 
@@ -128,6 +130,9 @@ Completed installation.
     - **Note**: Ensure that you disable the setting for both the **Administrator** and for all other users.
     - Select OK, and then exit the **Server Manager**.
     - Reboot for changes to take effect.
+
+1. Verify that CMake version 3.2 or higher is installed. If CMake is not installed, [download and install version 3.18.5](https://cmake.org/download/).
+
 
 ## Create IAM user required by AWS CloudWatch
 
@@ -155,13 +160,11 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
         - Select **Add user** and provide a name and select **Programmatic access**.
         - Select **Next: Permissions** and then select **Create group** to create a new user group.
         - Put in a **Group name** for the new group and select the policies for the group.
-            - Select the policy that was made in the step above for mediaconnect access.
-            - Select **CloudWatchAgentServerPolicy** to provide cloudwatch access.
+            - Select the policy that was made in the step above for CloudWatch access.
+            - Select **CloudWatchAgentServerPolicy** to provide CloudWatch access.
             - Select **Create group**
                 - Select **Next:Tags** the select **Next:Review**.
                 - Select **Create user**
-1. Verify that CMake version 3.2 or higher is installed. If CMake is not installed, [download and install version 3.18.5](https://cmake.org/download/).
-
 ## Add tools to the System Environment Variable Path
 
 - Add installed tools to the System Environment Variable: **Path**.
@@ -274,7 +277,7 @@ This procedure builds the entire AWS CDI SDK solution in a Debug configuration.
 1. Use Microsoft Visual Studio 2019 and open the *cdi_proj.sln* solution file found at ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
 1. Choose a configuration. For this example, choose **Debug**.
 1. Clean the solution each time a configuration is changed by selecting: **Build** > **Clean Solution**.
-1. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications.
+1. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications. NOTE: The test applications are only configured to use static libraries, so must use **Debug** or **Release** configurations when building them.
 1. Choose the application to run. By default, the *cdi_test* application runs. To select another application, right-click on the target application and choose **Set as Startup Project** for the application you want to run.
 
 ## (Optional) Disable the display of performance metrics to your Amazon CloudWatch account
@@ -282,6 +285,8 @@ This procedure builds the entire AWS CDI SDK solution in a Debug configuration.
 To disable the display of performance metrics to your Amazon CloudWatch account:
 
 - In the file ```src/cdi/configuration.h```, comment out ```#define CLOUDWATCH_METRICS_ENABLED```.
+
+**Note**: For the change to take effect, the CDI SDK library and related applications must be rebuilt.
 
 ---
 
@@ -311,6 +316,12 @@ To build the AWS CDI SDK documentation, install Doxygen using Chocolatey and con
             Documents will appear at ```aws-cdi-sdk\build\documentation\api```.
 
 1. Use a web browser to open aws-cdi-sdk\build\documentation\\**api|all**\html\index.html, choosing **api** or **all** depending on the build option you chose.
+
+---
+
+# Creating additional instances
+
+Refer to the Linux Guide [Creating additional instances](./INSTALL_GUIDE_LINUX.md#creating-additional-instances) for steps and information. NOTE: The **hostname** does not have to be changed as described in the Linux Guide.
 
 ---
 

@@ -220,7 +220,7 @@ typedef struct {
 
     /// @brief Pointer to name of the stream. It is used as an identifier when generating log messages that are specific
     /// to this stream. If NULL, a name is internally generated. Length of name must not exceed
-    /// MAX_STREAM_NAME_STRING_LENGTH.
+    /// CDI_MAX_STREAM_NAME_STRING_LENGTH.
     const char* stream_name_str;
 } CdiTxConfigDataStream;
 
@@ -349,7 +349,7 @@ CDI_INTERFACE CdiReturnStatus CdiAvmRxCreate(CdiRxConfigData* config_data_ptr, C
  * @param payload_config_ptr Pointer to payload configuration data. Part of the data is sent along with the payload and
  *                           part is provided to the registered user TX callback function.
  * @param avm_config_ptr Pointer to configuration data that describes the contents of this payload and subsequent
- *                       payloads. The first time this function is called for a given stream_id (in
+ *                       payloads. The first time this function is called for a given stream identifier (in
  *                       payload_config_ptr->avm_extra_data) after the connection's status has changed to
  *                       kCdiConnectionStatusConnected (reported to the transmit callback function), a value must be
  *                       specified so the receiver can identify the format of the payload data. Afterwards, NULL shall
@@ -375,8 +375,8 @@ CDI_INTERFACE CdiReturnStatus CdiAvmTxPayload(CdiConnectionHandle con_handle,
 /**
  * Transmit a payload of data to a remote endpoint. Endpoint handles are obtained through
  * CdiAvmTxStreamConnectionCreate(). This function is asynchronous and will immediately return. The user callback
- * function CdiAvmTxCallback() registered through CdiAvmTxCreate() will be invoked when the payload has been
- * acknowledged by the remote receiver or a transmission timeout occurred.
+ * function CdiAvmTxCallback() registered through CdiAvmTxStreamConnectionCreate() will be invoked when the payload has
+ * been acknowledged by the remote receiver or a transmission timeout occurred.
  *
  * MEMORY NOTE: The payload_config_ptr, avm_config_ptr, CdiSgList and SGL entries memory can be modified or released
  * immediately after the function returns. However, the buffers pointed to in the SGL must not be modified or released
@@ -386,7 +386,7 @@ CDI_INTERFACE CdiReturnStatus CdiAvmTxPayload(CdiConnectionHandle con_handle,
  * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
  * before setting the desired members to the actual values required.
  *
- * @param endpoint_handle Connection handle returned by a previous call to CdiAvmTxCreate().
+ * @param endpoint_handle Connection handle returned by a previous call to CdiAvmTxStreamEndpointCreate().
  * @param payload_config_ptr Pointer to payload configuration data. Part of the data is sent along with the payload and
  *                           part is provided to the registered user TX callback function.
  * @param avm_config_ptr Pointer to configuration data that describes the contents of this payload and subsequent

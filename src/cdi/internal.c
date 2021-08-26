@@ -16,6 +16,7 @@
 #include "internal.h"
 
 #include <arpa/inet.h> // For inet_ntop()
+#include <stdarg.h>
 #include <string.h>
 
 #include "adapter_api.h"
@@ -141,19 +142,25 @@ static void ConnectionShutdownInternal(CdiConnectionHandle handle)
  */
 static void AdapterShutdownInternal(CdiAdapterHandle handle)
 {
-    // NOTE: No need to use the connections_list_lock here, since only one thread should be calling this function.
-    if (!CdiListIsEmpty(&handle->connections_list)) {
+    CdiOsCritSectionReserve(handle->adapter_lock);
+
+    // NOTE: No need to use the connection_list_lock here, since only one thread should be calling this function.
+    if (!CdiListIsEmpty(&handle->connection_list)) {
         SDK_LOG_GLOBAL(kLogError,
                        "Connection list is not empty. Must use CdiCoreConnectionDestroy() for each connection before"
                        " shutting down an adapter.");
     }
 
     // Free the lock resource.
-    CdiOsCritSectionDelete(handle->connections_list_lock);
-    handle->connections_list_lock = NULL;
+    CdiOsCritSectionDelete(handle->connection_list_lock);
+    handle->connection_list_lock = NULL;
 
     // Shut down the adapter itself.
     CdiAdapterShutdown(handle);
+
+    CdiOsCritSectionRelease(handle->adapter_lock);
+    CdiOsCritSectionDelete(handle->adapter_lock);
+    handle->adapter_lock = NULL;
 
     // Free the memory holding the adapter's state.
     CdiOsMemFree(handle);
@@ -225,7 +232,7 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
     }
 
     if (kCdiStatusOk == rs) {
-        // Create a critical section used to protect access to connections_list.
+        // Create a critical section used to protect access to connection_list.
         if (!CdiOsCritSectionCreate(&cdi_global_context.adapter_handle_list_lock)) {
             rs = kCdiStatusNotEnoughMemory;
         }
@@ -257,8 +264,8 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
     // configuration strings. This is done so the caller can free the memory used by the data.
     if (kCdiStatusOk == rs && core_config_ptr->cloudwatch_config_ptr) {
 #ifdef CLOUDWATCH_METRICS_ENABLED
-        CloudWatchConfigData cleaned_cloudwatch_config = { 0 };
-        const CloudWatchConfigData* cloudwatch_config_ptr = core_config_ptr->cloudwatch_config_ptr;
+        CdiCloudWatchConfigData cleaned_cloudwatch_config = { 0 };
+        const CdiCloudWatchConfigData* cloudwatch_config_ptr = core_config_ptr->cloudwatch_config_ptr;
 
         // If a namespace string is not provided for cloudwatch use the CDI SDK default namespace string.
         if (!cloudwatch_config_ptr->namespace_str || ('\0' == cloudwatch_config_ptr->namespace_str[0])) {
@@ -434,24 +441,36 @@ CdiReturnStatus AdapterInitializeInternal(CdiAdapterData* adapter_data_ptr, CdiA
         }
 
         if (rs == kCdiStatusOk) {
-            // Create a critical section used to protect access to connections_list.
-            if (!CdiOsCritSectionCreate(&state_ptr->connections_list_lock)) {
+            // Create a critical section used to protect access to connection_list.
+            if (!CdiOsCritSectionCreate(&state_ptr->connection_list_lock)) {
                 rs = kCdiStatusNotEnoughMemory;
             }
         }
 
         if (rs == kCdiStatusOk) {
             // Initialize the list of connections using this adapter.
-            CdiListInit(&state_ptr->connections_list);
-
+            CdiListInit(&state_ptr->connection_list);
             // Add the structure to network adapter handle list.
             CdiListAddTail(&cdi_global_context.adapter_handle_list, &state_ptr->list_entry);
+        }
+
+        if (rs == kCdiStatusOk) {
+            // Create a critical section used to protect access to adapter state data.
+            if (!CdiOsCritSectionCreate(&state_ptr->adapter_lock)) {
+                rs = kCdiStatusNotEnoughMemory;
+            }
+        }
+
+        if (rs == kCdiStatusOk) {
+            // Initialize the list of poll threads using this adapter.
+            CdiListInit(&state_ptr->poll_thread_list);
         }
     }
 
     if (rs != kCdiStatusOk) {
         if (state_ptr) {
-            CdiOsCritSectionDelete(state_ptr->connections_list_lock);
+            CdiOsCritSectionDelete(state_ptr->adapter_lock);
+            CdiOsCritSectionDelete(state_ptr->connection_list_lock);
             CdiOsMemFree(state_ptr);
             state_ptr = NULL;
         }
@@ -515,7 +534,7 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
     if (kCdiStatusOk == rs) {
         // Create payload receive message queue that is used to send messages to the application callback thread.
         if (!CdiQueueCreate("PayloadRequests AppPayloadCallbackData Queue", MAX_PAYLOADS_PER_CONNECTION,
-                            FIXED_QUEUE_SIZE, FIXED_QUEUE_SIZE, sizeof(AppPayloadCallbackData),
+                            CDI_FIXED_QUEUE_SIZE, CDI_FIXED_QUEUE_SIZE, sizeof(AppPayloadCallbackData),
                             kQueueSignalPopWait, // Queue can block on pops.
                             &handle->app_payload_message_queue_handle)) {
             rs = kCdiStatusNotEnoughMemory;
@@ -524,8 +543,8 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
 
     if (kCdiStatusOk == rs) {
         // Create a pool used to hold error message strings.
-        int max_rx_payloads = MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
-        int max_tx_payloads = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+        int max_rx_payloads = CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
+        int max_tx_payloads = CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
 
         if (handle->handle_type == kHandleTypeRx) {
             if (handle->rx_state.config_data.max_simultaneous_rx_payloads_per_connection) {
@@ -548,9 +567,9 @@ CdiReturnStatus ConnectionCommonResourcesCreate(CdiConnectionHandle handle, CdiC
 
     if (kCdiStatusOk == rs) {
         // Add the structure to the adapter's list of connections.
-        CdiOsCritSectionReserve(handle->adapter_state_ptr->connections_list_lock);
-        CdiListAddTail(&handle->adapter_state_ptr->connections_list, &handle->list_entry);
-        CdiOsCritSectionRelease(handle->adapter_state_ptr->connections_list_lock);
+        CdiOsCritSectionReserve(handle->adapter_state_ptr->connection_list_lock);
+        CdiListAddTail(&handle->adapter_state_ptr->connection_list, &handle->list_entry);
+        CdiOsCritSectionRelease(handle->adapter_state_ptr->connection_list_lock);
     }
 
     return rs;
@@ -573,12 +592,12 @@ void ConnectionCommonResourcesDestroy(CdiConnectionHandle handle)
     handle->start_signal = NULL;
 }
 
-CdiReturnStatus ConnectionCommonPacketMessageThreadCreate(CdiConnectionHandle handle)
+CdiReturnStatus ConnectionCommonPacketMessageThreadCreate(CdiConnectionHandle handle, const char* thread_name)
 {
     CdiReturnStatus rs = kCdiStatusOk;
 
     // Start the thread which will service items from the queue.
-    if (!CdiOsThreadCreate(AppCallbackPayloadThread, &handle->app_payload_message_thread_id, "PayloadMessage",
+    if (!CdiOsThreadCreate(AppCallbackPayloadThread, &handle->app_payload_message_thread_id, thread_name,
                            handle, handle->start_signal)) {
         rs = kCdiStatusNotEnoughMemory;
     }
@@ -649,11 +668,11 @@ void ConnectionDestroyInternal(CdiConnectionHandle handle)
     if (handle) {
         CdiAdapterHandle adapter = handle->adapter_state_ptr;
 
-        CdiOsCritSectionReserve(adapter->connections_list_lock);
+        CdiOsCritSectionReserve(adapter->connection_list_lock);
         bool locked = true;
 
         CdiListIterator list_iterator;
-        CdiListIteratorInit(&adapter->connections_list, &list_iterator);
+        CdiListIteratorInit(&adapter->connection_list, &list_iterator);
 
         CdiListEntry* entry_ptr = NULL;
         // Walk through list until we reach the head or find our desired entry.
@@ -662,8 +681,8 @@ void ConnectionDestroyInternal(CdiConnectionHandle handle)
 
             // If we find the desired entry, remove it from the list and free the memory used by the object.
             if (obj_ptr == handle) {
-                CdiListRemove(&adapter->connections_list, entry_ptr);
-                CdiOsCritSectionRelease(adapter->connections_list_lock);
+                CdiListRemove(&adapter->connection_list, entry_ptr);
+                CdiOsCritSectionRelease(adapter->connection_list_lock);
                 locked = false;
                 // Shut down this connection's associated endpoint and free the associated memory.
                 ConnectionShutdownInternal(obj_ptr);
@@ -671,7 +690,7 @@ void ConnectionDestroyInternal(CdiConnectionHandle handle)
             }
         }
         if (locked) {
-            CdiOsCritSectionRelease(adapter->connections_list_lock);
+            CdiOsCritSectionRelease(adapter->connection_list_lock);
         }
     }
 }
@@ -720,7 +739,7 @@ bool FreeSglEntries(CdiPoolHandle pool_handle, CdiSglEntry* sgl_entry_head_ptr)
 }
 
 void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int extra_data_size,
-                              const uint8_t* extra_data_array, ConnectionProtocolType protocol_type)
+                              const uint8_t* extra_data_array, CdiConnectionProtocolType protocol_type)
 {
     CdiLogMultilineState m_state;
     CDIPacketAvmUnion* avm_union_ptr = (CDIPacketAvmUnion*)extra_data_array;

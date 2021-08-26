@@ -69,7 +69,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 // The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
@@ -77,6 +76,7 @@
 #include "cdi_logger_api.h"
 #include "cdi_os_api.h"
 #include "cdi_test.h"
+#include "curses.h"
 #include "optarg.h"
 #include "run_test.h"
 #include "test_common.h"
@@ -96,7 +96,7 @@
 CdiLoggerHandle test_app_logger_handle = NULL;
 
 /// An array of TestSettings objects used to store settings from the command line for each requested connection.
-static TestSettings test_settings[MAX_SIMULTANEOUS_CONNECTIONS] = {{ 0 }};
+static TestSettings test_settings[CDI_MAX_SIMULTANEOUS_CONNECTIONS] = {{ 0 }};
 
 /// A global structure used to hold the information global to all test settings.
 static GlobalTestSettings global_test_settings = { 0 };
@@ -119,6 +119,10 @@ static void InitializeGlobalTestSettings(void)
     global_test_settings.base_log_filename_str[0] = '\0';
     global_test_settings.sdk_log_filename_str[0] = '\0';
     global_test_settings.test_app_global_log_handle = NULL;
+    global_test_settings.total_num_connections = 0;
+    global_test_settings.connection_info_array = NULL;
+    global_test_settings.num_connections_established = 0;
+    global_test_settings.all_connected_signal = NULL;
 
     for (int i = 0; i < kLogComponentLast; i++) {
         global_test_settings.log_component[i] = i == 0 ? kLogComponentGeneric : CDI_INVALID_ENUM_VALUE;
@@ -238,7 +242,17 @@ GlobalTestSettings* GetGlobalTestSettings(void) {
     return &global_test_settings;
 }
 
-bool CreateStringFromArray(const char* array_of_strings_ptr[], int num_entries, const char* separator_str,
+/**
+ * Concatenate an array of strings into a single string buffer with a user-supplied separator between each element.
+ *
+ * @param   array_of_strings_ptr  Pointer to the input array of strings.
+ * @param   num_entries           The number of strings in the array.
+ * @param   separator_str         The separator string, such as " " or ", ".
+ * @param   concat_str            Pointer to the concatenation string buffer.
+ * @param   concat_max_len        The maximum size of the write buffer for the concatenation string.
+ * @return                        True if string is fully written; false if an error (such as buffer overrun) occurs.
+ */
+static bool CreateStringFromArray(const char* array_of_strings_ptr[], int num_entries, const char* separator_str,
                            char* concat_str, int concat_max_len)
 {
     int msg_index = 0;
@@ -268,7 +282,17 @@ bool CreateStringFromArray(const char* array_of_strings_ptr[], int num_entries, 
     return ret;
 }
 
-bool IsStringInArray(const char* array_ptr[], int size, const char* str, int* index_ptr)
+#if COMPILE_UNUSED_FUNCTIONS
+/**
+ * Search through an array of strings and return true if a given string is found.
+ *
+ * @param   array_ptr  Pointer to array of strings.
+ * @param   size       The number of strings in the array.
+ * @param   str        The string we are looking for in array_ptr.
+ * @param   index_ptr  Pointer to the index variable for where the string was found in the array.
+ * @return             True if string is found; false if string is not found.
+ */
+static bool IsStringInArray(const char* array_ptr[], int size, const char* str, int* index_ptr)
 {
     int i;
 
@@ -288,37 +312,7 @@ bool IsStringInArray(const char* array_ptr[], int size, const char* str, int* in
     // If not a null-terminated array and we checked 'size' entries, then return false.
     return false;
 }
-
-bool IsBase10Number(const char* str, int* base10_num_ptr)
-{
-    return IsBaseNNumber(str, base10_num_ptr, 10);
-}
-
-bool IsBaseNNumber(const char* str, int* num_ptr, const int base)
-{
-    char* end_ptr = NULL;
-    int base_n_num = (int)strtol(str, &end_ptr, base);
-
-    // The pointer to the return number is optional, so check for NULL pointer.
-    if (num_ptr != NULL) {
-        *num_ptr = base_n_num;
-    }
-
-    return *end_ptr == '\0';
-}
-
-bool Is64BitBaseNNumber(const char* str, uint64_t* num_ptr, const int base)
-{
-    char* end_ptr = NULL;
-    uint64_t base_n_num = strtoull(str, &end_ptr, base);
-
-    // The pointer to the return number is optional, so check for NULL pointer.
-    if (num_ptr != NULL) {
-        *num_ptr = base_n_num;
-    }
-
-    return *end_ptr == '\0';
-}
+#endif
 
 /**
  * C main entry function.
@@ -349,7 +343,7 @@ int main(int argc, const char **argv)
     // test_settings structure represents either a tx or rx connection. Takes in command-line arguments, sanitizes
     // them for syntax and correctness, and then assigns them to the test_settings data structure.
     CommandLineHandle command_line_handle = NULL;
-    if (status == kProgramExecutionStatusContinue) {
+    if (kProgramExecutionStatusContinue == status) {
         if (TestCommandLineParserCreate(&argc, &argv, &command_line_handle)) {
             status = GetArgs(argc, argv, test_settings, &num_connections_found);
         } else {
@@ -359,17 +353,10 @@ int main(int argc, const char **argv)
 
     // Loop through the test. If the --num_loops is not used in the command-line, it will default to run the test once.
     for (int loop_num = 0;
-         status == kProgramExecutionStatusContinue && (global_test_settings.num_loops > loop_num ||
+         kProgramExecutionStatusContinue == status && (global_test_settings.num_loops > loop_num ||
                                                        global_test_settings.num_loops == RUN_FOREVER_VALUE);
          loop_num++) {
         bool got_error = false;
-        // Initialize the logger so we can use it.  If it has already been initialized before, then it will not do
-        // anything here.  Skip this on the first loop since it was run above outside of this loop.
-        if (loop_num) {
-            if (!CdiLoggerInitialize()) {
-                status = kProgramExecutionStatusExitError;
-            }
-        }
 
         // If specified, enable error output to stderr in addition to log files (if log files are enabled).
         CdiLogStderrEnable(global_test_settings.use_stderr, kLogError); // Use kLogError as the log level.
@@ -430,10 +417,10 @@ int main(int argc, const char **argv)
         CdiLogMethodData sdk_log_method_data = {0};
         if (global_test_settings.base_log_filename_str[0]) {
             // Create a filename for the SDK global logger.
-            char filename[MAX_LOG_FILENAME_LENGTH] = {0};
-            char directory[MAX_LOG_FILENAME_LENGTH] = {0};
-            if (!CdiOsSplitPath(global_test_settings.base_log_filename_str, filename, MAX_LOG_FILENAME_LENGTH,
-                                directory, MAX_LOG_FILENAME_LENGTH)) {
+            char filename[CDI_MAX_LOG_FILENAME_LENGTH] = {0};
+            char directory[CDI_MAX_LOG_FILENAME_LENGTH] = {0};
+            if (!CdiOsSplitPath(global_test_settings.base_log_filename_str, filename, CDI_MAX_LOG_FILENAME_LENGTH,
+                                directory, CDI_MAX_LOG_FILENAME_LENGTH)) {
                 CDI_LOG_THREAD(kLogError, "CdiOsSplitPath failed, filename or directory buffers are too small.");
             }
             if (snprintf(global_test_settings.sdk_log_filename_str, sizeof(global_test_settings.sdk_log_filename_str),
@@ -495,7 +482,7 @@ int main(int argc, const char **argv)
 
         // Run the test!  Note that we allocate the number of connections specified on the command line.
         if (!got_error) {
-            got_error = !RunTestGeneric(test_settings, MAX_SIMULTANEOUS_CONNECTIONS, num_connections_found);
+            got_error = !RunTestGeneric(test_settings, CDI_MAX_SIMULTANEOUS_CONNECTIONS, num_connections_found);
         }
 
         // Check for pass/fail.

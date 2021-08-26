@@ -58,7 +58,7 @@ void RxReorderPayloadError(CdiEndpointState* endpoint_ptr, RxPayloadState* paylo
 
 /**
  * @brief Determine if a payload has not received any packets within the packet out of order window. See
- * MAX_RX_PACKET_OUT_OF_ORDER_WINDOW.
+ * CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW.
  *
  * @param endpoint_ptr Pointer to endpoint state structure.
  * @param payload_state_ptr Pointer to the payload state.

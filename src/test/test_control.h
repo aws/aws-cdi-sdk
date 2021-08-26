@@ -7,7 +7,7 @@
 /**
  * @file
  * @brief
- * The declarations in this header file correspond to the definitions in control.c.
+ * The declarations in this header file correspond to the definitions in test_control.c.
  */
 
 #ifndef TEST_CONTROL_H__
@@ -115,7 +115,7 @@ struct TestConnectionInfo {
 
     /// Array of Tx stream handles associated with this connection. Each handle is returned by the
     /// CdiAvmTxStreamEndpointCreate function.
-    CdiEndpointHandle tx_stream_endpoint_handle_array[MAX_ENDPOINTS_PER_CONNECTION];
+    CdiEndpointHandle tx_stream_endpoint_handle_array[CDI_MAX_ENDPOINTS_PER_CONNECTION];
 
     /// This connection's index;
     int my_index;
@@ -167,7 +167,7 @@ struct TestConnectionInfo {
     volatile CdiConnectionStatus connection_status;
 
     /// Current status of the streams in a connection.
-    CdiConnectionStatus connection_status_stream_array[MAX_ENDPOINTS_PER_CONNECTION];
+    CdiConnectionStatus connection_status_stream_array[CDI_MAX_ENDPOINTS_PER_CONNECTION];
 
     /// The connection handle returned by the CdiFifoCreate function,
     /// used for communicating between callback function and helper threads.
@@ -195,10 +195,13 @@ struct TestConnectionInfo {
     int number_stats;
 
     /// A copy of the last stats. Updated at the end of TestStatisticsCallback().
-    CdiPayloadCounterStats payload_counter_stats_array[MAX_ENDPOINTS_PER_CONNECTION];
+    CdiPayloadCounterStats payload_counter_stats_array[CDI_MAX_ENDPOINTS_PER_CONNECTION];
+
+    /// Total CPU load for all endpoints associated with this connection.
+    int total_poll_thread_load;
 
     /// Array of stream info data structures for storing stream-specific variables.
-    TestConnectionStreamInfo stream_info[MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION];
+    TestConnectionStreamInfo stream_info[CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION];
 
     /// Pattern counter used to generate unique value in each payload.
     uint64_t pattern_count;

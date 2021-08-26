@@ -136,7 +136,7 @@ struct SocketInfo
 //*********************************************************************************************************************
 
 /// Preferred clock used when doing timing calculations, because unaffected by system clock adjustments.
-static const clockid_t preferred_clock = CLOCK_MONOTONIC;
+static const clockid_t kPreferredClock = CLOCK_MONOTONIC;
 
 /// Array of data used to hold signal handlers.
 static CdiSignalHandlerInfo signal_handler_function_array[CDI_MAX_SIGNAL_HANDLERS];
@@ -510,7 +510,7 @@ bool CdiOsSemaphoreDelete(CdiSemID sem_handle)
 bool CdiOsSemaphoreRelease(CdiSemID sem_handle)
 {
     int temp_rc = 0;
-    SemInfo *sem_info_ptr = (SemInfo*)sem_handle;
+    SemInfo* sem_info_ptr = (SemInfo*)sem_handle;
 
     assert(sem_info_ptr != NULL);
 
@@ -608,21 +608,12 @@ bool CdiOsSignalCreate(CdiSignalType* signal_handle_ptr)
     } else {
         SignalInfo* signal_info_ptr = *(SignalInfo**)signal_handle_ptr;
         pthread_condattr_t attr;
-        int i;
 
         pthread_mutex_init(&signal_info_ptr->mutex, NULL);
         pthread_condattr_init(&attr);
-        pthread_condattr_setclock(&attr, preferred_clock);
+        pthread_condattr_setclock(&attr, kPreferredClock);
         pthread_cond_init(&signal_info_ptr->condition, &attr);
         pthread_condattr_destroy(&attr);
-
-        signal_info_ptr->signal_count = 0;
-
-        signal_info_ptr->num_other_sigs = 0;
-
-        for(i = 0; i < MAX_THREADS_WAITING; i++) {
-            signal_info_ptr->other_sigs_ptr_array[i] = NULL;
-        }
     }
 
     return return_val;
@@ -662,7 +653,6 @@ bool CdiOsSignalSet(CdiSignalType signal_handle)
 {
     bool return_val = true;
     SignalInfo* signal_info_ptr = (SignalInfo*)signal_handle;
-    int i;
     assert(NULL != signal_handle);
 
     pthread_mutex_lock(&signal_info_ptr->mutex);
@@ -677,7 +667,7 @@ bool CdiOsSignalSet(CdiSignalType signal_handle)
 
     // To support wait multiple we need to wake up all listening threads that are waiting on another condition variable.
     if (signal_info_ptr->num_other_sigs > 0) {
-        for (i = 0; i < MAX_THREADS_WAITING; i++) {
+        for (int i = 0; i < MAX_THREADS_WAITING; i++) {
             // Make a copy of the pointer, since the value in the array can be set to NULL under our nose.
             SignalInfo* other_signal_info_ptr = signal_info_ptr->other_sigs_ptr_array[i];
             if (other_signal_info_ptr != NULL) {
@@ -717,29 +707,43 @@ bool CdiOsSignalWait(CdiSignalType signal_handle, uint32_t timeout_in_ms, bool* 
     }
 
     if (timeout_in_ms != CDI_INFINITE) {
-        GetTimeout(&time_to_wait_until, timeout_in_ms, preferred_clock);
+        GetTimeout(&time_to_wait_until, timeout_in_ms, kPreferredClock);
     }
 
     uint32_t signal_count = signal_info_ptr->signal_count;
     if (!(signal_count & 1)) {
-        pthread_mutex_lock(&signal_info_ptr->mutex);
+        int mutex_rc = pthread_mutex_lock(&signal_info_ptr->mutex);
+        if (0 != mutex_rc) {
+            ERROR_MESSAGE("Error acquiring lock in CdiOsSignalWait [%s]", strerror(mutex_rc));
+            return_val = false;
+        }
 
         // Wait until the signal is set. Note that it is possible for us to sleep through a set/clear cycle. Even if
         // the signal is not currently set, we are released if the signal count changes.
-        while (signal_info_ptr->signal_count == signal_count) {
-            if (timeout_in_ms != CDI_INFINITE) {
-                if (pthread_cond_timedwait(&signal_info_ptr->condition, &signal_info_ptr->mutex, &time_to_wait_until)) {
-                    if (timed_out_ptr) {
-                        *timed_out_ptr = true;
-                    }
-                    break;
-                }
+        while (return_val && signal_info_ptr->signal_count == signal_count) {
+            int rc = 0;
+            if (CDI_INFINITE == timeout_in_ms) {
+                rc = pthread_cond_wait(&signal_info_ptr->condition, &signal_info_ptr->mutex);
             } else {
-                pthread_cond_wait(&signal_info_ptr->condition, &signal_info_ptr->mutex);
+                rc = pthread_cond_timedwait(&signal_info_ptr->condition, &signal_info_ptr->mutex, &time_to_wait_until);
+            }
+            if (ETIMEDOUT == rc) {
+                if (timed_out_ptr) {
+                    *timed_out_ptr = true;
+                }
+                break;
+            } else if (0 != rc) {
+                ERROR_MESSAGE("Error in CdiOsSignalWait [%s]", strerror(rc));
+                return_val = false;
             }
         }
-
-        pthread_mutex_unlock(&signal_info_ptr->mutex);
+        if (0 == mutex_rc) {
+            mutex_rc = pthread_mutex_unlock(&signal_info_ptr->mutex);
+            if (0 != mutex_rc) {
+                ERROR_MESSAGE("Error releasing lock in CdiOsSignalWait [%s]", strerror(mutex_rc));
+                return_val = false;
+            }
+        }
     } else {
         // The pthread_mutex functions imply a memory barrier. If we don't wait we must do our own.
         __sync_synchronize();
@@ -827,7 +831,7 @@ bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wai
         // No signals currently active, we need to wait for the first signal and register with the remaining signals.
         struct timespec sTime;
         if(timeout_in_ms != CDI_INFINITE) {
-            GetTimeout(&sTime, timeout_in_ms, preferred_clock);
+            GetTimeout(&sTime, timeout_in_ms, kPreferredClock);
         }
 
         pthread_mutex_lock(&signal_info_ptr_array[0]->mutex);
@@ -973,7 +977,7 @@ bool CdiOsOpenForWrite(const char* file_name_str, CdiFileID* file_handle_ptr)
     return return_val;
 }
 
-bool CdiOsOpenForRead(const char *file_name_str, CdiFileID* file_handle_ptr)
+bool CdiOsOpenForRead(const char* file_name_str, CdiFileID* file_handle_ptr)
 {
     bool return_val = true;
 
@@ -1202,7 +1206,7 @@ uint64_t CdiOsGetMicroseconds()
 {
     struct timespec time;
 
-    if (clock_gettime(preferred_clock, &time) == -1) {
+    if (clock_gettime(kPreferredClock, &time) == -1) {
         ERROR_MESSAGE("Cannot get current time. clock_gettime() failed");
     }
 

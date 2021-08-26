@@ -203,8 +203,8 @@ Includes can be found at the following paths:
 After the libraries have been built, library locations that are referenced by aws-cdi-sdk can be found at the following paths:
 
 1. Linux:
-    1. libfabric.so.1: build/debug|release/lib
-    1. libcdisdk.so.2.0: build/debug|release/lib
+    1. libfabric.so.x: build/debug|release/lib
+    1. libcdisdk.so.x.x: build/debug|release/lib
 1. Windows:
     1. proj/x64/Debug/cdi_sdk.lib
 
@@ -224,6 +224,8 @@ When you integrate the AWS CDI SDK into your video applications running on Amazo
 
 In order for the AWS CDI SDK to be able to connect to the performance metrics service, the instance on which it is running must be assigned an IAM role with at least the mediaconnect:PutMetricGroups permission.
 
+**Note**: This may result in a warning, which can be ignored.
+
 ### Customer option to disable the collection of performance metrics by the AWS CDI SDK
 
 Customers control whether to allow the collection of performance metrics by the AWS CDI SDK, and can change their settings at any time. AWS uses the metrics collected by the SDK to help improve the quality of its products and services. The metrics can also assist AWS Support in diagnosing specific issues that AWS customers may encounter when integrating the SDK into EC2 workloads.
@@ -232,9 +234,11 @@ Should you choose to, you can disable performance metric collection by the AWS C
 
 - In the file ```src/cdi/configuration.h```, comment out ```#define METRICS_GATHERING_SERVICE_ENABLED```.
 
+**Note**: For the change to take effect, the CDI SDK library and related applications must be rebuilt.
+
 If you do not make these changes, collection of performance metrics remains enabled and occurs in the background without requiring any additional interaction.
 
-Separately, customers can also configure the AWS CDI SDK to collect performance metrics to be displayed within their own Amazon Cloudwatch account. Instructions to enable and disable the Amazon Cloudwatch display are available in the [Linux](./INSTALL_GUIDE_LINUX.md#disabling-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account) and [Windows](./INSTALL_GUIDE_WINDOWS.md#disabling-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account) installation guides.
+Separately, customers can also configure the AWS CDI SDK to collect performance metrics to be displayed within their own Amazon CloudWatch account. Instructions to enable and disable the Amazon CloudWatch display are available in the [Linux](./INSTALL_GUIDE_LINUX.md#disabling-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account) and [Windows](./INSTALL_GUIDE_WINDOWS.md#disabling-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account) installation guides.
 
 ### Learn more
 
@@ -262,14 +266,13 @@ The best performance for transferring data between instances is *within a placem
 
 ### AWS CDI SDK CPU usage
 
-When using the EFA, a user space polled mode network driver is employed. Each receive connection has a dedicated thread that is constantly polling the network interface for received packets and processing them when they arrive. A similar thread is used on the transmit side. This thread is put to sleep when no transmitted packets are awaiting acknowledgement of receipt by the
-receiving end. The CPU core dedicated to running these threads can be specified at connection creation time.
+When using the EFA, a user space poll mode network driver is employed. Each receive connection uses a thread that is dedicated to constantly polling the network interface for received packets and processing them when they arrive. A similar thread is used on the transmit side. This thread is put to sleep when no transmitted packets are awaiting acknowledgment of receipt by the receiving end. The thread used by the connection can be either dedicated or shared with other connections as specified at connection creation time. On Linux-based platforms, the CPU core dedicated to running the threads can also be specified. In this case, the operating system should be set up to prevent other processes from being scheduled on the cores.
 
-General guidance is that receiving a 2160p60 stream (20736000 bytes per frame) consumes approximately 80% of a CPU core while 1080p60 requires about 20%. The load scales roughly linearly with the number of packets processed. Therefore, 2160p60 should be about four times that of 1080p60.
+Note that when using a shared thread that contains both transmit and receive connections the thread will be constantly running in order to process the receive connections.
 
-Note that sharing CPU cores between connections is not currently supported. Each should have its own core configured and the operating system should be set up to prevent other processes from being scheduled on those cores.
+When using a thread dedicated to a single connection, general guidance is that receiving a 2160p60 stream (20736000 bytes per frame) consumes approximately 80% of a CPU core while 1080p60 requires about 20%. The load scales roughly linearly with the number of packets processed. Therefore, 2160p60 should be about four times that of 1080p60.
 
-The AWS CDI SDK has other threads running besides the polling threads to perform processing, such as packetization and execution of application callback functions.
+The AWS CDI SDK has other threads running besides the poll threads to perform processing, such as packetization and execution of application callback functions.
 
 ### Other performance considerations
 

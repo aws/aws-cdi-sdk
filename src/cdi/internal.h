@@ -205,11 +205,12 @@ void ConnectionCommonResourcesDestroy(CdiConnectionHandle handle);
  * Create connection packet message thread that is common to both Tx and Rx connection types.
  *
  * @param handle The handle of the connection being created.
+ * @param thread_name The internal name of the thread.
  *
  * @return CdiReturnStatus kCdiStatusOk if the thread was successfully created, otherwise the value indicates the
  *         nature of the failure.
  */
-CdiReturnStatus ConnectionCommonPacketMessageThreadCreate(CdiConnectionHandle handle);
+CdiReturnStatus ConnectionCommonPacketMessageThreadCreate(CdiConnectionHandle handle, char const* thread_name);
 
 /**
  * Configure transfer statistics.
@@ -365,7 +366,7 @@ bool FreeSglEntries(CdiPoolHandle pool_handle, CdiSglEntry* sgl_entry_head_ptr);
  * @param protocol_type The type of connection protocol, kProtocolTypeRaw or kProtocolTypeAvm
  */
 void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int extra_data_size,
-                              const uint8_t* extra_data_array, ConnectionProtocolType protocol_type);
+                              const uint8_t* extra_data_array, CdiConnectionProtocolType protocol_type);
 
 /**
  * Convert an array of bytes to a hexadecimal string.

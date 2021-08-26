@@ -23,7 +23,7 @@
 //*********************************************************************************************************************
 
 /// @brief Queue cannot dynamically grow.
-#define FIXED_QUEUE_SIZE        (0)
+#define CDI_FIXED_QUEUE_SIZE        (0)
 
 /**
  * @brief Type used as the handle (pointer to an opaque structure) for a queue. Each handle represents a instance of a

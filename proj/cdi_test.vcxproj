@@ -92,7 +92,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\test;..\src\common\include;..\src\test_common\include;..\src\cdi;..\..\libfabric\include;..\..\libfabric\include\windows;..\..\PDcurses;..\src\test_common\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\include;..\src\test;..\src\common\include;..\src\test_common\include;..\src\cdi;..\..\PDcurses;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>

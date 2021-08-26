@@ -11,8 +11,8 @@
  * SDK but are not part of the API.
  */
 
-#if !defined UTILITIES_H__
-#define UTILITIES_H__
+#ifndef CDI_UTILITIES_H__
+#define CDI_UTILITIES_H__
 
 #include <stddef.h>
 #include <stdint.h>
@@ -20,6 +20,9 @@
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
+
+/// Number of nanoseconds in a second.
+#define CDI_NANOSECONDS_PER_SECOND   (1000000000UL)
 
 /**
  * This macro is used to locate a pointer to the start of a structure given a pointer to the specified member in the
@@ -96,4 +99,4 @@ static inline const char* CdiGetEmptyStringIfNull(const char* source_str)
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-#endif // UTILITIES_H__
+#endif // CDI_UTILITIES_H__

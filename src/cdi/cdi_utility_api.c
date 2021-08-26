@@ -19,6 +19,7 @@
 #include "cdi_core_api.h"
 #include "cdi_test_unit_api.h"
 #include "cdi_os_api.h"
+#include "utilities_api.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -33,7 +34,7 @@
 //*********************************************************************************************************************
 
 /// Enum/string keys for CdiAdapterTypeSelection.
-static const EnumStringKey adapter_type_key_array[] = {
+static const CdiEnumStringKey adapter_type_key_array[] = {
     { kCdiAdapterTypeEfa,             "EFA" },
     { kCdiAdapterTypeSocket,          "SOCKET" },
     { kCdiAdapterTypeSocketLibfabric, "SOCKET_LIBFABRIC" },
@@ -41,21 +42,21 @@ static const EnumStringKey adapter_type_key_array[] = {
 };
 
 /// Enum/string keys for CdiBufferType.
-static const EnumStringKey buffer_type_key_array[] = {
+static const CdiEnumStringKey buffer_type_key_array[] = {
     { kCdiLinearBuffer, "LINEAR" },
     { kCdiSgl,          "SGL" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
 };
 
 /// Enum/String keys for ConnectionProtocolType.
-static const EnumStringKey protocols_key_array[] = {
+static const CdiEnumStringKey protocols_key_array[] = {
     { kProtocolTypeRaw, "RAW" },
     { kProtocolTypeAvm, "AVM" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
 };
 
 /// Enum/string keys for CdiLogMethod.
-static const EnumStringKey log_method_key_array[] = {
+static const CdiEnumStringKey log_method_key_array[] = {
     { kLogMethodStdout,   "LogMethodStdout" },
     { kLogMethodCallback, "LogMethodCallback" },
     { kLogMethodFile,     "LogMethodFile" },
@@ -63,7 +64,7 @@ static const EnumStringKey log_method_key_array[] = {
 };
 
 /// Enum/string keys for CdiLogComponent.
-static const EnumStringKey log_component_key_array[] = {
+static const CdiEnumStringKey log_component_key_array[] = {
     { kLogComponentGeneric,            "GENERIC" },
     { kLogComponentPayloadConfig,      "PAYLOAD_CONFIG" },
     { kLogComponentPerformanceMetrics, "PERFORMANCE_METRICS" },
@@ -73,7 +74,7 @@ static const EnumStringKey log_component_key_array[] = {
 };
 
 /// Enum/string keys for CdiLogLevel.
-static const EnumStringKey log_level_key_array[] = {
+static const CdiEnumStringKey log_level_key_array[] = {
     { kLogFatal,    "FATAL" },
     { kLogCritical, "CRITICAL" },
     { kLogError,    "ERROR" },
@@ -85,7 +86,7 @@ static const EnumStringKey log_level_key_array[] = {
 };
 
 /// Enum/string keys for CdiConnectionStatus.
-static const EnumStringKey connection_status_key_array[] = {
+static const CdiEnumStringKey connection_status_key_array[] = {
     { kCdiConnectionStatusDisconnected, "Disconnected" },
     { kCdiConnectionStatusConnected,    "Connected" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
@@ -99,9 +100,9 @@ static const EnumStringKey connection_status_key_array[] = {
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-// Update EnumStringKeyTypes in cdi_utility_api.h whenever an entry is added to this function's switch statement.
-const EnumStringKey* CdiUtilityKeyGetArray(EnumStringKeyTypes key_type) {
-    const EnumStringKey* key_array_ptr = NULL;
+// Update CdiEnumStringKeyType in cdi_utility_api.h whenever an entry is added to this function's switch statement.
+const CdiEnumStringKey* CdiUtilityKeyGetArray(CdiEnumStringKeyType key_type) {
+    const CdiEnumStringKey* key_array_ptr = NULL;
     switch (key_type) {
         case kKeyAdapterType:                 key_array_ptr = adapter_type_key_array; break;
         case kKeyBufferType:                  key_array_ptr = buffer_type_key_array; break;
@@ -110,13 +111,13 @@ const EnumStringKey* CdiUtilityKeyGetArray(EnumStringKeyTypes key_type) {
         case kKeyLogComponent:                key_array_ptr = log_component_key_array; break;
         case kKeyLogLevel:                    key_array_ptr = log_level_key_array; break;
         case kKeyConnectionStatus:            key_array_ptr = connection_status_key_array; break;
-        case kKeyTestUnit:                    key_array_ptr = TestUnitGetKeyArray(); break;
+        case kKeyTestUnit:                    key_array_ptr = CdiTestUnitGetKeyArray(); break;
     }
     assert(NULL != key_array_ptr);
     return key_array_ptr;
 }
 
-const char* CdiUtilityEnumValueToString(const EnumStringKey* key_array, int enum_value)
+const char* CdiUtilityEnumValueToString(const CdiEnumStringKey* key_array, int enum_value)
 {
     const char* ret_str = NULL;
 
@@ -134,7 +135,7 @@ const char* CdiUtilityEnumValueToString(const EnumStringKey* key_array, int enum
     return ret_str;
 }
 
-int CdiUtilityStringToEnumValue(const EnumStringKey* key_array, const char* name_str)
+int CdiUtilityStringToEnumValue(const CdiEnumStringKey* key_array, const char* name_str)
 {
     int ret_enum_value = CDI_INVALID_ENUM_VALUE;
 
@@ -152,25 +153,25 @@ int CdiUtilityStringToEnumValue(const EnumStringKey* key_array, const char* name
     return ret_enum_value;
 }
 
-const char* CdiUtilityKeyEnumToString(EnumStringKeyTypes key_type, int enum_value)
+const char* CdiUtilityKeyEnumToString(CdiEnumStringKeyType key_type, int enum_value)
 {
-    const EnumStringKey* key_array = CdiUtilityKeyGetArray(key_type);
+    const CdiEnumStringKey* key_array = CdiUtilityKeyGetArray(key_type);
     return CdiUtilityEnumValueToString(key_array, enum_value);
 }
 
-int CdiUtilityKeyStringToEnum(EnumStringKeyTypes key_type, const char* name_str)
+int CdiUtilityKeyStringToEnum(CdiEnumStringKeyType key_type, const char* name_str)
 {
-    const EnumStringKey *key_array = CdiUtilityKeyGetArray(key_type);
+    const CdiEnumStringKey *key_array = CdiUtilityKeyGetArray(key_type);
     return CdiUtilityStringToEnumValue(key_array, name_str);
 }
 
 uint32_t CdiUtilityPtpToRtp(const CdiPtpTimestamp* ptp_timestamp_ptr, uint32_t sample_rate)
 {
-    uint64_t ptp_time_ns = (ptp_timestamp_ptr->seconds * NANOSECONDS_PER_SECOND) + ptp_timestamp_ptr->nanoseconds;
+    uint64_t ptp_time_ns = (ptp_timestamp_ptr->seconds * CDI_NANOSECONDS_PER_SECOND) + ptp_timestamp_ptr->nanoseconds;
     // RTP counter is a 32 bit counter counting at sample_rate samples per seconds.
-    uint64_t rtp_rollover_time_ns = ((NANOSECONDS_PER_SECOND * RTP_ROLLOVER_COUNT) + (sample_rate/2)) / sample_rate;
+    uint64_t rtp_rollover_time_ns = ((CDI_NANOSECONDS_PER_SECOND * RTP_ROLLOVER_COUNT) + (sample_rate/2)) / sample_rate;
     // Get the number of nanoseconds since the last rollover occurred and convert that to rtp samples.
-    uint64_t rtp_counts = ((ptp_time_ns % rtp_rollover_time_ns) * sample_rate) / NANOSECONDS_PER_SECOND;
+    uint64_t rtp_counts = ((ptp_time_ns % rtp_rollover_time_ns) * sample_rate) / CDI_NANOSECONDS_PER_SECOND;
     // RTP timestamp is truncated to 32 bits so any lost upper bits on ptp_time_in_nanoseconds don't matter.
     // As long as the PTP timestamps are from a common source RTP time from different samples can be compared.
     return (uint32_t)rtp_counts;

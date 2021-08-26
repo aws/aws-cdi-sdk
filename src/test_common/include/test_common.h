@@ -13,6 +13,7 @@
 #ifndef TEST_COMMON_H__
 #define TEST_COMMON_H__
 
+#include <stdarg.h>
 #include <stdbool.h>
 
 #include "cdi_logger_api.h"

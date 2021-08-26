@@ -35,8 +35,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <strsafe.h>
+#include <sys/uio.h>
 #include <windows.h>
 #include <ws2def.h>
+#include <ws2tcpip.h>
 
 #include "cdi_logger_api.h"
 #include "utilities_api.h"
@@ -92,7 +94,7 @@ typedef struct SocketInfo SocketInfo;
 struct SocketInfo
 {
     SOCKET s; ///< Socket descriptor
-    struct sockaddr addr; ///< Socket address info
+    struct sockaddr_in addr; ///< Socket address info
 };
 
 /// @brief Macro used within this file to handle generation of error messages with OS message either to the logger or
@@ -1030,7 +1032,7 @@ bool CdiOsIsPathWriteable(const char* directory_str)
     // Next, verify the directory is writeable by attempting to create a temp file in user-provided directory.
     if (ret) {
         CdiFileID file_handle = 0;
-        char temp_file_string[MAX_LOG_FILENAME_LENGTH] = { 0 };
+        char temp_file_string[CDI_MAX_LOG_FILENAME_LENGTH] = { 0 };
         snprintf(temp_file_string, sizeof(temp_file_string), "%s\\%s", directory_str, "_tmp_");
 
         file_handle = CreateFile(temp_file_string, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
@@ -1271,7 +1273,7 @@ bool CdiOsSocketReadFrom(CdiSocket socket_handle, void* buffer_ptr, int* byte_co
         };
         DWORD flags = 0;
         socklen_t addrlen = (source_address_ptr) ? sizeof(*source_address_ptr) : 0;
-        rv = WSARecvFrom(info_ptr->s, &wsabuf, 1, byte_count_ptr, &flags, source_address_ptr, &addrlen, NULL, NULL);
+        rv = WSARecvFrom(info_ptr->s, &wsabuf, 1, byte_count_ptr, &flags, (struct sockaddr *)source_address_ptr, &addrlen, NULL, NULL);
         if (rv == 0) {
             ret = true;
         } else {
@@ -1317,8 +1319,8 @@ bool CdiOsSocketWriteTo(CdiSocket socket_handle, struct iovec* iov, int iovcnt,
             wsabufs[i].len = iov[i].iov_len;
         }
 
-        struct sockaddr* addr_ptr = (destination_address_ptr) ? destination_address_ptr : &info_ptr->addr;
-        return WSASendTo(info_ptr->s, wsabufs, iovcnt, byte_count_ptr, 0, addr_ptr, sizeof(*addr_ptr),
+        const struct sockaddr_in* addr_ptr = (destination_address_ptr) ? destination_address_ptr : &info_ptr->addr;
+        return WSASendTo(info_ptr->s, wsabufs, iovcnt, byte_count_ptr, 0, (const struct sockaddr *)addr_ptr, sizeof(*addr_ptr),
                          NULL, NULL) == 0;
     }
 }

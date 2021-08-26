@@ -124,22 +124,22 @@ namespace Model
 
 
     /**
-     * The percentage of CPU that is being used by the adapter endpoint polling thread.
+     * The percentage of CPU that is being used by the adapter endpoint poll thread.
      */
     inline int GetCpuUtilization() const{ return m_cpuUtilization; }
 
     /**
-     * The percentage of CPU that is being used by the adapter endpoint polling thread.
+     * The percentage of CPU that is being used by the adapter endpoint poll thread.
      */
     inline bool CpuUtilizationHasBeenSet() const { return m_cpuUtilizationHasBeenSet; }
 
     /**
-     * The percentage of CPU that is being used by the adapter endpoint polling thread.
+     * The percentage of CPU that is being used by the adapter endpoint poll thread.
      */
     inline void SetCpuUtilization(int value) { m_cpuUtilizationHasBeenSet = true; m_cpuUtilization = value; }
 
     /**
-     * The percentage of CPU that is being used by the adapter endpoint polling thread.
+     * The percentage of CPU that is being used by the adapter endpoint poll thread.
      */
     inline MetricGroup& WithCpuUtilization(int value) { SetCpuUtilization(value); return *this;}
 

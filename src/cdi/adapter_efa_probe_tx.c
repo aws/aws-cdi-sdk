@@ -67,15 +67,29 @@ static bool EfaEnqueueSendProbePackets(ProbeEndpointState* probe_ptr)
             // Set the EFA data to a pattern.
             memset(packet_ptr->efa_data, EFA_PROBE_PACKET_DATA_PATTERN, sizeof(packet_ptr->efa_data));
 
+            work_request_ptr->packet.sg_list.total_data_size = EFA_PROBE_PACKET_DATA_SIZE;
+            work_request_ptr->packet.sg_list.sgl_head_ptr = &work_request_ptr->sgl_entry;
+
+            work_request_ptr->sgl_entry.size_in_bytes = EFA_PROBE_PACKET_DATA_SIZE;
+            work_request_ptr->sgl_entry.address_ptr = packet_ptr->efa_data;
+
             // Set the CDI common header.
             CdiRawPacketHeader* header_ptr = (CdiRawPacketHeader*)packet_ptr->efa_data;
             payload_state.payload_packet_state.payload_type = kPayloadTypeProbe;
             payload_state.payload_packet_state.payload_num = 0;
             payload_state.payload_packet_state.packet_sequence_num = packet_ptr->packet_sequence_num;
             payload_state.payload_packet_state.packet_id = i;
+
+            payload_state.source_sgl.total_data_size = EFA_PROBE_PACKET_DATA_SIZE;
             ProtocolPayloadHeaderInit(protocol_handle, header_ptr, &payload_state);
 
+            // Set flag to true if last packet of the payload. This is used to decrement tx_in_flight_ref_count when
+            // the last packet of a payload is ACKed.
+            work_request_ptr->packet.payload_last_packet = (i+1 == EFA_PROBE_PACKET_COUNT);
+
             CdiSinglyLinkedListPushTail(&packet_list, &work_request_ptr->packet.list_entry);
+            // Increment in-flight reference counter once for each packet.
+            CdiOsAtomicInc32(&probe_ptr->app_adapter_endpoint_handle->tx_in_flight_ref_count);
         }
     }
 
@@ -159,6 +173,10 @@ void ProbeTxEfaMessageFromEndpoint(void* param_ptr, Packet* packet_ptr, Endpoint
 
     // Put back work request into the pool.
     CdiPoolPut(probe_ptr->efa_work_request_pool_handle, work_request_ptr);
+
+    probe_ptr->tx_probe_state.packets_acked_count++;
+
+    CdiAdapterTxPacketComplete(probe_ptr->app_adapter_endpoint_handle, packet_ptr);
 }
 
 void ProbeTxControlMessageFromEndpoint(void* param_ptr, Packet* packet_ptr)
@@ -210,7 +228,8 @@ bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecoded
 
                 // Ensure the sizes of these values are the same, so wrapping doesn't affect results when comparing
                 // them.
-                assert(sizeof(packet_ack_ptr->ack_control_packet_num) == sizeof(probe_ptr->ack_control_packet_num));
+                CDI_STATIC_ASSERT(sizeof(packet_ack_ptr->ack_control_packet_num) == sizeof(probe_ptr->ack_control_packet_num), \
+                    "Control packet sizes must match.");
 
                 if (packet_ack_ptr->ack_command == probe_ptr->ack_command &&
                     packet_ack_ptr->ack_control_packet_num == probe_ptr->ack_control_packet_num) {
@@ -301,13 +320,9 @@ bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecoded
                 *wait_timeout_ms_ptr = 0; // Take effect immediately.
                 ret_new_state = true;
             } else {
-                // Got a connected command from receiver. Enable application connection.
-                ProbeControlEfaConnectionEnableApplication(probe_ptr);
-
-                // Advance to the connected state, which will start the ping process. Setup wait period for next ping
-                // based on ping frequency.
-                probe_ptr->tx_probe_state.tx_state = kProbeStateEfaConnected;
-                *wait_timeout_ms_ptr = SEND_PING_COMMAND_FREQUENCY_MSEC;
+                // Got a connected command from receiver. Advance state to ensure probe ACKs have all been received.
+                probe_ptr->tx_probe_state.tx_state = kProbeStateEfaTxProbeAcks;
+                *wait_timeout_ms_ptr = 0; // Take effect immediately.
                 ret_new_state = true;
             }
             break;
@@ -401,6 +416,25 @@ uint64_t ProbeTxControlProcessProbeState(ProbeEndpointState* probe_ptr)
                                       "configured. See the CDI SDK Install and Setup Guide for proper security group "
                                       "configuration.");
 
+            break;
+        case kProbeStateEfaTxProbeAcks:
+            if (probe_ptr->tx_probe_state.packets_acked_count >= EFA_PROBE_PACKET_COUNT) {
+                // Received all ACKs from probe packets, so advance to the EFA connected state.
+                ProbeControlEfaConnectionEnableApplication(probe_ptr);
+                // Advance to the connected state, which will start the ping process. Setup wait period for next ping
+                // based on ping frequency.
+                probe_ptr->tx_probe_state.tx_state = kProbeStateEfaConnected;
+                wait_timeout_ms = SEND_PING_COMMAND_FREQUENCY_MSEC;
+            } else {
+                if (++probe_ptr->tx_probe_state.packets_ack_wait_count < EFA_TX_PROBE_ACK_MAX_RETRIES) {
+                    // Wait a little while and retry if we have not received all the ACKs yet.
+                    wait_timeout_ms = EFA_TX_PROBE_ACK_TIMEOUT;
+                } else {
+                    CDI_LOG_THREAD(kLogError, "Did not get all ACKs from probe packets. Resetting connection.");
+                    probe_ptr->tx_probe_state.tx_state = kProbeStateEfaReset; // Advance to resetting state.
+                    wait_timeout_ms = 0; // Do immediately.
+                }
+            }
             break;
         case kProbeStateEfaConnected:
 #ifdef DISABLE_PROBE_MONITORING

@@ -48,7 +48,7 @@ typedef struct {
  * single EFA endpoint.
  */
 typedef struct {
-    /// @brief Memory pool for Rx packet SGL entires (CdiSglEntry). Not thread-safe.
+    /// @brief Memory pool for Rx packet SGL entries (CdiSglEntry). Not thread-safe.
     CdiPoolHandle packet_sgl_entries_pool_handle;
     void* allocated_buffer_ptr;             ///< Address of receive packets memory buffer; needed for freeing.
     int allocated_buffer_size;              ///< Total size of allocated packets buffer; needed for freeing.

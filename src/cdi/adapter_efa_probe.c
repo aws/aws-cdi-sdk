@@ -31,7 +31,7 @@
  *    #kProbeStateSendReset.
  *
  * 2. Transmitter sends reset requests that contain protocol v1.0.x to receiver until an ACK is received. This value is
- *    used to allow backwards compatibilty with legacy versions of the protocols. For legacy versions of the probe
+ *    used to allow backwards compatibility with legacy versions of the protocols. For legacy versions of the probe
  *    protocol, the value of "x" is ignored. For all other versions:
  *
  *      If the value of "x" (defined by CDI_PROBE_VERSION) is 3 or greater, then the probe protocol supports the new

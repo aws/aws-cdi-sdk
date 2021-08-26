@@ -63,7 +63,7 @@ typedef struct
     /// A string that describes the arguments to the option.
     const char* argument_str;
     /// Pointer to array of strings of option argument choices.
-    const EnumStringKey* arg_choices_array_ptr;
+    const CdiEnumStringKey* arg_choices_array_ptr;
     /// A string that describes the function of the option.  Max length is OPTARG_MAX_DESCRIPTION_STRING_LEN.
     const char* description_str;
 } OptDef;
@@ -92,7 +92,7 @@ typedef struct
  * @param key_array A key-value array to search for name_str.
  * @param indent The number of space to indent before printing the array of names from the name_str member of each key-value pair.
  */
-void PrintKeyArrayNames(const EnumStringKey* key_array, const int indent);
+void PrintKeyArrayNames(const CdiEnumStringKey* key_array, const int indent);
 
 /**
  * Print the usage message of a single option based on the user-defined usage options.

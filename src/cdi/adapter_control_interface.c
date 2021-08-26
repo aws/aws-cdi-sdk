@@ -94,7 +94,8 @@ CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_
             .connection_cb_ptr = NULL,             // Not used by control interface.
             .connection_user_cb_param = NULL,      // Not used by control interface.
             .log_handle = config_data_ptr->log_handle,
-            .thread_core_num = -1,
+            .shared_thread_id = 0, // 0 or -1= Use unique poll thread for this connection.
+            .thread_core_num = -1, // -1= Let OS decide which CPU core to use.
             .direction = kEndpointDirectionBidirectional,
 
             // This endpoint is a control interface. This means that the Endpoint Manager is not used for managing
@@ -117,7 +118,7 @@ CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_
         };
         rs = CdiAdapterOpenEndpoint(&config_data, &control_ptr->adapter_endpoint_handle);
 
-        // Save a copy of the handle so the polling thread can use it. See ControlInterfacePoll().
+        // Save a copy of the handle so the poll thread can use it. See ControlInterfacePoll().
         control_ptr->adapter_connection_handle->control_state.control_endpoint_handle =
             control_ptr->adapter_endpoint_handle;
     }
@@ -136,6 +137,8 @@ void ControlInterfaceDestroy(ControlInterfaceHandle handle)
     ControlInterfaceState* control_ptr = (ControlInterfaceState*)handle;
     if (control_ptr) {
         if (control_ptr->adapter_connection_handle) {
+            // Set shutdown signal so the PollThread() will wake-up to process the stop connection.
+            CdiOsSignalSet(control_ptr->adapter_connection_handle->shutdown_signal);
             // Stop PollThread(). This needs to shutdown before closing the endpoint, otherwise destroying resources
             // the thread is using such as tx_packet_queue_handle will case a hang.
             CdiAdapterStopConnection(control_ptr->adapter_connection_handle);

@@ -10,7 +10,6 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 - [Install AWS CloudWatch and AWS CLI](#install-aws-cloudwatch-and-aws-cli)
   - [Install AWS CLI](#install-aws-cli)
   - [Install Package Dependencies](#install-package-dependencies)
-  - [Install CMake](#install-cmake)
   - [Download AWS SDK](#download-aws-sdk)
 - [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications)
   - [(Optional) Disable the display of performance metrics to your Amazon CloudWatch account](#optional-disable-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
@@ -27,7 +26,7 @@ Follow the steps in [create an EFA-enabled instance](README.md#create-an-efa-ena
 
 # Install EFA driver
 
-For Linux installations, follow step 3 in [launch an Elasatic Fabric Adapter (EFA)-capable instance](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html), with the following additions to the step **Install the EFA software**:
+For Linux installations, follow step 3 in [launch an Elastic Fabric Adapter (EFA)-capable instance](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html), with the following additions to the step **Install the EFA software**:
 
  - During **Connect to the instance you launched**, once your instance has booted, you can find the public IP you requested earlier by clicking on the instance and looking for “IPv4 Public IP” in the pane below your instance list. Use that IP address to SSH to your new instance.
     - If you cannot connect (connection times out), you may have forgotten to add an SSH rule to your security group, or you may need to set up an internet gateway for your Virtual Private Cloud (VPC) and add a route to your subnet. You can find more information about setting up SSH access and connecting to the instance at [accessing Linux instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AccessingInstancesLinux.html).
@@ -124,8 +123,8 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
         - Select **Add user** and provide a name and select **Programmatic access**.
         - Select **Next: Permissions** and then select **Create group** to create a new user group.
         - Put in a **Group name** for the new group and select the policies for the group.
-            - Select the policy that was made in the step above for mediaconnect access.
-            - Select **CloudWatchAgentServerPolicy** to provide cloudwatch access.
+            - Select the policy that was made in the step above for CloudWatch access.
+            - Select **CloudWatchAgentServerPolicy** to provide CloudWatch access.
             - Select **Create group**
                 - Select **Next:Tags** the select **Next:Review**.
                 - Select **Create user**
@@ -145,47 +144,18 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
     ```
 
 ## Install Package Dependencies
-Installation of dependent packages is required before building the AWS CDI SDK and CMake:
+Installation of dependent packages is required before building the AWS CDI SDK:
 
 - CentOS 7 and Amazon Linux 2:
 
     ```bash
-    sudo yum -y install gcc-c++ make libnl3-devel autoconf automake libtool doxygen ncurses-devel
+    sudo yum -y install gcc-c++ make cmake3 libnl3-devel autoconf automake libtool doxygen ncurses-devel
     ```
 
 - Ubuntu:
 
     ```bash
     sudo apt-get install –y build-essential libncurses-dev autoconf automake libtool libnl-3-dev cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev
-    ```
-
-## Install CMake
-CMake is required to build AWS SDK C++.
-
-1. Verify that CMake version 3.2 or higher is installed. If it’s not installed, here are a few examples of how to install it through a package manager or by building from its source:
-
-    - Ubuntu versions 16.04LTS and later have suitable packages that can be installed with:
-
-    ```bash
-    sudo apt-get install -y cmake
-    ```
-
-    - CentOS 8 use:
-
-    ```bash
-    sudo yum install -y cmake
-    ```
-
-    - The following commands represent an Amazon Linux 2 and Linux CentOS 7 installation of CMake version 3.15 by building from its source:
-
-    ```bash
-    cd
-    wget https://github.com/Kitware/CMake/releases/download/v3.15.3/cmake-3.15.3.tar.gz
-    tar -zxvf cmake-3.15.3.tar.gz
-    cd cmake-3.15.3
-    ./bootstrap --prefix=/usr/local
-    make
-    sudo make install
     ```
 
 ## Download AWS SDK
@@ -237,7 +207,7 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
    **Note**: After a successful compile, the locations for the results are at:
     - Test application: ```cdi_test``` is placed at ```aws-cdi-sdk/build/debug/bin```
     - Minimal test applications: ```cdi_test_min_tx``` and ```cdi_test_min_rx``` are placed at ```aws-cdi-sdk/build/debug/bin```
-    - AWS CDI SDK and libfabric shared libraries ```libcdisdk.so.2.0``` and ```libfabric.so.1``` are placed at ```aws-cdi-sdk/build/debug/lib.```
+    - AWS CDI SDK and libfabric shared libraries ```libcdisdk.so.x.x``` and ```libfabric.so.x``` are placed at ```aws-cdi-sdk/build/debug/lib.```
     - HTML documentation can be found at ```aws-cdi-sdk/build/documentation```
 
 ## (Optional) Disable the display of performance metrics to your Amazon CloudWatch account
@@ -246,6 +216,8 @@ To disable the display of performance metrics to your Amazon CloudWatch account:
 
 - In the file ```src/cdi/configuration.h```, comment out ```#define CLOUDWATCH_METRICS_ENABLED```.
 
+**Note**: For the change to take effect, the CDI SDK library and related applications must be rebuilt.
+
 ---
 
 # Enable huge pages
@@ -253,6 +225,7 @@ To disable the display of performance metrics to your Amazon CloudWatch account:
 Applications that use AWS CDI SDK see a performance benefit when using huge pages. To enable huge pages:
 
 1. Edit ```/etc/sysctl.conf``` (you will likely need to use sudo with your edit command). Add the line ```vm.nr_hugepages = 1024```
+**Note**: If using more than 6 connections, you may have to use a larger value such as 2048.
 1. Issue the command ```sudo sysctl -p```
 1. Check that huge pages have updated by issuing the command ```cat /proc/meminfo | grep Huge```.
 
@@ -287,6 +260,8 @@ bytes   #sent   #ack     total       time     MB/sec    usec/xfer   Mxfers/sec
 1m      10      =10      20m         0.01s   2359.00     444.50       0.00
 ```
 
+If you get an error, please check this issue: https://github.com/aws/aws-cdi-sdk/issues/48
+
 ---
 
 # Build the HTML documentation
@@ -303,18 +278,22 @@ After this completes, use a web browser to navigate to ```build/documentation/in
 
 # Creating additional instances
 
-To use AWS CDI SDK in an application, two instances are needed.
-To create a new instance:
+To create a new instance, create an Amazon Machine Image (AMI) of the existing instance and use it to launch additional instances as described below:
 
-  1. Select the previously created instance in the EC2 console, and then in the **Action** menu, select **Launch More Like This**.
-  1. Perform step 3 of the instructions for creating an [EFA-capable instance](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html). This installs and configures the EFA software.
-  1. To install AWS CDI SDK software and test using the memory loopback test, repeat these instructions:
-     - [Install AWS CDI SDK](#install-aws-cdi-sdk)
-     - [Install AWS CloudWatch and AWS CLI](#install-aws-cloudwatch-and-aws-cli)
-     - [Build CDI Libraries and Test Applications](#build-cdi-libraries-and-test-applications)
-     - [Enable Huge Pages](#enable-huge-pages)
-     - [Validate the EFA Environment](#validate-the-efa-environment)
-  1. This instance is now considered the receiver.
+  1. To create an AMI, select the previously created instance in the EC2 console, and then in the **Action** menu, select **Image and Templates -> Create Image**. For details see [Create AMI](https://docs.aws.amazon.com/toolkit-for-visual-studio/latest/user-guide/tkv-create-ami-from-instance.html).
+  1. In the EC2 console Under **Images**, select **AMIs**. Locate the AMI and wait until the **Status** shows **available**. It will may several minutes for the AMI to be created and become available for use. After it becomes available, select the AMI and use the **Action** menu to select **Launch**.
+  1. Select the same instance type as the existing instance and select **Next: Configure Instance Details**.
+  1. To **Configure Instance Details**, **Add Storage**, **Add Tags** and **Configure Security Group** follow the steps at [Create an EFA-enabled instance](#create-an-efa-enabled-instance).
+  1. The new instance will contain the host name stored in the AMI and not the private IP name used by the new instance. Edit **/etc/hostname**. The private IP name can be obtained from the AWS Console or use **ifconfig** on the instance. For example, if **ifconfig** shows **1.2.3.4** then the name should look something like (region may be different):
+
+     ```
+     ip-1-2-3-4.us-west-2.compute.internal
+     ```
+     This change requires a reboot. Depending on OS variant, there are commands that can be used to avoid a reboot. For example:
+
+     ```
+     sudo hostname <new-name>
+     ```
 
 ---
 

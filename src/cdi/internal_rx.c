@@ -49,7 +49,7 @@
  * @param core_cb_data_ptr Pointer to the core callback data structure.
  * @param payload_sgl_ptr Pointer to the payload SGL list to free.
  */
-static void SetCbErrorAndFreeResources(CdiReturnStatus rs, const char *error_msg_str, CdiCoreCbData* core_cb_data_ptr,
+static void SetCbErrorAndFreeResources(CdiReturnStatus rs, const char* error_msg_str, CdiCoreCbData* core_cb_data_ptr,
                                        CdiSgList* payload_sgl_ptr)
 {
     // If another error has already occurred don't overwrite it, just log this error.
@@ -191,7 +191,7 @@ static void UpdateApplicationCallbackDataFromCdiPacket0(AppPayloadCallbackData* 
  * @param header_ptr Pointer to CDI header that contains data to be added to payload state.
  */
 static void UpdatePayloadStateDataFromCDIPacket0(RxPayloadState* payload_state_ptr,
-                                                 CdiDecodedPacketHeader *header_ptr)
+                                                 CdiDecodedPacketHeader* header_ptr)
 {
     // Got packet #0. Initialize payload state from data in packet sequence number zero's CDI header.
     payload_state_ptr->payload_num = header_ptr->payload_num;
@@ -535,7 +535,7 @@ static void QueueBackPressurePayloadToApp(CdiConnectionState* con_state_ptr, Cdi
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConfigData* config_data_ptr,
+CdiReturnStatus RxCreateInternal(CdiConnectionProtocolType protocol_type, CdiRxConfigData* config_data_ptr,
                                  CdiCallback rx_cb_ptr, CdiConnectionHandle* ret_handle_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;
@@ -545,7 +545,7 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
     }
     int max_rx_payloads = config_data_ptr->max_simultaneous_rx_payloads_per_connection;
     if (max_rx_payloads == 0) {
-        max_rx_payloads = MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
+        max_rx_payloads = CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION;
     }
 
     con_state_ptr->adapter_state_ptr = config_data_ptr->adapter_handle;
@@ -555,15 +555,15 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
     memcpy(&con_state_ptr->rx_state.config_data, config_data_ptr, sizeof *config_data_ptr);
     con_state_ptr->rx_state.cb_ptr = rx_cb_ptr;
     // Now that we have a connection logger, we can use the CDI_LOG_HANDLE() macro to add log messages to it. Since this
-    // thread is from the application, we cannot use the CDI_LOG_THEAD() macro.
+    // thread is from the application, we cannot use the CDI_LOG_THREAD() macro.
 
     if (-1 == con_state_ptr->rx_state.config_data.buffer_delay_ms) {
-        con_state_ptr->rx_state.config_data.buffer_delay_ms = ENABLED_RX_BUFFER_DELAY_DEFAULT_MS;
+        con_state_ptr->rx_state.config_data.buffer_delay_ms = CDI_ENABLED_RX_BUFFER_DELAY_DEFAULT_MS;
     } else {
-        if (config_data_ptr->buffer_delay_ms > MAXIMUM_RX_BUFFER_DELAY_MS) {
+        if (config_data_ptr->buffer_delay_ms > CDI_MAXIMUM_RX_BUFFER_DELAY_MS) {
             CDI_LOG_HANDLE(cdi_global_context.global_log_handle, kLogError,
                            "Buffer delay specified[%d]ms exceeds maximum allowable value[%d]ms.",
-                           config_data_ptr->buffer_delay_ms, MAXIMUM_RX_BUFFER_DELAY_MS);
+                           config_data_ptr->buffer_delay_ms, CDI_MAXIMUM_RX_BUFFER_DELAY_MS);
             rs = kCdiStatusInvalidParameter;
         } else if (config_data_ptr->buffer_delay_ms < -1) {
             CDI_LOG_HANDLE(cdi_global_context.global_log_handle, kLogError,
@@ -623,7 +623,7 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
     if (con_state_ptr->rx_state.config_data.buffer_delay_ms) {
         // Rx buffer delay is enabled, so we need to allocate additional Rx buffers.
         reserve_packet_buffers += (MAX_RX_PACKETS_PER_CONNECTION * con_state_ptr->rx_state.config_data.buffer_delay_ms)
-                                  / RX_BUFFER_DELAY_BUFFER_MS_DIVISOR;
+                                  / CDI_RX_BUFFER_DELAY_BUFFER_MS_DIVISOR;
     }
 
     if (kCdiStatusOk == rs) {
@@ -654,7 +654,7 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
 
     if (kCdiStatusOk == rs) {
         // Set up receive buffer handling if enabled; either way, set payload complete queue to point to the right one.
-        if (con_state_ptr->rx_state.config_data.buffer_delay_ms != 0) {
+        if (0 != con_state_ptr->rx_state.config_data.buffer_delay_ms) {
             rs = RxBufferInit(con_state_ptr->log_handle, con_state_ptr->error_message_pool,
                               con_state_ptr->rx_state.config_data.buffer_delay_ms, max_rx_payloads,
                               con_state_ptr->app_payload_message_queue_handle,
@@ -672,7 +672,7 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
 
     if (kCdiStatusOk == rs) {
         // Create a packet message thread that is used by both Tx and Rx connections.
-        rs = ConnectionCommonPacketMessageThreadCreate(con_state_ptr);
+        rs = ConnectionCommonPacketMessageThreadCreate(con_state_ptr, "Rx:PayloadMessage");
     }
 
     if (kCdiStatusOk == rs) {
@@ -687,6 +687,7 @@ CdiReturnStatus RxCreateInternal(ConnectionProtocolType protocol_type, CdiRxConf
 
             .log_handle = con_state_ptr->log_handle,
             .port_number = config_data_ptr->dest_port,
+            .shared_thread_id = config_data_ptr->shared_thread_id,
             .thread_core_num = config_data_ptr->thread_core_num,
 
             .direction = kEndpointDirectionReceive,
@@ -908,7 +909,7 @@ void RxPacketReceive(void* param_ptr, Packet* packet_ptr, EndpointMessageType me
         }
 
         // If we have received a packet for a payload that is marked ignore, we will ignore incoming packets for it
-        // until we have received MAX_RX_PACKET_OUT_OF_ORDER_WINDOW packets since the payload was set to ignore.
+        // until we have received CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW packets since the payload was set to ignore.
         if (kPayloadIgnore == payload_state_ptr->payload_state &&
             RxReorderPayloadIsStale(endpoint_ptr, payload_state_ptr)) {
             // Payload state data is stale, so ok to re-use it now.
@@ -1018,7 +1019,7 @@ void RxSendPayload(CdiEndpointState* endpoint_ptr, RxPayloadState* payload_state
     // Add the Rx payload SGL message to the AppCallbackPayloadThread() queue.
     if (!CdiQueuePush(con_state_ptr->rx_state.active_payload_complete_queue_handle,
                       (void*)&payload_state_ptr->work_request_state.app_payload_cb_data)) {
-        CDI_LOG_THREAD(kLogError, "Queue[%s] full, push failed.",
+        CDI_LOG_THREAD(kLogError, "[%s] full, payload push failed.  Application callback might be too slow.",
                        CdiQueueGetName(con_state_ptr->rx_state.active_payload_complete_queue_handle));
 
         // If payload is in state kPayloadComplete, its resources need to be freed. If in one of the other states, the
@@ -1097,7 +1098,6 @@ CdiReturnStatus RxEnqueueFreeBuffer(const CdiSgList* sgl_ptr)
     CdiReturnStatus rs = kCdiStatusOk;
     CdiMemoryState* memory_state_ptr = (CdiMemoryState*)sgl_ptr->internal_data_ptr;
     CdiEndpointState* endpoint_ptr = memory_state_ptr->cdi_endpoint_handle;
-    CdiConnectionState* con_state_ptr = endpoint_ptr->connection_state_ptr;
 
     if (kHandleTypeRx != endpoint_ptr->connection_state_ptr->handle_type) {
         return kCdiStatusWrongDirection;
@@ -1111,13 +1111,6 @@ CdiReturnStatus RxEnqueueFreeBuffer(const CdiSgList* sgl_ptr)
     // Add the free buffer message into the Rx free buffer queue processing by PollThread().
     if (!CdiQueuePush(endpoint_ptr->rx_state.free_buffer_queue_handle, sgl_ptr)) {
         rs = kCdiStatusQueueFull;
-    }
-
-    // If adapter endpoint does not support polling, then signal the poll thread to do work so it can process freeing
-    // payload and adapter packet buffers.
-    bool is_poll = (NULL != con_state_ptr->adapter_state_ptr->functions_ptr->Poll);
-    if (!is_poll) {
-        CdiOsSignalSet(endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->poll_do_work_signal);
     }
 
     return rs;

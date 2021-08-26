@@ -81,7 +81,7 @@
 #define CDI_POOL_API_H__
 
 #include <stdbool.h>
-#include <inttypes.h>
+#include <stdint.h>
 
 #include "cdi_utility_api.h"
 

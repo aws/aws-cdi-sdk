@@ -138,7 +138,7 @@ static void GetStats(CdiEndpointState* endpoint_ptr, CdiTransferStats* ret_stats
  */
 static void SendUserStatsMessage(StatisticsState* stats_state_ptr, int destination_idx)
 {
-    CdiTransferStats transfer_stats_array[MAX_ENDPOINTS_PER_CONNECTION];
+    CdiTransferStats transfer_stats_array[CDI_MAX_ENDPOINTS_PER_CONNECTION];
     CdiCoreStatsCbData cb_data = {
         .stats_count = 0,
         .transfer_stats_array = transfer_stats_array,
@@ -175,7 +175,7 @@ static void SendUserStatsMessage(StatisticsState* stats_state_ptr, int destinati
  */
 static void SendToCdiMetricsService(StatisticsState* stats_state_ptr, int destination_idx)
 {
-    CdiTransferStats transfer_stats_array[MAX_ENDPOINTS_PER_CONNECTION];
+    CdiTransferStats transfer_stats_array[CDI_MAX_ENDPOINTS_PER_CONNECTION];
     int stats_count = 0;
 
     // Collect the stats from all of the endpoints of the connection.

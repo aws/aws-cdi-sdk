@@ -12,17 +12,20 @@ This is the usage guide for the example CDI Test applications ```cdi_test```, ``
   - [EFA test with audio, video, and metadata options](#efa-test-with-audio-video-and-metadata-options)
     - [Video test with pattern](#video-test-with-pattern)
     - [Video test with input file](#video-test-with-input-file)
-  - [Verify output files:](#verify-output-files)
+    - [Verify output files](#verify-output-files)
     - [Audio test](#audio-test)
     - [Metadata](#metadata)
     - [Variable sized ancillary payloads with RIFF files](#variable-sized-ancillary-payloads-with-riff-files)
     - [Multi-stream audio/video/metadata](#multi-stream-audiovideometadata)
     - [Mux/Demux streams](#muxdemux-streams)
+    - [Testing CDI with the sockets adapter](#testing-cdi-with-the-sockets-adapter-not-recommended)
+    - [Testing CDI with the libfabric sockets adapter](#testing-cdi-with-the-libfabric-sockets-adapter-preferred)
   - [Using file-based command-line argument insertion](#using-file-based-command-line-argument-insertion)
     - [Rules for file-based command-line insertion](#rules-for-file-based-command-line-insertion)
     - [Examples](#examples)
   - [Multiple connections](#multiple-connections)
     - [Multiple connection example](#multiple-connection-example)
+    - [Multiple connection example using shared poll threads](#multiple-connection-example-using-shared-poll-threads)
   - [Connection names, logging, and display options](#connection-names-logging-and-display-options)
     - [Naming a connection](#naming-a-connection)
     - [Logging](#logging)
@@ -268,8 +271,8 @@ Transmitter EC2:
 ./build/debug/bin/cdi_test --adapter EFA --local_ip <tx-ipv4> -X --tx AVM --remote_ip <rx-ipv4> --dest_port 2000 --rate 60 --num_transactions 100 -S --id 1 --payload_size 5184000 --file_read video_out.file --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0
 ```
 
-## Verify output files:
-Peform ```sha256sum``` on ```video_in.file``` and ```video_out.file``` and the two should match.
+### Verify output files
+Perform ```sha256sum``` on ```video_in.file``` and ```video_out.file``` and the two should match.
 
 Receiver:
 
@@ -337,7 +340,7 @@ BYTE POSITION | DATA TYPE | DESCRIPTION
 17 to 21      | uint32    | Frame #1 chunk size in bytes
 chunk_size number of bytes starting at 22 | BYTE[chunk_size] | Frame #1 binary section of ancillary RTP packets
 
-Other than the limits provided by your operating system, the RIFF file has no maxiumum number of "ANC" chunks in it. Each ANC chunk is sent as a payload of chunk_size bytes. When using a RIFF file, the ```--payload_size``` option indicates the max chunk_size for buffer allocation purposes instead of the actual size of the payload that is sent.
+Other than the limits provided by your operating system, the RIFF file has no maximum number of "ANC" chunks in it. Each ANC chunk is sent as a payload of chunk_size bytes. When using a RIFF file, the ```--payload_size``` option indicates the max chunk_size for buffer allocation purposes instead of the actual size of the payload that is sent.
 If using looping content for testing, the RIFF file continues looping until ```--num_transactions``` are sent. As long as the RIFF file ends on a completed chunk, it loops back to the beginning of the file.
 
 The following test sends variably sized payloads of ancillary data sourced from a RIFF file and writes back the received data back as a RIFF file. These commands create an ```ancillary_data_out.cdi``` file identical to the test content ```ancillary_data.cdi``` file:
@@ -416,10 +419,50 @@ Transmitter:
 ./build/debug/bin/cdi_test --adapter EFA --local_ip <tx-ipv4> -XS --tx AVM --rate 60 --num_transactions 100 -S --id 1 --remote_ip <rx-ipv4> --dest_port 3100 --payload_size 5184000 --pattern INC --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0 -S --id 2 --remote_ip <rx-ipv4> --dest_port 3200 --payload_size 2944 --pattern INC --avm_audio "ST" 48kHz none
 ```
 
+## Testing CDI with the sockets adapter (not recommended)
+The `sockets` adapter makes it possible to run `cdi_test` without using underlying EFA hardware by transmitting data through the UDP stack in the kernel. Note that UDP is inherently an unreliable form of transmission. If reliable transmission is required while still prototyping without the EFA adapter, it is recommended to use the [libfabric sockets adapter](#testing-cdi-with-the-libfabric-sockets-adapter). Furthermore, UDP sockets incur a higher overhead than the libfabric interface, limiting the payload size and increasing latency when compared with using the EFA adapter.
+
+The `sockets` adapter is provided through the SDK and exposed in the `cdi_test` application for prototyping purposes and can be utilized by specifying the following command-line option: `--adapter SOCKET`.
+
+When using the `sockets` adapter, it is suggested to use payload sizes less than or equal to `58,130` bytes. Larger sizes are not guaranteed to work with the sockets adapter.
+
+Below are example command-line options for `cdi_test` using the `sockets` adapter.
+
+Transmitter:
+
+```bash
+./build/debug/bin/cdi_test --adapter SOCKET --local_ip <tx-ipv4> -X --tx RAW --dest_port 2000 --remote_ip <rx-ipv4> --num_transactions 1000 --rate 30 --keep_alive -S --pattern INC --payload_size 1000
+```
+
+Receiver:
+
+```bash
+./build/debug/bin/cdi_test --adapter SOCKET --local_ip <rx-ipv4> -X --rx RAW --dest_port 2000 --num_transactions 1000 --rate 30 --keep_alive -S --pattern INC --payload_size 1000
+```
+
+## Testing CDI with the libfabric sockets adapter (preferred)
+The `libfabric sockets` adapter provides reliable transport over UDP and is recommended for prototyping on non-EFA platforms because it eliminates unreliable transport as a source of errors that will not occur in production environments. Similar to the `EFA` adapter, transmitting and receiving larger payload sizes is possible with the `libfabric sockets` adapter. However, much like the `sockets` adapter, `libfabric sockets` will suffer from a latency penalty. It is suggested to only use this adapter for prototyping applications.
+
+The `libfabric sockets` adapter is provided through the SDK and exposed in the `cdi_test` application by specifying the following command-line option: `--adapter SOCKET_LIBFABRIC`.
+
+Below are example command-line options for `cdi_test` using the `libfabric sockets` adapter.
+
+Transmitter:
+
+```bash
+./build/debug/bin/cdi_test --adapter SOCKET_LIBFABRIC --local_ip <tx-ipv4> -X --tx RAW --dest_port 2000 --remote_ip <rx-ipv4> --num_transactions 1000 --rate 30 -name single_raw --keep_alive -S --pattern INC --payload_size 20000
+```
+
+Receiver:
+
+```bash
+./build/debug/bin/cdi_test --adapter SOCKET_LIBFABRIC --local_ip <rx-ipv4> -X --rx RAW --dest_port 2000 --num_transactions 1000 --rate 30 --keep_alive -S --pattern INC --payload_size 20000
+```
+
 
 ## Using file-based command-line argument insertion
 
-In addition to parsing command line options directly, the ```cdi_test``` application can read commands from a file. To use file-based command-line arguments, use the following format in place of usual arguments:
+In addition to parsing command-line options directly, the ```cdi_test``` application can read commands from a file. To use file-based command-line arguments, use the following format in place of usual arguments:
 
 ```bash
 ./build/debug/bin/cdi_test @<cmd-filename>
@@ -531,11 +574,24 @@ Receiver command file:
 --avm_audio 51 48KHz EN
 ```
 
+### Multiple connection example using shared poll threads
+
+To share a single poll thread across multiple connections, use the ```-tc <ID>``` command-line option with the same ID value for each connection. For example, to share a single poll thread for both Rx connections using the receiver command file shown above, add the ```-tc``` option as shown below:
+
+```
+...
+# connection 1: video
+-X -tc 1 --rx AVM
+...
+# connection 2: audio
+-X -tc 1 --rx AVM
+...
+```
 ## Connection names, logging, and display options
 
 ### Naming a connection
 
-By default, the ```cdi_test``` application labels connection names with numbers representing the order in which connections were created on the command line. Use the option ```--connection_name``` (or ```-name```) to name connections using more meaningful names.
+By default, the ```cdi_test``` application labels connection names with numbers representing the order in which connections were created on the command-line. Use the option ```--connection_name``` (or ```-name```) to name connections using more meaningful names.
 
 For example:
 
@@ -580,7 +636,7 @@ The logging level can be set with the ```--log_level``` option. By default the D
 
 #### Setting log components
 
-Some log messages are disabled by default to keep log messages from overwhelming the SDK output. However, there are several groups of log messages, called “components,” that can be enabled using the ```--log_component``` command line option. Multiple components can be enabled by putting them in quotes, separated by spaces. See the ```cdi_test``` usage message for all log components.
+Some log messages are disabled by default to keep log messages from overwhelming the SDK output. However, there are several groups of log messages, called “components,” that can be enabled using the ```--log_component``` command-line option. Multiple components can be enabled by putting them in quotes, separated by spaces. See the ```cdi_test``` usage message for all log components.
 
 #### Putting it all together
 

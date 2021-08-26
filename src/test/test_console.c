@@ -15,16 +15,17 @@
 // headers.
 
 #include "test_console.h"
+#include "curses.h"
 
 #ifdef WIN32
-#include <fcntl.h> // For O_TEXT
+    #include <fcntl.h> // For O_TEXT
 #endif
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 
 #include "cdi_logger_api.h"
 #include "cdi_test.h"
+#include "curses.h"
 #include "utilities_api.h"
 
 //*********************************************************************************************************************

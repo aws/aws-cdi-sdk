@@ -29,9 +29,9 @@
  *    ProbeControlThread(), since it runs all the time (never gets blocked).
  * 2. When a request to perform an endpoint state change is made using EndpointManagerQueueEndpointReset(),
  *    EndpointManagerQueueEndpointStart() or EndpointManagerShutdownConnection(), the
- *    #EndpointManagerState::new_command_signal is set. The Polling thread must call EndpointManagerPoll() as part of
- *    its normal poll loop to determine if it should perform adapter level polling or not. All other registered threads
- *    must monitor this signal and when set, must call EndpointManagerThreadWait(), which blocks the thread.
+ *    #EndpointManagerState::new_command_signal is set. The Poll thread must call EndpointManagerPoll() as part of its
+ *    normal poll loop to determine if it should perform adapter level polling or not. All other registered threads must
+ *    monitor this signal and when set, must call EndpointManagerThreadWait(), which blocks the thread.
  * 3. After the non-poll registered threads have called EndpointManagerThreadWait(), the endpoint state change is
  *    carried out using EndpointManagerThread().
  * 4. After the endpoint state change completes, the registered threads that are blocked in EndpointManagerThreadWait()
@@ -99,13 +99,18 @@ struct EndpointManagerState {
 
     volatile bool got_shutdown;        ///< True if got a connection shutdown command.
 
+    /// @brief True if Endpoint Manager thread is done and exiting (or has exited). NOTE: Must use state_lock when
+    /// accessing it.
+    volatile bool thread_done;
+
     CdiThreadID thread_id;             ///< Endpoint state thread identifier
 
     /// @brief Lock used to protect access to endpoint state.
     CdiCsID state_lock;
 
-    CdiSignalType shutdown_signal;     ///< Signal used to shutdown endpoint manager.
+    CdiSignalType shutdown_signal;     ///< Signal used to shutdown Endpoint Manager.
     CdiSignalType new_command_signal;  ///< Signal used to start processing a command.
+    uint32_t queued_commands_count;    ///< Total number of pending commands in endpoint queues.
     CdiSignalType command_done_signal; ///< Signal used when command processing has finished.
 
     volatile bool poll_thread_waiting;     ///< If true, poll thread is running, but not using any resources.
@@ -148,9 +153,12 @@ static InternalEndpointState* CdiEndpointToInternalEndpoint(CdiEndpointHandle ha
  *
  * @param internal_endpoint_ptr Pointer to internal endpoint structure to queue new command.
  * @param command New command to add to the queue.
+ *
+ * @return True if command placed in queue, otherwise false is returned.
  */
-static void SetCommand(InternalEndpointState* internal_endpoint_ptr, EndpointManagerCommand command)
+static bool SetCommand(InternalEndpointState* internal_endpoint_ptr, EndpointManagerCommand command)
 {
+    bool ret = false;
     EndpointManagerState* mgr_ptr = internal_endpoint_ptr->endpoint_manager_ptr;
 
     CdiEndpointHandle handle = &internal_endpoint_ptr->cdi_endpoint;
@@ -168,16 +176,23 @@ static void SetCommand(InternalEndpointState* internal_endpoint_ptr, EndpointMan
         if (kEndpointStateShutdown == command) {
             internal_endpoint_ptr->got_shutdown = true;
         }
+        // Increment counter before pushing into the queue, since it may be immediately popped off.
+        CdiOsAtomicInc32(&mgr_ptr->queued_commands_count);
         if (!CdiQueuePush(internal_endpoint_ptr->command_queue_handle, &command)) {
+            // Queue full, so decrement counter and generate log message.
+            CdiOsAtomicDec32(&mgr_ptr->queued_commands_count);
             CDI_LOG_THREAD(kLogInfo, "Add endpoint command queue[%s] full.",
                            CdiQueueGetName(internal_endpoint_ptr->command_queue_handle));
             internal_endpoint_ptr->got_new_command = false;
         } else {
             CdiOsSignalSet(mgr_ptr->new_command_signal);
+            ret = true;
         }
     }
 
     CdiOsCritSectionRelease(mgr_ptr->state_lock);
+
+    return ret;
 }
 
 /**
@@ -246,7 +261,12 @@ static void DestroyEndpoint(CdiEndpointHandle handle)
 
     internal_endpoint_ptr = CdiEndpointToInternalEndpoint(handle);
     if (internal_endpoint_ptr->command_queue_handle) {
-        CdiQueueFlush(internal_endpoint_ptr->command_queue_handle);
+        // Pull items off queue one at a time so we can adjust queued_commands_count.
+        EndpointManagerCommand command;
+        while (CdiQueuePop(internal_endpoint_ptr->command_queue_handle, &command)) {
+            assert(0 != mgr_ptr->queued_commands_count);
+            CdiOsAtomicDec32(&mgr_ptr->queued_commands_count);
+        }
         CdiQueueDestroy(internal_endpoint_ptr->command_queue_handle);
 
         // Invalidate the endpoint state in case the application tries to use its handle again.
@@ -270,17 +290,18 @@ static THREAD EndpointManagerThread(void* ptr)
     // Set this thread to use the connection's log. Can now use CDI_LOG_THREAD() for logging within this thread.
     CdiLoggerThreadLogSet(mgr_ptr->connection_state_ptr->log_handle);
 
-    CdiSignalType signal_array[2];
-    signal_array[0] = mgr_ptr->all_threads_waiting_signal;
-    signal_array[1] = mgr_ptr->shutdown_signal;
-    uint32_t signal_index;
+    CdiSignalType signal_array[3];
+    signal_array[0] = mgr_ptr->all_threads_waiting_signal; // If set, have command to process.
+    signal_array[1] = mgr_ptr->shutdown_signal;            // If set, shutting down.
+    signal_array[2] = mgr_ptr->poll_thread_exit_signal;    // If set, poll thread is exiting.
+    uint32_t signal_index = 0;
 
     bool keep_alive = true;
     while (!CdiOsSignalGet(mgr_ptr->shutdown_signal) && keep_alive) {
-        // Wait for all registered threads to be waiting.
-        CdiOsSignalsWait(signal_array, 2, false, CDI_INFINITE, &signal_index);
-
-        if (0 == signal_index) { // If shutdown_signal was set then do not walk through endpoints.
+        // Wait for all registered threads to be waiting, a shutdown or poll thread is exiting.
+        CdiOsSignalsWait(signal_array, 3, false, CDI_INFINITE, &signal_index);
+        if (0 == signal_index) {
+            // Got all_threads_waiting_signal, so Walk through the endpoints.
             CdiOsSignalClear(mgr_ptr->all_threads_waiting_signal);
 
             // Walk through the list of endpoints associated with this Endpoint Manager and process commands in the
@@ -290,6 +311,8 @@ static THREAD EndpointManagerThread(void* ptr)
                 InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(endpoint_handle);
                 EndpointManagerCommand command;
                 while (internal_endpoint_ptr && CdiQueuePop(internal_endpoint_ptr->command_queue_handle, &command)) {
+                    assert(0 != mgr_ptr->queued_commands_count);
+                    CdiOsAtomicDec32(&mgr_ptr->queued_commands_count);
                     CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
                                             "Endpoint Manager remote IP[%s:%d] processing command[%s]",
                                             EndpointManagerEndpointRemoteIpGet(endpoint_handle),
@@ -314,10 +337,22 @@ static THREAD EndpointManagerThread(void* ptr)
                 endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
             }
         }
+
         // Commands have completed. Set signal to unblock registered connection threads that are blocked in
         // EndpointManagerThreadWait() so they can continue running.
         CdiOsSignalSet(mgr_ptr->command_done_signal);
     }
+
+    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Endpoint Manager thread exiting. Connection name[%s].",
+                            mgr_ptr->connection_state_ptr->saved_connection_name_str);
+
+    // Acquire lock before accessing the resources below.
+    CdiOsCritSectionReserve(mgr_ptr->state_lock);
+    mgr_ptr->thread_done = true;
+    // set new_command_signal, since watchers use it to also wakeup in the event of a shutdown.
+    CdiOsSignalSet(mgr_ptr->new_command_signal);
+    CdiOsSignalSet(mgr_ptr->command_done_signal);
+    CdiOsCritSectionRelease(mgr_ptr->state_lock);
 
     CdiLoggerThreadLogUnset();
     return 0; // Return code not used.
@@ -336,7 +371,15 @@ static void IncrementThreadWaitCount(EndpointManagerState* mgr_ptr)
 
     // If all registered threads are here, then ok to start processing the new state.
     if (current_count >= mgr_ptr->registered_thread_count) {
-        CdiOsSignalClear(mgr_ptr->new_command_signal);
+        // Acquire lock before accessing the resources below.
+        CdiOsCritSectionReserve(mgr_ptr->state_lock);
+        // Clear the new_command_signal if the Endpoint Manager thread is running and there are no commands in the
+        // queue.
+        if (!mgr_ptr->thread_done && 0 == CdiOsAtomicLoad32(&mgr_ptr->queued_commands_count)) {
+            CdiOsSignalClear(mgr_ptr->new_command_signal);
+        }
+        CdiOsCritSectionRelease(mgr_ptr->state_lock);
+
         // Clear signal used to ensure all threads have exited this function (none are blocked).
         CdiOsSignalClear(mgr_ptr->all_threads_running_signal);
         // Set signal to wakeup EndpointManagerThread() so it can process the new state.
@@ -357,9 +400,14 @@ static void DecrementThreadWaitCount(EndpointManagerState* mgr_ptr)
     int current_count = CdiOsAtomicDec32(&mgr_ptr->thread_wait_count);
     assert(current_count >= 0);
     if (0 == current_count) {
-        if (!mgr_ptr->got_shutdown) {
+        // Acquire lock before accessing the resources below.
+        CdiOsCritSectionReserve(mgr_ptr->state_lock);
+        // Clear the command_done_signal if the Endpoint Manager thread is still running.
+        if (!mgr_ptr->thread_done) {
             CdiOsSignalClear(mgr_ptr->command_done_signal);
         }
+        CdiOsCritSectionRelease(mgr_ptr->state_lock);
+
         CdiOsSignalSet(mgr_ptr->all_threads_running_signal);
     }
 }
@@ -378,10 +426,10 @@ static CdiReturnStatus CreateEndpointCommonResources(EndpointManagerState* mgr_p
     CdiReturnStatus rs = kCdiStatusOk;
     InternalEndpointState* internal_endpoint_ptr = NULL;
 
-    if (CdiListCount(&mgr_ptr->endpoint_list) >= MAX_ENDPOINTS_PER_CONNECTION) {
+    if (CdiListCount(&mgr_ptr->endpoint_list) >= CDI_MAX_ENDPOINTS_PER_CONNECTION) {
         CDI_LOG_THREAD(kLogError,
             "Failed to create endpoint. Already at the maximum[%d] allowed in a single connection.",
-            MAX_ENDPOINTS_PER_CONNECTION);
+            CDI_MAX_ENDPOINTS_PER_CONNECTION);
         rs = kCdiStatusArraySizeExceeded;
     }
 
@@ -479,7 +527,7 @@ CdiReturnStatus EndpointManagerCreate(CdiConnectionHandle handle, CdiCoreStatsCa
         }
     }
     if (kCdiStatusOk == rs) {
-        if (!CdiQueueCreate("DestroyEndpoint Queue", MAX_ENDPOINTS_PER_CONNECTION, NO_GROW_SIZE, NO_GROW_COUNT,
+        if (!CdiQueueCreate("DestroyEndpoint Queue", CDI_MAX_ENDPOINTS_PER_CONNECTION, NO_GROW_SIZE, NO_GROW_COUNT,
                             sizeof(CdiEndpointHandle), kQueueSignalNone,
                             &mgr_ptr->destroy_endpoint_queue_handle)) {
             rs = kCdiStatusAllocationFailed;
@@ -639,17 +687,21 @@ void EndpointManagerShutdownConnection(EndpointManagerHandle handle)
         return;
     }
 
+    mgr_ptr->got_shutdown = true;
+
     CdiEndpointHandle endpoint_handle = EndpointManagerGetFirstEndpoint(mgr_ptr);
+    bool sent_command = false;
     while (endpoint_handle) {
         InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(endpoint_handle);
         // Start the shutdown endpoint process.
-        SetCommand(internal_endpoint_ptr, kEndpointStateShutdown);
+        if (SetCommand(internal_endpoint_ptr, kEndpointStateShutdown)) {
+            sent_command = true;
+        }
         endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
     }
 
-    // Now that shutdown command has been added to the queue for each endpoint, set shutdown flags so pull thread's
+    // Now that shutdown command has been added to the queue for each endpoint, set shutdown flags so poll threads
     // exit their main loop and start shutting down by invoking EndpointManagerPollThreadExit().
-    mgr_ptr->got_shutdown = true;
     if (handle->connection_state_ptr->adapter_connection_ptr) {
         CdiOsSignalSet(handle->connection_state_ptr->adapter_connection_ptr->shutdown_signal);
     }
@@ -662,7 +714,7 @@ void EndpointManagerShutdownConnection(EndpointManagerHandle handle)
     // within those same functions, so no additional race-condition logic is required here.
     if (mgr_ptr->registered_thread_count) {
         if (mgr_ptr->connection_state_ptr->start_signal && mgr_ptr->command_done_signal &&
-             CdiOsSignalGet(mgr_ptr->connection_state_ptr->start_signal)) {
+             CdiOsSignalGet(mgr_ptr->connection_state_ptr->start_signal) && sent_command) {
             // Ok to wait for the shutdown command to be processed.
             CdiOsSignalWait(mgr_ptr->command_done_signal, CDI_INFINITE, NULL);
         }
@@ -837,7 +889,7 @@ CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, bo
     CdiConnectionState* con_ptr = mgr_ptr->connection_state_ptr;
 
     // Make a copy of provided stream name or copy the connection name if no stream name provided.
-    char temp_stream_name_str[MAX_STREAM_NAME_STRING_LENGTH];
+    char temp_stream_name_str[CDI_MAX_STREAM_NAME_STRING_LENGTH];
     const char* src_str = (stream_name_str && '\0' != stream_name_str[0])
                           ? stream_name_str : con_ptr->saved_connection_name_str;
     CdiOsStrCpy(temp_stream_name_str, sizeof(temp_stream_name_str), src_str);
@@ -845,10 +897,10 @@ CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, bo
     CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
 
     int stream_count = CdiListCount(&mgr_ptr->endpoint_list);
-    if (stream_count > MAX_ENDPOINTS_PER_CONNECTION) {
+    if (stream_count > CDI_MAX_ENDPOINTS_PER_CONNECTION) {
         CDI_LOG_HANDLE(cdi_global_context.global_log_handle, kLogError,
                        "[%d] streams exceeds the maximum[%d] allowed in a single connection.",
-                       stream_count, MAX_ENDPOINTS_PER_CONNECTION);
+                       stream_count, CDI_MAX_ENDPOINTS_PER_CONNECTION);
         rs = kCdiStatusInvalidParameter;
     }
 
@@ -953,8 +1005,8 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
 
         // Multiple threads may use the CdiCoreRxFreeBuffer() API, which pushes items onto this queue. So, we want to
         // enable thread-safe writes when creating it by using kQueueMultipleWritersFlag.
-        if (!CdiQueueCreate("RxFreeBuffer CdiSgList Queue", MAX_PAYLOADS_PER_CONNECTION, FIXED_QUEUE_SIZE,
-                            FIXED_QUEUE_SIZE, sizeof(CdiSgList), kQueueSignalNone | kQueueMultipleWritersFlag,
+        if (!CdiQueueCreate("RxFreeBuffer CdiSgList Queue", MAX_PAYLOADS_PER_CONNECTION, CDI_FIXED_QUEUE_SIZE,
+                            CDI_FIXED_QUEUE_SIZE, sizeof(CdiSgList), kQueueSignalNone | kQueueMultipleWritersFlag,
                             &endpoint_ptr->rx_state.free_buffer_queue_handle)) {
             rs = kCdiStatusAllocationFailed;
         }
@@ -1052,7 +1104,7 @@ void EndpointManagerEndpointDestroy(CdiEndpointHandle handle)
         CdiOsSignalClear(mgr_ptr->endpoints_destroyed_signal);
         if (!CdiQueuePush(mgr_ptr->destroy_endpoint_queue_handle, &handle)) {
             CDI_LOG_THREAD(kLogInfo, "Destroy endpoint queue[%s] full.",
-                        CdiQueueGetName(mgr_ptr->destroy_endpoint_queue_handle));
+                           CdiQueueGetName(mgr_ptr->destroy_endpoint_queue_handle));
         }
 
         CdiSignalType signal_array[3];
@@ -1154,6 +1206,15 @@ bool EndpointManagerPoll(CdiEndpointHandle* handle_ptr)
         CdiOsSignalSet(mgr_ptr->endpoints_destroyed_signal);
     }
 
+    if (do_poll && mgr_ptr->thread_done) {
+        // Endpoint Manager thread is done. If pull thread was waiting, decrement thread wait count and clear flag.
+        if (mgr_ptr->poll_thread_waiting) {
+            DecrementThreadWaitCount(mgr_ptr);
+            mgr_ptr->poll_thread_waiting = false;
+        }
+        do_poll = false;
+    }
+
     if (do_poll) {
         // Determine if this endpoint is processing a state change command and needs to have polling paused.
         InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(handle);
@@ -1167,8 +1228,8 @@ bool EndpointManagerPoll(CdiEndpointHandle* handle_ptr)
             } else if (CdiOsSignalReadState(mgr_ptr->command_done_signal)) {
                 DecrementThreadWaitCount(mgr_ptr);
                 // Even though this is a poll thread where we don't want to use OS resources, we need to use a critical
-                // section here to synchronize an empty queue condition and the got_new_command variable. This logic only
-                // executes while the connection state of an endpoint is changing.
+                // section here to synchronize an empty queue condition and the got_new_command variable. This logic
+                // only executes while the connection state of an endpoint is changing.
                 CdiOsCritSectionReserve(mgr_ptr->state_lock);
                 if (CdiQueueIsEmpty(internal_endpoint_ptr->command_queue_handle)) {
                     internal_endpoint_ptr->got_new_command = false;
@@ -1190,22 +1251,20 @@ bool EndpointManagerPoll(CdiEndpointHandle* handle_ptr)
     return do_poll;
 }
 
-void EndpointManagerPollThreadExit(EndpointManagerHandle handle)
+bool EndpointManagerPollThreadExit(EndpointManagerHandle handle)
 {
     EndpointManagerState* mgr_ptr = (EndpointManagerState*)handle;
 
-    // Stay in this loop until all pending Endpoint Manager commands are processed for all endpoints related to this
-    // Endpoint Manager.
-    bool do_poll = true;
-    while (do_poll) {
-        CdiEndpointHandle endpoint_handle = EndpointManagerGetFirstEndpoint(mgr_ptr);
-        // Walk through each endpoint.
-        while (endpoint_handle) {
-            EndpointManagerPoll(&endpoint_handle);
-        }
-        do_poll = mgr_ptr->poll_thread_waiting;
+    // Walk through each endpoint.
+    CdiEndpointHandle endpoint_handle = EndpointManagerGetFirstEndpoint(mgr_ptr);
+    while (endpoint_handle) {
+        EndpointManagerPoll(&endpoint_handle);
     }
 
-    CdiOsSignalSet(mgr_ptr->poll_thread_exit_signal);
-    CdiOsSignalWait(mgr_ptr->command_done_signal, CDI_INFINITE, NULL);
+    bool done = !mgr_ptr->poll_thread_waiting; // Done when poll thread is no longer in wait state.
+    if (done) {
+        CdiOsSignalSet(mgr_ptr->poll_thread_exit_signal);
+    }
+
+    return done;
 }

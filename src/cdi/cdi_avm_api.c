@@ -55,7 +55,7 @@ CdiReturnStatus CdiAvmTxCreate(CdiTxConfigData* config_data_ptr, CdiAvmTxCallbac
     }
 }
 
-CDI_INTERFACE CdiReturnStatus CdiAvmTxStreamConnectionCreate(CdiTxConfigData* config_data_ptr,
+CdiReturnStatus CdiAvmTxStreamConnectionCreate(CdiTxConfigData* config_data_ptr,
                                                              CdiAvmTxCallback tx_cb_ptr,
                                                              CdiConnectionHandle* ret_handle_ptr)
 {
@@ -98,10 +98,10 @@ CdiReturnStatus CdiAvmTxPayload(CdiConnectionHandle con_handle, const CdiAvmTxPa
                                    max_latency_microsecs);
 }
 
-CDI_INTERFACE CdiReturnStatus CdiAvmEndpointTxPayload(CdiEndpointHandle endpoint_handle,
-                                                      const CdiAvmTxPayloadConfig* payload_config_ptr,
-                                                      const CdiAvmConfig* avm_config_ptr, const CdiSgList* sgl_ptr,
-                                                      int max_latency_microsecs)
+CdiReturnStatus CdiAvmEndpointTxPayload(CdiEndpointHandle endpoint_handle,
+                                        const CdiAvmTxPayloadConfig* payload_config_ptr,
+                                        const CdiAvmConfig* avm_config_ptr, const CdiSgList* sgl_ptr,
+                                        int max_latency_microsecs)
 {
     if (!IsValidEndpointHandle(endpoint_handle)) {
         return kCdiStatusInvalidHandle;

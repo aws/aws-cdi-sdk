@@ -34,6 +34,7 @@
 #include "cdi_os_api.h"
 #include "cdi_raw_api.h"
 #include "cdi_test.h"
+#include "curses.h"
 #include "test_args.h"
 #include "test_console.h"
 #include "test_dynamic.h"
@@ -130,7 +131,7 @@ static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int
     uint64_t start_time = CdiOsGetMicroseconds();
 
     // Create an array of all the connection done signals so we can get a signal when they are all done.
-    CdiSignalType signal_array[MAX_SIMULTANEOUS_CONNECTIONS];
+    CdiSignalType signal_array[CDI_MAX_SIMULTANEOUS_CONNECTIONS];
     for (int i = 0; i < num_connections; i++) {
         signal_array[i] = connection_info_array[i].done_signal;
     }
@@ -138,8 +139,11 @@ static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int
     int time_pos_x = 16; // Set starting X-position of elapsed time digits "00:00:00" as used in first line below:
     const char* line1_str = "| Elapsed Time: 00:00:00  |                         Payload Latency (us)                  |      | Connection | Control |";
     const char* line2_str = "|      Payload Counts     |    Overall    |                 Most Recent Series            |      |            | Command |";
-    const char* line3_str = "| Success | Errors | Late |  Min  |  Max  |  Min  |  P50  |  P90  |  P99  |  Max  | Count | CPU%% | Drop Count | Retries |";
-    //       Example values: |00000000 |0000000 |00000 |000000 |000000 |000000 |000000 |000000 |000000 |000000 | 0000  |    0000    |  0000   |
+    const char* line3_str = "| Success | Errors | Late |  Min  |  Max  |  Min  |  P50  |  P90  |  P99  |  Max  | Count | CPU%%  | Drop Count | Retries |";
+    //       Example values: |00000000 |0000000 |00000 |000000 |000000 |000000 |000000 |000000 |000000 |000000 | 0000  | 00(00) |     0000   |  0000
+    // NOTE: The "CPU%" contains two values. The first value is the CPU load of the poll thread for the specific
+    // endpoint. The second value, surrounded by parenthesis, is the total CPU load of all poll thread(s) used by all
+    // connections.
 
     TestConsoleStats(0, 0, A_REVERSE, line1_str);
     TestConsoleStats(0, 1, A_REVERSE, line2_str);
@@ -307,7 +311,7 @@ static bool CreateTxBufferPools(TestConnectionInfo* connection_info_ptr, uint8_t
     const int num_streams = connection_info_ptr->test_settings_ptr->number_of_streams;
     int pool_size = connection_info_ptr->config_data.tx.max_simultaneous_tx_payloads;
     if (0 == pool_size) {
-        pool_size = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+        pool_size = CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
     }
     pool_size++; // Make the pool_size larger the maximum number of simultaneous payloads.
 
@@ -350,7 +354,10 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
     bool got_error = false;
 
     // Create a data structure for all connection info that we can assign the test settings to.
-    TestConnectionInfo connection_info_array[MAX_SIMULTANEOUS_CONNECTIONS] = {{ 0 }};
+    TestConnectionInfo connection_info_array[CDI_MAX_SIMULTANEOUS_CONNECTIONS] = {{ 0 }};
+
+    GetGlobalTestSettings()->total_num_connections = num_connections;
+    GetGlobalTestSettings()->connection_info_array = connection_info_array;
 
     // Make sure we cannot overrun the test_settings and connection_info_array arrays.
     if (num_connections > max_test_settings_entries) {
@@ -359,7 +366,10 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
         got_error = true;
     }
 
+
     if (!got_error) {
+        bool wait_for_all_connections = false;
+
         // For each requested connection, create a data structure and initialize it.
         for (int i = 0; i < num_connections; i++) {
             // Create connection data structure, add its pointer to the connections array, and initialize its elements.
@@ -378,6 +388,19 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
             // all streams.
             connection_info_array[i].total_payloads = connection_info_array[i].test_settings_ptr->number_of_streams *
                                                         connection_info_array[i].test_settings_ptr->num_transactions;
+
+            // If any of the connections use a shared thread, then setup to delay transmitting payloads until after all
+            // connections have been established.
+            if (connection_info_array[i].test_settings_ptr->shared_thread_id > 0) {
+                wait_for_all_connections = true;
+            }
+        }
+
+        if (wait_for_all_connections) {
+            if (!CdiOsSignalCreate(&GetGlobalTestSettings()->all_connected_signal)) {
+                CDI_LOG_THREAD(kLogError, "Failed to allocate signal for all_connected_signal");
+                got_error = true;
+            }
         }
     }
 
@@ -404,7 +427,7 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
 
                     int payload_pool_size = connection_info_array[i].config_data.tx.max_simultaneous_tx_payloads;
                     if (0 == payload_pool_size) {
-                        payload_pool_size = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+                        payload_pool_size = CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
                     }
                     payload_pool_size++; // Make payload pool one larger than maximum simultaneous payloads.
 
@@ -450,7 +473,6 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
         adapter_data_ptr->tx_buffer_size_bytes = total_tx_payload_bytes;
         got_error = (kCdiStatusOk != CdiCoreNetworkAdapterInitialize(adapter_data_ptr, &adapter_handle));
     }
-
     // If the we are still happy at this point, then start up all the connections and run the tests.
     if (!got_error) {
         // Get pointer to Tx buffer allocated by adapter. Will use to allocate Tx payload memory pools for all
@@ -469,12 +491,10 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                     connection_info_ptr->config_data.rx.adapter_handle = adapter_handle;
 
                     // Start the thread that creates the Rx connection and checks received payloads.
-                    if (!got_error) {
-                        got_error = !CdiOsThreadCreate(TestRxCreateThread, &connection_info_ptr->thread_id, "TestRx",
-                                                       connection_info_ptr, NULL);
-                        if (got_error) {
-                            CDI_LOG_THREAD(kLogError, "Failed to create test receiver thread");
-                        }
+                    got_error = !CdiOsThreadCreate(TestRxCreateThread, &connection_info_ptr->thread_id, "TestRx",
+                                                   connection_info_ptr, NULL);
+                    if (got_error) {
+                        CDI_LOG_THREAD(kLogError, "Failed to create test receiver thread");
                     }
                 } else {
                     // Add the adapter handle to this connection's Tx config data.
@@ -488,7 +508,7 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                     // payloads.
                     if (!got_error) {
                         got_error = !CdiOsThreadCreate(TestTxCreateThread, &connection_info_ptr->thread_id, "TestTx",
-                                                    connection_info_ptr, NULL);
+                                                       connection_info_ptr, NULL);
                         if (got_error) {
                             CDI_LOG_THREAD(kLogError, "Failed to create test transmitter thread");
                         }
@@ -528,6 +548,11 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
             got_error = true;
         }
         adapter_handle = NULL;
+    }
+
+    if (GetGlobalTestSettings()->all_connected_signal) {
+        CdiOsSignalDelete(GetGlobalTestSettings()->all_connected_signal);
+        GetGlobalTestSettings()->all_connected_signal = NULL;
     }
 
     // Return the correct return status to the test app.

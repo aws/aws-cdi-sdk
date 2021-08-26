@@ -220,14 +220,14 @@ CdiReturnStatus RxBufferInit(CdiLogHandle log_handle, CdiPoolHandle error_messag
 
         // Create the input queue for the receive buffer thread.
         if (!CdiQueueCreate("Receive Buffer Thread Input Queue", MAX_PAYLOADS_PER_CONNECTION,
-                            FIXED_QUEUE_SIZE, FIXED_QUEUE_SIZE, sizeof(AppPayloadCallbackData),
+                            CDI_FIXED_QUEUE_SIZE, CDI_FIXED_QUEUE_SIZE, sizeof(AppPayloadCallbackData),
                             kQueueSignalPopWait, // Queue can block on pops.
                             &state_ptr->input_queue_handle)) {
             rs = kCdiStatusNotEnoughMemory;
         }
 
         if (kCdiStatusOk == rs) {
-            int pool_items = (max_rx_payloads * buffer_delay_ms) / RX_BUFFER_DELAY_BUFFER_MS_DIVISOR;
+            int pool_items = (max_rx_payloads * buffer_delay_ms) / CDI_RX_BUFFER_DELAY_BUFFER_MS_DIVISOR;
             if (!CdiPoolCreate("Connection RxOrdered AppPayloadCallbackData Pool", pool_items, NO_GROW_SIZE,
                                NO_GROW_COUNT, sizeof(AppPayloadCallbackData), false, // false= Not thread-safe.
                                &state_ptr->delay_pool_handle)) {

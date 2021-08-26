@@ -183,7 +183,7 @@ uint64_t CdiCoreGetTaiTimeMicroseconds(void)
 
 const char* CdiCoreStatusToString(CdiReturnStatus status)
 {
-    static const EnumStringKey key_array[] = {
+    static const CdiEnumStringKey key_array[] = {
         { kCdiStatusOk,                    "OK"                             },
         { kCdiStatusFatal,                 "fatal error encountered"        },
         { kCdiStatusNotEnoughMemory,       "not enough memory"              },
