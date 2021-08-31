@@ -281,5 +281,8 @@
     <ClCompile Include="..\src\cdi\test_unit_list.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\cdi\test_unit_avm_api.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

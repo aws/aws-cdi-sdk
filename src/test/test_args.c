@@ -894,7 +894,9 @@ static bool IsUniqueStreamIdentifiers(TestSettings* const test_settings_ptr) {
     bool is_unique = true;
 
     int n = test_settings_ptr->number_of_streams;
-    int stream_ids[n];
+    int* stream_ids = CdiOsMemAllocZero(n * sizeof(int));
+    assert(stream_ids);
+
     for (int i = 0; i < n; i++) {
         stream_ids[i] = test_settings_ptr->stream_settings[i].stream_id;
     }
@@ -908,6 +910,7 @@ static bool IsUniqueStreamIdentifiers(TestSettings* const test_settings_ptr) {
             }
         }
     }
+    CdiOsMemFree(stream_ids);
 
     return is_unique;
 }
