@@ -13,6 +13,8 @@
 #ifndef CDI_LOGGER_API_API_H__
 #define CDI_LOGGER_API_API_H__
 
+#include <stdbool.h>
+
 #include "cdi_utility_api.h"
 #include "cdi_log_api.h"
 #include "cdi_os_api.h"
@@ -22,10 +24,10 @@
 //*********************************************************************************************************************
 
 /// Maximum length of log message string used in logger.c.
-#define MAX_LOG_STRING_LENGTH               (1024)
+#define CDI_MAX_LOG_STRING_LENGTH               (1024)
 
 /// Maximum length of log message function name string used in logger.c.
-#define MAX_LOG_FUNCTION_NAME_STRING_LENGTH (128)
+#define CDI_MAX_LOG_FUNCTION_NAME_STRING_LENGTH (128)
 
 /**
  * @brief Type used as the handle (pointer to an opaque structure) for a logger instance. Each handle represents an
@@ -42,7 +44,7 @@ typedef struct CdiLogState* CdiLogHandle;
 /**
  * @brief Structure used to hold a buffer for a multiline log message.
  */
-typedef struct MultilineLogBufferState MultilineLogBufferState;
+typedef struct CdiMultilineLogBufferState CdiMultilineLogBufferState;
 
 /**
  * @brief Structure used to hold state data for a multiline log message.
@@ -54,11 +56,11 @@ typedef struct {
     CdiLogComponent component; ///<Selects the SDK component type for logging.
     CdiLogLevel log_level; ///< Current log level for log_handle.
 
-    char function_name_str[MAX_LOG_FUNCTION_NAME_STRING_LENGTH]; ///<Name of this log.
+    char function_name_str[CDI_MAX_LOG_FUNCTION_NAME_STRING_LENGTH]; ///<Name of this log.
     int line_number; ///<Line number in file where log was called.
 
     int line_count;                            ///< Number of log lines in the log message buffer
-    MultilineLogBufferState* buffer_state_ptr; ///< Pointer to log message buffer structure
+    CdiMultilineLogBufferState* buffer_state_ptr; ///< Pointer to log message buffer structure
 
     bool buffer_used; ///< Buffer was used, so don't generate output when ending using CdiLoggerMultilineEnd().
 } CdiLogMultilineState;
@@ -186,7 +188,7 @@ CDI_INTERFACE void CdiLogger(CdiLogHandle handle, CdiLogComponent component, Cdi
                              const char* function_name_str, int line_number, const char* format_str, ...);
 
 /**
- * Function used to generate a formatted log line from logger callback data.
+ * Generate a formatted log line from logger callback data.
  *
  * @param handle Log handle to write the message to. Must be using a kLogMethodStdout or kLogMethodFile log method.
  * @param cb_data_ptr Logger callback data used to generate the log message.

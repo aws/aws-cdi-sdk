@@ -14,7 +14,6 @@
  */
 
 #include <stdbool.h>
-#include <stddef.h>
 
 #include "cdi_avm_api.h"
 
@@ -54,7 +53,7 @@ typedef struct {
 /**
  * @brief Enums used to indicate which key-value array a function is to access.
  *
- * NOTE: Update CdiAvmKeyGetArray() in baseline_profie.c whenever an entry is added to this table.
+ * NOTE: Update CdiAvmKeyGetArray() in baseline_profile.c whenever an entry is added to this table.
  */
 typedef enum {
     /// Keys that contain one set of unique data (not specific to a profile or version). See CdiAvmKeyGetArray().
@@ -116,7 +115,7 @@ typedef CdiReturnStatus (*CdiAvmGetBaselineUnitSizePtr)(const CdiAvmBaselineConf
  *
  * @return Pointer to enum/string keypair table. If none is found, NULL is returned.
  */
-typedef const EnumStringKey* (*CdiAvmKeyGetArrayPtr)(CdiAvmBaselineEnumStringKeyTypes key_type);
+typedef const CdiEnumStringKey* (*CdiAvmKeyGetArrayPtr)(CdiAvmBaselineEnumStringKeyTypes key_type);
 
 /**
  * @brief Type used to hold V-table of APIs that must be implemented by baseline profiles.
@@ -181,21 +180,22 @@ CDI_INTERFACE CdiReturnStatus CdiAvmMakeBaselineConfiguration2(const CdiAvmBasel
 /**
  * @brief Converts from the AVM configuration structure to the CDI baseline configuration structure if possible. This is
  * to be called on the receive side if the CdiAvmConfig structure is provided to the registered receive payload callback
- * function. This function should be called whenever the pointer is non-NULL as the first step in determining the
- * stream's configuration. If it returns kCdiStatusOk, then the configuration belongs to the CDI baseline profile
- * described by the structure filled in at baseline_config_ptr. If kCdiStatusFatal is returned, the provided
- * configuration does not belong to the baseline profile and therefore needs to be decoded in an application specific
- * manner if other profiles are supported by it.
+ * function. This function must be called whenever the config_ptr is non-NULL as the first step in determining the
+ * stream's configuration.  If kCdiStatusOk is returned, then the configuration belongs to the CDI baseline profile
+ * described by the structure filled in at baseline_config_ptr.  A code other than kCdiStatusOk is returned when the
+ * configuration is not recognized as a supported baseline profile.  An AVM configuration not convertible to a CDI
+ * baseline configuration must be parsed by an application-specific function.
  *
  * @param config_ptr Pointer to the AVM configuration structure provided to the registered receive payload callback
  *                   function.
- * @param baseline_config_ptr Address of where to write the baseline configuration structure parameters if the
- *                            configuration belongs to the CDI baseline profile.
+ * @param baseline_config_ptr Address where baseline configuration structure parameters are written to when the return
+ *                            code is kCdiStatusOk.  When the return code is kCdiStatusProfileNotSupported, then only
+ *                            payload_type is written.  For any other return code no parameters are written.
  *
- * @return kCdiStatusOk if the conversion was successful; kCdiStatusFatal if baseline_config_ptr is NULL,
- *         config_ptr->uri isn't NUL terminated, config_ptr->data_size exceeds sizeof(config_ptr->data) or if
- *         config_ptr->data could not be decoded; or kCdiStatusNonFatal if config_ptr->uri does not belong to the CDI
- *         baseline profile.
+ * @return kCdiStatusOk if conversion to CDI baseline configuration was successful; kCdiStatusFatal if a CDI baseline
+ *         configuration was recognized but baseline_config_ptr is NULL; kCdiStatusNonFatal when the AVM configuration
+ *         structure could not be interpreted or did not meet specifications; kCdiStatusProfileNotSupported when a CDI
+ *         profile version was parsed but no corresponding baseline profile was found.
  */
 CDI_INTERFACE CdiReturnStatus CdiAvmParseBaselineConfiguration(const CdiAvmConfig* config_ptr,
                                                                CdiAvmBaselineConfig* baseline_config_ptr);
@@ -208,10 +208,10 @@ CDI_INTERFACE CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConf
                                                                 CdiAvmBaselineConfigCommon* baseline_config_ptr);
 
 /**
- * @brief Gets the unit size for transmission of the media as specified by the configuration structure.
+ * @brief Gets the unit size in bits for transmission of the media as specified by the configuration structure.
  *
  * @param baseline_config_ptr The address of a configuration structure whose unit size is of interest.
- * @param payload_unit_size_ptr Pointer to location where the unit size is to be written.
+ * @param payload_unit_size_ptr Pointer to location where the unit bit length is to be written.
  *
  * @return CdiReturnStatus kCdiStatusOk if the configuration structure was correct enough to determine a unit size,
  *         otherwise kCdiStatusFatal.
@@ -258,8 +258,8 @@ CDI_INTERFACE int CdiAvmKeyStringToEnum(CdiAvmBaselineEnumStringKeyTypes key_typ
  *
  * @return Pointer to returned string. If no match was found, NULL is returned.
  */
-CDI_INTERFACE const EnumStringKey* CdiAvmKeyGetArray(CdiAvmBaselineEnumStringKeyTypes key_type,
-                                                     const CdiAvmBaselineProfileVersion* version_ptr);
+CDI_INTERFACE const CdiEnumStringKey* CdiAvmKeyGetArray(CdiAvmBaselineEnumStringKeyTypes key_type,
+                                                        const CdiAvmBaselineProfileVersion* version_ptr);
 
 /**
  * Converts a string representing a baseline configuration structure version number in the form of "xx.yy" into a
@@ -270,7 +270,7 @@ CDI_INTERFACE const EnumStringKey* CdiAvmKeyGetArray(CdiAvmBaselineEnumStringKey
  *
  * @return true if the conversion was successful, false if a failure was encountered.
  */
-CDI_INTERFACE bool CdiAvmParseBaselineVersionString(const char* version_str, 
+CDI_INTERFACE bool CdiAvmParseBaselineVersionString(const char* version_str,
                                                     CdiAvmBaselineProfileVersion* ret_version_ptr);
 
 #ifdef __cplusplus

@@ -11,6 +11,7 @@
 */
 
 #include <assert.h>
+#include <stdbool.h>
 
 #include "cdi_baseline_profile_01_00_api.h"
 #include "cdi_baseline_profile_02_00_api.h"
@@ -44,6 +45,7 @@ typedef struct {
     int rate_numerator;                ///< The numerator for the number of payloads per second to send.
     int rate_denominator;              ///< The denominator for the number of payloads per second to send.
     int tx_timeout;                    ///< The transmit timeout in microseconds for a Tx payload.
+    bool use_efa;                      ///< Whether to use EFA adapter.
 } TestSettings;
 
 /**
@@ -94,6 +96,7 @@ void PrintHelp(void) {
                    "'numerator'.");
     TestConsoleLog(kLogInfo, "--tx_timeout       <microseconds> : Set the transmit timeout for a payload in "
                    "microseconds.");
+    TestConsoleLog(kLogInfo, "--use_efa          <boolean>      : Whether to use EFA or Unix sockets (default true).");
 }
 
 /**
@@ -140,6 +143,8 @@ static bool ParseCommandLine(int argc, const char** argv, TestSettings* test_set
             }
         } else if (0 == CdiOsStrCmp("--tx_timeout", arg_str)) {
             ret = TestStringToInt(argv[i++], &test_settings_ptr->tx_timeout, NULL);
+        } else if (0 == CdiOsStrCmp("--use_efa", arg_str)) {
+            test_settings_ptr->use_efa = (0 == CdiOsStrCmp("true", argv[i++]));
         } else if (0 == CdiOsStrCmp("--help", arg_str) || 0 == CdiOsStrCmp("-h", arg_str)) {
             ret = false;
             break;
@@ -330,7 +335,10 @@ static CdiReturnStatus SendRawPayload(TestConnectionInfo* connection_info_ptr, C
         .core_extra_data.origination_ptp_timestamp = *timestamp_ptr,
         .core_extra_data.payload_user_data = 0,
         .user_cb_param = connection_info_ptr,
-        .unit_size = 0
+        // Note: unit_size is unused in the minimal transmitter example code. For applications transmitting AVM payloads
+        // unit_size must be set correctly, however. See CdiAvmGetBaselinUnitSize in cdi_baseline_profile_api.h as well
+        // as the cdi_test source code.
+        .unit_size = 8 * sizeof(char)
     };
 
     // Send the payload, retrying if the queue is full.
@@ -356,7 +364,7 @@ static CdiReturnStatus SendRawPayload(TestConnectionInfo* connection_info_ptr, C
  */
 int main(int argc, const char** argv)
 {
-    CdiLoggerInitialize(); // Intialize logger so we can use the CDI_LOG_THREAD() macro to generate console messages.
+    CdiLoggerInitialize(); // Initialize logger so we can use the CDI_LOG_THREAD() macro to generate console messages.
 
     // Setup default test settings.
     TestConnectionInfo con_info = {
@@ -399,7 +407,7 @@ int main(int argc, const char** argv)
     }
 
     //-----------------------------------------------------------------------------------------------------------------
-    // CDI SDK Step 2: Register the EFA adapter.
+    // CDI SDK Step 2: Register the adapter.
     //-----------------------------------------------------------------------------------------------------------------
     CdiAdapterHandle adapter_handle = NULL;
     if (kCdiStatusOk == rs) {
@@ -407,7 +415,7 @@ int main(int argc, const char** argv)
             .adapter_ip_addr_str = con_info.test_settings.local_adapter_ip_str,
             .tx_buffer_size_bytes = con_info.test_settings.payload_size,
             .ret_tx_buffer_ptr = NULL, // Initialize to NULL.
-            .adapter_type = kCdiAdapterTypeEfa // Use EFA adapter.
+            .adapter_type = con_info.test_settings.use_efa ? kCdiAdapterTypeEfa : kCdiAdapterTypeSocketLibfabric
         };
         rs = CdiCoreNetworkAdapterInitialize(&adapter_data, &adapter_handle);
 
@@ -426,6 +434,7 @@ int main(int argc, const char** argv)
             // Settings that are common between Tx and Rx connections.
             .adapter_handle = adapter_handle,
             .dest_port = con_info.test_settings.dest_port,
+            .shared_thread_id = 0, // 0 or -1= Use unique poll thread for this connection.
             .thread_core_num = -1, // -1= Let OS decide which CPU core to use.
             .connection_name_str = NULL,
             .connection_log_method_data_ptr = &log_method_data,
@@ -513,12 +522,7 @@ int main(int argc, const char** argv)
         };
 
         // Create a PTP timestamp to send along with the payload. CDI doesn't use it, but just here as an example.
-        struct timespec start_time;
-        CdiCoreGetUtcTime(&start_time);
-        CdiPtpTimestamp timestamp = {
-            .seconds = (uint32_t)start_time.tv_sec,
-            .nanoseconds = start_time.tv_nsec
-        };
+        CdiPtpTimestamp timestamp = CdiCoreGetPtpTimestamp(NULL);
 
         // Send the payload.
         if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
@@ -528,8 +532,8 @@ int main(int argc, const char** argv)
             rs = SendRawPayload(&con_info, &sgl, &timestamp);
         }
 
-       // Update console with progress message.
-       if (0 == (++payload_count % PAYLOAD_PROGRESS_UPDATE_FREQUENCY)) {
+        // Update console with progress message.
+        if (0 == (++payload_count % PAYLOAD_PROGRESS_UPDATE_FREQUENCY)) {
             printf("\rSent [%d] payloads.", payload_count);
             fflush(stdout);
         }

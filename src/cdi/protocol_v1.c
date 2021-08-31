@@ -94,7 +94,7 @@ typedef struct {
     ProbeCommand command; ///< Sender's command
     char senders_ip_str[MAX_IP_STRING_LENGTH];   ///< Sender's IP address.
     uint8_t senders_gid_array[MAX_IPV6_GID_LENGTH]; ///< Sender's device GID. Contains GID + QPN (see efa_ep_addr).
-    char senders_stream_name_str[MAX_STREAM_NAME_STRING_LENGTH]; ///< Sender's stream name string.
+    char senders_stream_name_str[CDI_MAX_STREAM_NAME_STRING_LENGTH]; ///< Sender's stream name string.
     int senders_stream_identifier; ///< Sender's stream identifier.
 
     /// @brief Sender's control interface destination port. Sent from Tx (client) to Rx (server) so the Rx can establish

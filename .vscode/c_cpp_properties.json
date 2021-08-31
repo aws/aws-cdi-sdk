@@ -3,7 +3,8 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**",
+                "${workspaceFolder}/include/*",
+                "${workspaceFolder}/src/**",
                 "${workspaceFolder}/../libfabric/**"
             ],
             "defines": ["_LINUX", "CLOUDWATCH_METRICS"],
@@ -15,7 +16,8 @@
         {
             "name": "cdi_config",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/include/*",
+                "${workspaceFolder}/src/**"
             ],
             "defines": ["_LINUX"],
             "compilerPath": "/usr/bin/gcc",

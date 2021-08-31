@@ -312,8 +312,8 @@ typedef struct {
     CdiQueueHandle free_buffer_queue_handle; ///< Circular queue of CdiSgList structures.
 
     /// @brief Current state of the payload number being processed. Array is addressed by payload_num, masked by
-    /// MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER-1.
-    RxPayloadState* payload_state_array_ptr[MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER];
+    /// CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER-1.
+    RxPayloadState* payload_state_array_ptr[CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER];
     /// @brief The current payload_state_array_ptr index that is pending completion or an error state, waiting to be
     /// sent in payload sequence order.
     int rxreorder_current_index;
@@ -340,7 +340,7 @@ struct CdiEndpointState {
 
     /// @brief Name of the stream. It is used as an identifier when generating log messages, connection callbacks and
     /// statistics data.
-    char stream_name_str[MAX_STREAM_NAME_STRING_LENGTH];
+    char stream_name_str[CDI_MAX_STREAM_NAME_STRING_LENGTH];
 
     union {
         /// The internal state of the structure if ConnectionHandleType is kHandleTypeTx.
@@ -415,12 +415,12 @@ struct CdiConnectionState {
     CdiStatsCallbackHandle stats_cb_handle;
 
     /// Connection protocol type.
-    ConnectionProtocolType protocol_type;
+    CdiConnectionProtocolType protocol_type;
 
     /// Data for payload worker thread. Either used for TxPayloadThread().
     CdiThreadID payload_thread_id;             ///< Payload thread identifier
 
-    char saved_connection_name_str[MAX_CONNECTION_NAME_STRING_LENGTH]; ///< Name of the connection.
+    char saved_connection_name_str[CDI_MAX_CONNECTION_NAME_STRING_LENGTH]; ///< Name of the connection.
 
     CdiLogHandle log_handle; ///< Logger handle used for this connection. If NULL, the global logger is used.
 

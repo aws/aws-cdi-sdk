@@ -15,6 +15,8 @@
 
 #include "adapter_efa.h"
 
+#include <inttypes.h> // for PRIu16
+
 #include "adapter_efa_probe_control.h"
 #include "internal.h"
 #include "internal_log.h"
@@ -27,6 +29,10 @@
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
+
+/// @brief This release of the CDI SDK has been qualified with libfabric version 1.9.x. More recent versions of
+/// libfabric are not interoperable with version 1.9.
+CDI_STATIC_ASSERT(FI_MAJOR_VERSION==1 && FI_MINOR_VERSION==9, "Incorrect libfabric version.");
 
 #ifndef FT_FIVERSION
 /// @brief The current FI Version.
@@ -122,7 +128,7 @@ static struct fi_info* CreateHints(bool is_socket_based)
         hints_ptr->mode = FI_CONTEXT;
         hints_ptr->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR;
 
-        // Not using FI_THREAD_SAFE, to prevent use of locks. NOTE: This means that single-thread access to  libfabric
+        // Not using FI_THREAD_SAFE, to prevent use of locks. NOTE: This means that single-thread access to libfabric
         // must be used.
         hints_ptr->domain_attr->threading = FI_THREAD_DOMAIN;
 
@@ -188,6 +194,14 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         ret = fi_getinfo(FT_FIVERSION, node_str, service_str, flags, hints_ptr, &endpoint_ptr->fabric_info_ptr);
     }
 
+    if (0 == ret && !is_socket_based) {
+        // The SDK does not expect to receive packets in order. For best performance don't require packet ordering.
+        endpoint_ptr->fabric_info_ptr->tx_attr->msg_order = FI_ORDER_NONE;
+        endpoint_ptr->fabric_info_ptr->rx_attr->msg_order = FI_ORDER_NONE;
+        endpoint_ptr->fabric_info_ptr->ep_attr->max_msg_size =
+            endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->maximum_payload_bytes;
+    }
+
     if (0 == ret) {
         ret = fi_fabric(endpoint_ptr->fabric_info_ptr->fabric_attr, &endpoint_ptr->fabric_ptr, NULL);
     }
@@ -222,8 +236,9 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
     };
 
     if (0 == ret) {
-        ret = fi_av_open(endpoint_ptr->domain_ptr, &address_vector_attr, &endpoint_ptr->address_vector_ptr,
-                         NULL);
+        ret = fi_av_open(endpoint_ptr->domain_ptr, &address_vector_attr, &endpoint_ptr->address_vector_ptr, NULL);
+        // We use remote_fi_addr in EfaTxEndpointStop to check if fi_av_insert was called.
+        endpoint_ptr->remote_fi_addr = FI_ADDR_UNSPEC;
     }
 
     if (0 == ret) {
@@ -285,11 +300,12 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
                          &name_length);
 
         if (0 == ret) {
+            bool is_transmitter = (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction);
             char gid_name_str[MAX_IPV6_ADDRESS_STRING_LENGTH];
             DeviceGidToString(endpoint_ptr->local_ipv6_gid_array,
                               sizeof(endpoint_ptr->local_ipv6_gid_array), gid_name_str, sizeof(gid_name_str));
             CDI_LOG_HANDLE(endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->log_handle, kLogDebug,
-                           "Using local EFA device GID[%s].", gid_name_str);
+                           "Using local EFA device GID[%s] (%s).", gid_name_str, is_transmitter ? "Tx" : "Rx");
         }
     }
 
@@ -314,8 +330,12 @@ static void LibFabricEndpointClose(EfaEndpointState* endpoint_ptr)
 {
     bool is_transmitter = (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction);
 
-    if (!is_transmitter) {
-        EfaRxPacketPoolFree(endpoint_ptr);
+    {
+        char gid_name_str[MAX_IPV6_ADDRESS_STRING_LENGTH];
+        DeviceGidToString(endpoint_ptr->local_ipv6_gid_array,
+                          sizeof(endpoint_ptr->local_ipv6_gid_array), gid_name_str, sizeof(gid_name_str));
+        CDI_LOG_HANDLE(endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->log_handle, kLogDebug,
+                       "Closing local EFA device GID[%s] (%s).", gid_name_str, is_transmitter ? "Tx" : "Rx");
     }
 
     if (endpoint_ptr->endpoint_ptr) {
@@ -333,10 +353,13 @@ static void LibFabricEndpointClose(EfaEndpointState* endpoint_ptr)
         endpoint_ptr->completion_queue_ptr = NULL;
     }
 
-    if (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction &&
-            endpoint_ptr->tx_state.memory_region_ptr) {
-        fi_close(&endpoint_ptr->tx_state.memory_region_ptr->fid);
-        endpoint_ptr->tx_state.memory_region_ptr = NULL;
+    if (is_transmitter) {
+        if (endpoint_ptr->tx_state.memory_region_ptr) {
+            fi_close(&endpoint_ptr->tx_state.memory_region_ptr->fid);
+            endpoint_ptr->tx_state.memory_region_ptr = NULL;
+        }
+    } else {
+        EfaRxPacketPoolFree(endpoint_ptr);
     }
 
     if (endpoint_ptr->domain_ptr) {
@@ -400,6 +423,8 @@ static CdiReturnStatus EfaConnectionCreate(AdapterConnectionHandle handle, int p
     CdiReturnStatus rs = kCdiStatusOk;
 
     EfaConnectionState* efa_con_ptr = CdiOsMemAllocZero(sizeof(*efa_con_ptr));
+    handle->type_specific_ptr = efa_con_ptr; // Set here before Control Interface is created, since it uses it.
+
     if (efa_con_ptr == NULL) {
         rs = kCdiStatusNotEnoughMemory;
     } else {
@@ -442,7 +467,6 @@ static CdiReturnStatus EfaConnectionCreate(AdapterConnectionHandle handle, int p
         }
     }
 
-    handle->type_specific_ptr = efa_con_ptr;
     if (kCdiStatusOk != rs) {
         EfaConnectionDestroy(handle);
     }
@@ -463,16 +487,17 @@ static CdiReturnStatus EfaConnectionDestroy(AdapterConnectionHandle handle)
     if (adapter_con_ptr) {
         EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
         if (efa_con_ptr) {
-            // NOTE: The SGL entries in this pool are stored within the pool buffer, so no additional resource freeing needs
-            // to be done here.
-            CdiPoolPutAll(efa_con_ptr->control_work_request_pool_handle);
-            CdiPoolDestroy(efa_con_ptr->control_work_request_pool_handle);
-            efa_con_ptr->control_work_request_pool_handle = NULL;
-
             if (efa_con_ptr->control_interface_handle) {
                 ControlInterfaceDestroy(efa_con_ptr->control_interface_handle);
                 efa_con_ptr->control_interface_handle = NULL;
             }
+
+            // The Control Interface uses this pool, so don't destroy it until after the Control Interface's polling
+            // thread has been stopped. NOTE: The SGL entries in this pool are stored within the pool buffer, so no
+            // additional resource freeing needs to be done here.
+            CdiPoolPutAll(efa_con_ptr->control_work_request_pool_handle);
+            CdiPoolDestroy(efa_con_ptr->control_work_request_pool_handle);
+            efa_con_ptr->control_work_request_pool_handle = NULL;
 
             CdiOsMemFree(efa_con_ptr);
             adapter_con_ptr->type_specific_ptr = NULL;
@@ -697,6 +722,41 @@ static CdiReturnStatus EnvironmentVariableSet(const char* name_str, int value)
     return rs;
 }
 
+/**
+ * Determine maximum payload size that fits in a single link-level packet
+ *
+ * @param fi_ptr Pointer to name of variable to set.
+ *
+ * @return maximum payload size in number of bytes
+ */
+static int GetMaximumEfaPayloadSize(struct fi_info* fi_ptr)
+{
+    assert(fi_ptr);
+    // Documentation for fi_getinfo says we should compare the integer values for portability.
+    int major = FI_MAJOR_VERSION;
+    int minor = FI_MINOR_VERSION;
+    SDK_LOG_GLOBAL(kLogInfo, "Libfabric is version [%d.%d] (FT_FIVERSION[%d])", major, minor, FT_FIVERSION);
+
+    // Get MTU size from adapter.
+    size_t mtu = fi_ptr->nic->link_attr->mtu;
+    int maximum_payload_size = 0;
+
+    // In version 1.9 and prior, the EFA provider reported link-level MTU. In later versions it accounts for
+    // provider-specific headers and reports the maximum payload size.
+    if ((major == 1 && minor >= 10) || major > 1) {
+        maximum_payload_size = mtu;
+    } else {
+        // See logic in rxr_get_rts_data_size().
+        // (MTU - 64 bytes for SRD headers)
+        maximum_payload_size = mtu - 64;
+    }
+    SDK_LOG_GLOBAL(kLogInfo, "EFA adapter MTU [%lu], maximum payload size [%d], message prefix size [%lu]",
+        mtu, maximum_payload_size, fi_ptr->ep_attr->msg_prefix_size);
+
+    assert(maximum_payload_size > 0);
+    return maximum_payload_size;
+}
+
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -704,23 +764,25 @@ static CdiReturnStatus EnvironmentVariableSet(const char* name_str, int value)
 CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, bool is_socket_based)
 {
     // NOTE: Since the caller is the application's thread, use SDK_LOG_GLOBAL() for any logging in this function.
-    assert(adapter_state_ptr != NULL);
+    assert(NULL != adapter_state_ptr);
 
     CdiReturnStatus rs = kCdiStatusOk;
 
-    EfaAdapterState* efa_adapter_state_ptr = (EfaAdapterState*)CdiOsMemAllocZero(sizeof *efa_adapter_state_ptr);
-    if (efa_adapter_state_ptr == NULL) {
+    EfaAdapterState* efa_adapter_state_ptr = (EfaAdapterState*)CdiOsMemAllocZero(sizeof(EfaAdapterState));
+    if (NULL == efa_adapter_state_ptr) {
         rs = kCdiStatusNotEnoughMemory;
+    } else {
+        efa_adapter_state_ptr->is_socket_based = is_socket_based;
     }
 
-    efa_adapter_state_ptr->is_socket_based = is_socket_based;
-
     uint64_t allocated_size = adapter_state_ptr->adapter_data.tx_buffer_size_bytes;
-    if (rs == kCdiStatusOk && allocated_size) {
+    if (kCdiStatusOk == rs && allocated_size) {
         // If necessary, round up to next even-multiple of hugepages byte size.
         allocated_size = ((adapter_state_ptr->adapter_data.tx_buffer_size_bytes +
                           CDI_HUGE_PAGES_BYTE_SIZE-1) / CDI_HUGE_PAGES_BYTE_SIZE) * CDI_HUGE_PAGES_BYTE_SIZE;
         void* mem_ptr = CdiOsMemAllocHugePage(allocated_size);
+        // Set flag so we know how to later free Tx buffer.
+        adapter_state_ptr->tx_buffer_is_hugepages = NULL != mem_ptr;
         if (NULL == mem_ptr) {
             // Fallback using heap memory.
             allocated_size = adapter_state_ptr->adapter_data.tx_buffer_size_bytes;
@@ -729,19 +791,13 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
                 allocated_size = 0; // Since allocation failed, set allocated size to zero.
                 rs = kCdiStatusNotEnoughMemory;
             }
-        } else {
-            // Tx buffer was allocated using huge pages. Set flag so we know how to later free it.
-            adapter_state_ptr->tx_buffer_is_hugepages = true;
         }
         adapter_state_ptr->adapter_data.ret_tx_buffer_ptr = mem_ptr;
         adapter_state_ptr->tx_buffer_allocated_size = allocated_size;
     }
 
     // Set environment variables used by libfabric.
-#ifdef LIBFABRIC_LOG_LEVEL
-    rs = EnvironmentVariableSet("FI_LOG_LEVEL", LIBFABRIC_LOG_LEVEL); // Set the libfabric log level.
-#endif
-    if (rs == kCdiStatusOk && !is_socket_based) {
+    if (kCdiStatusOk == rs && !is_socket_based) {
         // Set values specific to EFA provider.
         //
         // Disable the shared memory provider, which we are not using. If it is enabled, it will use
@@ -749,14 +805,19 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
         // files that have not been flushed using fflush(). In case this feature is used, the logic below flushes all
         // open CdiLogger log files using the call to CdiLoggerFlushAllFileLogs().
         rs = EnvironmentVariableSet("FI_EFA_ENABLE_SHM_TRANSFER", false);
-        if (rs == kCdiStatusOk) {
+        if (kCdiStatusOk == rs) {
             // Set the number of read completion queue entries. Current libfabric default is 50.
             rs = EnvironmentVariableSet("FI_EFA_CQ_READ_SIZE", EFA_CQ_READ_SIZE);
             //EnvironmentVariableSet("FI_EFA_CQ_SIZE", 1024); // default is 1024 (see EFA_DEF_CQ_SIZE)
         }
+#ifdef LIBFABRIC_LOG_LEVEL
+        if (kCdiStatusOk == rs) {
+            rs = EnvironmentVariableSet("FI_LOG_LEVEL", LIBFABRIC_LOG_LEVEL); // Set the libfabric log level.
+        }
+#endif
     }
 
-    if (rs == kCdiStatusOk) {
+    if (kCdiStatusOk == rs) {
         if (is_socket_based) {
             adapter_state_ptr->maximum_payload_bytes = MAX_TCP_PACKET_SIZE;
         } else {
@@ -767,7 +828,7 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
                 uint64_t flags = 0;
                 struct fi_info* fi_ptr;
 
-                // Ensure that the all log files are flushed before using fi_get_info() below for the EFA adapter. See
+                // Ensure that the all log files are flushed before using fi_getinfo() below for the EFA adapter. See
                 // comment above about fork().
                 CdiLoggerFlushAllFileLogs();
 
@@ -776,16 +837,10 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
                     SDK_LOG_GLOBAL(kLogError, "fi_getinfo() failed for local EFA device. Ret[%d]", ret);
                     rs = kCdiStatusFatal;
                 } else {
-                    // Get MTU size from adapter.
-                    adapter_state_ptr->maximum_payload_bytes = fi_ptr->nic->link_attr->mtu;
-
-                    /// See logic in rxr_get_rts_data_size().
-                    /// Don't want to exceed MTU user data size (MTU - 64 bytes for SRD headers).
-                    adapter_state_ptr->maximum_payload_bytes -= 64;
+                    adapter_state_ptr->maximum_payload_bytes = GetMaximumEfaPayloadSize(fi_ptr);
 
                     // Get Tx IOV Limit (maximum number of SGL entries for a payload).
                     adapter_state_ptr->maximum_tx_sgl_entries = fi_ptr->tx_attr->iov_limit;
-
                     fi_freeinfo(fi_ptr);
                 }
                 hints_ptr->fabric_attr->prov_name = NULL;

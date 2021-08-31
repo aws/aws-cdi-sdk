@@ -210,14 +210,6 @@ static THREAD TxPayloadThread(void* ptr)
     // payload and resume when resources are available.
     TxPayloadState* payload_state_ptr = NULL;
     while (!CdiOsSignalGet(con_state_ptr->shutdown_signal) && !EndpointManagerIsConnectionShuttingDown(mgr_handle)) {
-
-        // If connected and queue is empty, then clear enqueue active flag so PollThread() can sleep. While not
-        // connected, Probe controls use of the do_work flag.
-        if (kCdiConnectionStatusConnected == con_state_ptr->adapter_connection_ptr->connection_status_code &&
-            CdiQueueIsEmpty(con_state_ptr->tx_state.payload_queue_handle)) {
-            CdiOsSignalClear(con_state_ptr->adapter_connection_ptr->poll_do_work_signal);
-        }
-
         uint32_t signal_index = 0;
         bool payload_received = false;
         if (kPayloadStateIdle == payload_processing_state) {
@@ -243,9 +235,10 @@ static THREAD TxPayloadThread(void* ptr)
             }
         } else {
             payload_processing_state = kPayloadStateWorkReceived;
-            // Set flag/signal that we are going to start queueing a payload of packets. This will keep the PollThread()
-            // working as long as we have these packets and more payloads in payload_queue_handle to send.
-            CdiOsSignalSet(con_state_ptr->adapter_connection_ptr->poll_do_work_signal);
+            // Increment reference counter once at the start of each payload. This will keep the PollThread() working as
+            // long as we have payloads and their related packets to send.
+            CdiOsAtomicInc32(&payload_state_ptr->cdi_endpoint_handle->adapter_endpoint_ptr->tx_in_flight_ref_count);
+            CdiOsSignalSet(con_state_ptr->adapter_connection_ptr->tx_poll_do_work_signal);
         }
 
         // Always check the completion queue here. Don't want to starve it in case either several Endpoint Manager
@@ -327,8 +320,14 @@ static THREAD TxPayloadThread(void* ptr)
                     // work_request_ptr (a pointer to a TxPacketWorkRequest structure).
                     work_request_ptr->packet.sg_list.internal_data_ptr = work_request_ptr;
 
+                    // Set flag for last packet of the payload so ACKs received can keep track of the number of
+                    // in-flight payloads.
+                    work_request_ptr->packet.payload_last_packet = last_packet;
+
                     // Add the packet to a list to be enqueued to the adapter.
                     CdiSinglyLinkedListPushTail(&packet_list, &work_request_ptr->packet.list_entry);
+                    // Increment reference counter once for each packet.
+                    CdiOsAtomicInc32(&payload_state_ptr->cdi_endpoint_handle->adapter_endpoint_ptr->tx_in_flight_ref_count);
 
                     payload_processing_state = (last_packet || CdiSinglyLinkedListSize(&packet_list) >= batch_size) ?
                         kPayloadStateEnqueuing : kPayloadStateGetWorkRequest;
@@ -381,12 +380,12 @@ static THREAD TxPayloadThread(void* ptr)
  *
  * @return A value from the CdiReturnStatus enumeration.
  */
-static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, CdiTxConfigData* config_data_ptr,
+static CdiReturnStatus TxCreateConnection(CdiConnectionProtocolType protocol_type, CdiTxConfigData* config_data_ptr,
                                           CdiCallback tx_cb_ptr, CdiConnectionHandle* ret_handle_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;
 
-    int max_tx_payloads = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+    int max_tx_payloads = CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
 
     // If max_simultaneous_tx_payloads has been set use that value otherwise use
     // MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION
@@ -394,10 +393,10 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
         max_tx_payloads = config_data_ptr->max_simultaneous_tx_payloads;
     }
 
-    int max_tx_payload_sgl_entries = MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION;
+    int max_tx_payload_sgl_entries = CDI_MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION;
 
     // If max_simultaneous_tx_payload_sgl_entries has been set use that value otherwise use
-    // MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION
+    // CDI_MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION
     if (config_data_ptr->max_simultaneous_tx_payload_sgl_entries) {
         max_tx_payload_sgl_entries = config_data_ptr->max_simultaneous_tx_payload_sgl_entries;
     }
@@ -483,7 +482,7 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
         // less than the number of TX payloads allowed per connection to allow for proper pushback and payload state
         // data management.
         if (!CdiQueueCreate("TxPayloadState queue Pointer", max_tx_payloads-1,
-                            FIXED_QUEUE_SIZE, FIXED_QUEUE_SIZE, sizeof(TxPayloadState*),
+                            CDI_FIXED_QUEUE_SIZE, CDI_FIXED_QUEUE_SIZE, sizeof(TxPayloadState*),
                             kQueueSignalPopWait | kQueueMultipleWritersFlag, // Can use wait signal for pops (reads),
                                                                              // thread safe for multiple writers.
                             &con_state_ptr->tx_state.payload_queue_handle)) {
@@ -545,7 +544,7 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
 
     if (kCdiStatusOk == rs) {
         // Create a packet message thread that is used by both Tx and Rx connections.
-        rs = ConnectionCommonPacketMessageThreadCreate(con_state_ptr);
+        rs = ConnectionCommonPacketMessageThreadCreate(con_state_ptr, "Tx:PayloadMessage");
     }
 
     if (kCdiStatusOk == rs) {
@@ -558,6 +557,7 @@ static CdiReturnStatus TxCreateConnection(ConnectionProtocolType protocol_type, 
             .connection_user_cb_param = con_state_ptr->tx_state.config_data.connection_user_cb_param,
 
             .log_handle = con_state_ptr->log_handle,
+            .shared_thread_id = config_data_ptr->shared_thread_id,
             .thread_core_num = config_data_ptr->thread_core_num,
             .direction = kEndpointDirectionSend,
             .port_number = con_state_ptr->tx_state.config_data.dest_port,
@@ -636,7 +636,7 @@ static void FlushFailedPayload(CdiEndpointState* endpoint_ptr, TxPayloadState* p
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-CdiReturnStatus TxCreateInternal(ConnectionProtocolType protocol_type, CdiTxConfigData* config_data_ptr,
+CdiReturnStatus TxCreateInternal(CdiConnectionProtocolType protocol_type, CdiTxConfigData* config_data_ptr,
                                  CdiCallback tx_cb_ptr, CdiConnectionHandle* ret_handle_ptr)
 {
     CdiReturnStatus rs = TxCreateConnection(protocol_type, config_data_ptr, tx_cb_ptr, ret_handle_ptr);
@@ -864,9 +864,10 @@ void TxPacketWorkRequestComplete(void* param_ptr, Packet* packet_ptr, EndpointMe
 {
     assert(kEndpointMessageTypePacketSent == message_type);
     (void)message_type;
-
     CdiEndpointState* endpoint_ptr = (CdiEndpointState*)param_ptr;
     CdiConnectionState* con_state_ptr = endpoint_ptr->connection_state_ptr;
+
+    CdiAdapterTxPacketComplete(endpoint_ptr->adapter_endpoint_ptr, packet_ptr);
 
     if (kAdapterPacketStatusNotConnected == packet_ptr->tx_state.ack_status) {
         return;
@@ -894,9 +895,8 @@ void TxPacketWorkRequestComplete(void* param_ptr, Packet* packet_ptr, EndpointMe
                                         (void*)&work_request_ptr->packet.list_entry);
 
             if (payload_state_ptr->data_bytes_transferred >= payload_state_ptr->source_sgl.total_data_size) {
-                // Payload transfer complete.
-                // Pointer is freed below in PayloadTransferComplete(). Clear it now so it cannot be accidentally used
-                // later.
+                // Payload transfer complete. Pointer is freed below in PayloadTransferComplete(). Clear it now so it
+                // cannot be accidentally used later.
                 work_request_ptr->payload_state_ptr = NULL;
 
                 // Put list of work requests in queue so TxPayloadThread() can free the allocated resources.

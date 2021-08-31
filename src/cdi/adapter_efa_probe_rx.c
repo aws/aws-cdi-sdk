@@ -110,6 +110,7 @@ static ProbeEndpointState* FindProbeEndpoint(AdapterConnectionHandle handle,
                 CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Existing endpoint IP[%s:%d].",
                                         EndpointManagerEndpointRemoteIpGet(temp_handle),
                                         EndpointManagerEndpointRemotePortGet(temp_handle));
+                temp_handle = EndpointManagerGetNextEndpoint(temp_handle);
             }
         }
     }
@@ -122,32 +123,16 @@ static ProbeEndpointState* FindProbeEndpoint(AdapterConnectionHandle handle,
 }
 
 /**
- * Process ping timeout condition.
+ * Destroy Rx endpoint.
  *
  * @param probe_ptr Pointer to probe endpoint state data.
  */
-static void ProcessPingTimeout(ProbeEndpointState* probe_ptr)
+static void DestroyRxEndpoint(ProbeEndpointState* probe_ptr)
 {
     CdiEndpointHandle cdi_endpoint_handle = probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle;
-    bool do_reset = true;
-
-    // Checking the application's adapter endpoint connection, wnich cannot be bidirectional, so no need to check for
-    // it here.
-    if (kEndpointDirectionReceive == probe_ptr->app_adapter_endpoint_handle->adapter_con_state_ptr->direction) {
-        // For Rx endpoint, destroy it. This prevents use of Rx resources when an endpoint is no longer needed.
-        CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
-                                    "Probe Rx EFA ping timeout. Destroying stale endpoint.");
-        EndpointManagerEndpointDestroy(cdi_endpoint_handle);
-        do_reset = false;
-    }
-
-    if (do_reset) {
-        CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Probe Rx EFA ping timeout. Sending reset to Tx.");
-        ProbeControlEfaConnectionQueueReset(probe_ptr, NULL);
-        probe_ptr->rx_probe_state.rx_state = kProbeStateEfaReset;
-    } else {
-        probe_ptr->rx_probe_state.rx_state = kProbeStateDestroy;
-    }
+    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Destroying stale endpoint.");
+    EndpointManagerEndpointDestroy(cdi_endpoint_handle);
+    probe_ptr->rx_probe_state.rx_state = kProbeStateDestroy;
 }
 
 //*********************************************************************************************************************
@@ -328,7 +313,7 @@ bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr,
     return ret_new_state;
 }
 
-int ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
+uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
 {
     uint64_t wait_timeout_ms = DEFAULT_TIMEOUT_MSEC;
     AdapterEndpointHandle adapter_endpoint_handle = probe_ptr->app_adapter_endpoint_handle;
@@ -362,14 +347,24 @@ int ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
         case kProbeStateSendReset:
             // Notify application that we are disconnected.
             EndpointManagerConnectionStateChange(cdi_endpoint_handle, kCdiConnectionStatusDisconnected, NULL);
-            // If we have received a reset command from the remote Tx (client) connection, which contains the
-            // remote IP and destination port, we can send reset commands to it.
-            if (efa_con_ptr->control_interface_handle) {
-                // Send command to reset the remote Tx (client) connection. Will not expect an ACK back.
-                ProbeControlSendCommand(probe_ptr, kProbeCommandReset, false);
+            if (++probe_ptr->rx_probe_state.send_reset_retry_count < RX_RESET_COMMAND_MAX_RETRIES) {
+                    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
+                        "Probe Rx remote IP[%s:%d] sending reset #[%d].",
+                        EndpointManagerEndpointRemoteIpGet(cdi_endpoint_handle),
+                        EndpointManagerEndpointRemotePortGet(cdi_endpoint_handle),
+                        probe_ptr->rx_probe_state.send_reset_retry_count);
+                // If we have received a reset command from the remote Tx (client) connection, which contains the
+                // remote IP and destination port, we can send reset commands to it.
+                if (efa_con_ptr->control_interface_handle) {
+                    // Send command to reset the remote Tx (client) connection. Will not expect an ACK back.
+                    ProbeControlSendCommand(probe_ptr, kProbeCommandReset, false);
+                }
+                probe_ptr->rx_probe_state.rx_state = kProbeStateSendReset; // Ensure in send reset state.
+                wait_timeout_ms = SEND_RESET_COMMAND_FREQUENCY_MSEC;
+            } else {
+                DestroyRxEndpoint(probe_ptr);
+                wait_timeout_ms = 0; // Do immediately.
             }
-            probe_ptr->rx_probe_state.rx_state = kProbeStateSendReset; // Ensure in send reset state.
-            wait_timeout_ms = SEND_RESET_COMMAND_FREQUENCY_MSEC;
             break;
         case kProbeStateResetDone:
             // If the reset was triggered by the remote connection, respond with an ACK command.
@@ -403,6 +398,7 @@ int ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
             // communication, the transmitter could start sending a payload and packets for it might arrive before the
             // last probe packet arrives. NOTE: We will not expect an ACK back.
             ProbeControlSendCommand(probe_ptr, kProbeCommandConnected, false);
+            probe_ptr->rx_probe_state.send_reset_retry_count = 0; // Reset retry counter.
 #ifdef DISABLE_PROBE_MONITORING
             wait_timeout_ms = CDI_INFINITE;
 #else
@@ -413,11 +409,12 @@ int ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
             break;
         case kProbeStateEfaConnectedPing:
             // Did not get a ping within the timeout period. Reset the connection.
-            ProcessPingTimeout(probe_ptr);
+            DestroyRxEndpoint(probe_ptr);
             wait_timeout_ms = 0; // Do immediately.
             break;
         case kProbeStateDestroy:
         case kProbeStateSendProtocolVersion:
+        case kProbeStateEfaTxProbeAcks:
             // Nothing special needed here.
             break;
     }

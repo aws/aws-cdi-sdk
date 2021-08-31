@@ -11,6 +11,7 @@
 */
 
 #include <assert.h>
+#include <stdbool.h>
 
 #include "cdi_avm_api.h"
 #include "cdi_core_api.h"
@@ -30,6 +31,7 @@ typedef struct {
     TestConnectionProtocolType protocol_type; ///< Protocol type (AVM or RAW).
     int num_transactions;              ///< The number of transactions in the test.
     int payload_size;                  ///< Payload size in bytes.
+    bool use_efa;                      ///< Whether to use EFA adapter.
 } TestSettings;
 
 /**
@@ -69,6 +71,7 @@ void PrintHelp(void) {
     TestConsoleLog(kLogInfo, "--dest_port        <port num>     : (required) Set the destination port.");
     TestConsoleLog(kLogInfo, "--payload_size     <byte_size>    : Set the size (in bytes) for each payload.");
     TestConsoleLog(kLogInfo, "--num_transactions <count>        : Set the number of transactions for this test.");
+    TestConsoleLog(kLogInfo, "--use_efa          <boolean>      : Whether to use EFA or Unix sockets (default true).");
 }
 
 /**
@@ -105,6 +108,8 @@ static bool ParseCommandLine(int argc, const char** argv, TestSettings* test_set
             ret = TestStringToInt(argv[i++], &test_settings_ptr->num_transactions, NULL);
         } else if (0 == CdiOsStrCmp("--payload_size", arg_str)) {
             ret = TestStringToInt(argv[i++], &test_settings_ptr->payload_size, NULL);
+        } else if (0 == CdiOsStrCmp("--use_efa", arg_str)) {
+            test_settings_ptr->use_efa = (0 == CdiOsStrCmp("true", argv[i++]));
         } else if (0 == CdiOsStrCmp("--help", arg_str) || 0 == CdiOsStrCmp("-h", arg_str)) {
             ret = false;
             break;
@@ -212,7 +217,7 @@ static void TestRawRxCallback(const CdiRawRxCbData* cb_data_ptr)
  */
 int main(int argc, const char** argv)
 {
-    CdiLoggerInitialize(); // Intialize logger so we can use the CDI_LOG_THREAD() macro to generate console messages.
+    CdiLoggerInitialize(); // Initialize logger so we can use the CDI_LOG_THREAD() macro to generate console messages.
 
     // Setup default test settings.
     TestConnectionInfo con_info = {
@@ -252,13 +257,13 @@ int main(int argc, const char** argv)
     }
 
     //-----------------------------------------------------------------------------------------------------------------
-    // CDI SDK Step 2: Register the EFA adapter.
+    // CDI SDK Step 2: Register the adapter.
     //-----------------------------------------------------------------------------------------------------------------
     CdiAdapterHandle adapter_handle = NULL;
     if (kCdiStatusOk == rs) {
         CdiAdapterData adapter_data = {
             .adapter_ip_addr_str = con_info.test_settings.local_adapter_ip_str,
-            .adapter_type = kCdiAdapterTypeEfa // Use EFA adapter.
+            .adapter_type = con_info.test_settings.use_efa ? kCdiAdapterTypeEfa : kCdiAdapterTypeSocketLibfabric
         };
         rs = CdiCoreNetworkAdapterInitialize(&adapter_data, &adapter_handle);
     }
@@ -276,6 +281,7 @@ int main(int argc, const char** argv)
             // Settings that are common between Rx and Tx connections.
             .adapter_handle = adapter_handle,
             .dest_port = con_info.test_settings.dest_port,
+            .shared_thread_id = 0, // 0 or -1= Use unique poll thread for this connection.
             .thread_core_num = -1, // -1= Let OS decide which CPU core to use.
 
             .connection_name_str = NULL,

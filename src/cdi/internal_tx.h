@@ -40,7 +40,7 @@ typedef struct {
 //*********************************************************************************************************************
 
 /// @see CdiRawTxCreate
-CdiReturnStatus TxCreateInternal(ConnectionProtocolType protocol_type, CdiTxConfigData* config_data_ptr,
+CdiReturnStatus TxCreateInternal(CdiConnectionProtocolType protocol_type, CdiTxConfigData* config_data_ptr,
                                  CdiCallback tx_cb_ptr, CdiConnectionHandle* ret_handle_ptr);
 
 /// @see CdiAvmTxStreamConnectionCreate

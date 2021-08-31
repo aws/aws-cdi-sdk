@@ -46,7 +46,7 @@ static const char* profile_version_ancillary_data_str = "02.00";
 //*********************************************************************************************************************
 
 /// Enum/string keys for CdiAvmVideoSampling.
-static const EnumStringKey video_sampling_key_array[] = {
+static const CdiEnumStringKey video_sampling_key_array[] = {
     { kCdiAvmVidYCbCr444, "YCbCr-4:4:4" },
     { kCdiAvmVidYCbCr422, "YCbCr-4:2:2" },
     { kCdiAvmVidRGB,      "RGB" },
@@ -54,14 +54,14 @@ static const EnumStringKey video_sampling_key_array[] = {
 };
 
 /// Enum/string keys for CdiAvmVideoAlphaChannel.
-static const EnumStringKey alpha_channel_key_array[] = {
+static const CdiEnumStringKey alpha_channel_key_array[] = {
     { kCdiAvmAlphaUnused, "Unused" },
     { kCdiAvmAlphaUsed,   "Used" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
 };
 
 /// Enum/string keys for CdiAvmVideoTcs
-static const EnumStringKey tcs_key_array[] = {
+static const CdiEnumStringKey tcs_key_array[] = {
     { kCdiAvmVidTcsSDR,          "SDR" },
     { kCdiAvmVidTcsPQ,           "PQ" },
     { kCdiAvmVidTcsHLG,          "HLG" },
@@ -75,7 +75,7 @@ static const EnumStringKey tcs_key_array[] = {
 };
 
 /// Enum/string keys for CdiAvmVideoRange
-static const EnumStringKey range_key_array[] = {
+static const CdiEnumStringKey range_key_array[] = {
     { kCdiAvmVidRangeNarrow,      "NARROW" },
     { kCdiAvmVidRangeFullProtect, "FULLPROTECT" },
     { kCdiAvmVidRangeFull,        "FULL" },
@@ -83,7 +83,7 @@ static const EnumStringKey range_key_array[] = {
 };
 
 /// Enum/string keys for CdiAvmVideoBitDepth.
-static const EnumStringKey video_bit_depth_key_array[] = {
+static const CdiEnumStringKey video_bit_depth_key_array[] = {
     { kCdiAvmVidBitDepth8,  "8bit" },
     { kCdiAvmVidBitDepth10, "10bit" },
     { kCdiAvmVidBitDepth12, "12bit" },
@@ -91,7 +91,7 @@ static const EnumStringKey video_bit_depth_key_array[] = {
 };
 
 /// Enum/string keys for CdiAvmColorimetry.
-static const EnumStringKey colorimetry_key_array[] = {
+static const CdiEnumStringKey colorimetry_key_array[] = {
     { kCdiAvmVidColorimetryBT601,    "BT601" },
     { kCdiAvmVidColorimetryBT709,    "BT709" },
     { kCdiAvmVidColorimetryBT2020,   "BT2020" },
@@ -103,7 +103,7 @@ static const EnumStringKey colorimetry_key_array[] = {
 };
 
 /// Enum/string keys for CdiAvmAudioChannelGrouping.
-static const EnumStringKey audio_channel_grouping_key_array[] = {
+static const CdiEnumStringKey audio_channel_grouping_key_array[] = {
     { kCdiAvmAudioM, "SMPTE2110.(M)" },
     { kCdiAvmAudioDM, "SMPTE2110.(DM)" },
     { kCdiAvmAudioST, "SMPTE2110.(ST)" },
@@ -116,15 +116,15 @@ static const EnumStringKey audio_channel_grouping_key_array[] = {
 };
 
 /// Enum/string keys for CdiAvmAudioSampleRate.
-static const EnumStringKey audio_sample_rate_key_array[] = {
+static const CdiEnumStringKey audio_sample_rate_key_array[] = {
     { kCdiAvmAudioSampleRate48kHz, "48kHz" },
     { kCdiAvmAudioSampleRate96kHz, "96kHz" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
 };
 
 /// Update EnumStringKeyTypes in cdi_utility_api.h whenever an entry is added to this function's switch statement.
-static const EnumStringKey* KeyGetArray(CdiAvmBaselineEnumStringKeyTypes key_type) {
-    const EnumStringKey* key_array_ptr = NULL;
+static const CdiEnumStringKey* KeyGetArray(CdiAvmBaselineEnumStringKeyTypes key_type) {
+    const CdiEnumStringKey* key_array_ptr = NULL;
     switch (key_type) {
         case kKeyAvmPayloadType:
             assert(false); // Should not get here. This type is supported in baseline.
@@ -266,7 +266,7 @@ static bool MakeBaselineVideoConfiguration(const CdiAvmBaselineConfigCommon* bas
                 break;
         }
         pos = snprintf((char*)config_ptr->data, sizeof(config_ptr->data), "cdi_profile_version=%s; sampling=%s; "
-                       "depth=%u; width=%u, height=%u; exactframerate=%s; colorimetry=%s;%s",
+                       "depth=%u; width=%u; height=%u; exactframerate=%s; colorimetry=%s;%s",
                        profile_version_video_str,
                        CdiAvmKeyEnumToString(kKeyAvmVideoSamplingType, video_config_ptr->sampling,
                                              &video_config_ptr->version),
@@ -329,8 +329,8 @@ static bool GetAudioUnitSize(const CdiAvmBaselineConfig* baseline_config_ptr, in
             break;
         // No default so compiler complains about missing cases.
     }
-    // Each audio sample is 3 bytes. Unit size must contain all the bytes of the samples of all the channels.
-    *payload_unit_size_ptr = sizeof(uint8_t) * 3 * channel_count;
+    // Each audio sample is 3 bytes. Unit size must account for all the bytes of the samples of all the channels.
+    *payload_unit_size_ptr = 8 * 3 * channel_count;
     return ret;
 }
 
@@ -395,7 +395,7 @@ static bool GetAncillaryDataUnitSize(const CdiAvmBaselineConfig* baseline_config
 {
     (void)baseline_config_ptr;
 
-    *payload_unit_size_ptr = sizeof(uint32_t);  // Let the transmit packetizer break packets only at word boundaries.
+    *payload_unit_size_ptr = 8 * sizeof(uint32_t); // Let the transmit packetizer break packets only at word boundaries.
     return true;
 }
 

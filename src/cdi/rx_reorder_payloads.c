@@ -28,10 +28,10 @@
 //*********************************************************************************************************************
 
 /// @brief Ensure define is a power of 2.
-CDI_STATIC_ASSERT((0 == (MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER % 2)), "The define must be a power of 2.");
+CDI_STATIC_ASSERT((0 == (CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER % 2)), "The define must be a power of 2.");
 
 /// @brief Ensure the packet out of order window is less than or equal to the payload out of order buffer.
-CDI_STATIC_ASSERT((MAX_RX_PACKET_OUT_OF_ORDER_WINDOW <= MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER), "...WINDOW must be <= ...BUFFER.");
+CDI_STATIC_ASSERT((CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW <= CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER), "...WINDOW must be <= ...BUFFER.");
 
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
@@ -149,7 +149,7 @@ static void FlushPartialPayload(CdiEndpointState* endpoint_ptr)
 
     int idx = endpoint_ptr->rx_state.rxreorder_current_index;
     int starting_idx = idx;
-    while (endpoint_ptr->rx_state.rxreorder_buffered_packet_count >= MAX_RX_PACKET_OUT_OF_ORDER_WINDOW) {
+    while (endpoint_ptr->rx_state.rxreorder_buffered_packet_count >= CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW) {
         RxPayloadState* payload_state_ptr = endpoint_ptr->rx_state.payload_state_array_ptr[idx];
         if (payload_state_ptr) {
             // If this payload is in progress, change it to the error state.
@@ -167,7 +167,7 @@ static void FlushPartialPayload(CdiEndpointState* endpoint_ptr)
         if (idx == starting_idx) {
             // Wrapped.
             CDI_LOG_THREAD(kLogError, "Failed to reduce Rx packet count[%d] below limit[%d]",
-                           endpoint_ptr->rx_state.rxreorder_buffered_packet_count, MAX_RX_PACKET_OUT_OF_ORDER_WINDOW);
+                           endpoint_ptr->rx_state.rxreorder_buffered_packet_count, CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW);
             assert(false); // Should never occur.
             break;
         }
@@ -217,14 +217,14 @@ bool RxReorderPayloadIsStale(CdiEndpointState* endpoint_ptr, RxPayloadState* pay
         diff = UINT32_MAX - payload_state_ptr->last_total_packet_count + endpoint_state_ptr->total_packet_count;
     }
 
-    return (diff > MAX_RX_PACKET_OUT_OF_ORDER_WINDOW);
+    return (diff > CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW);
 }
 
 RxPayloadState* RxReorderPayloadStateGet(CdiEndpointState* endpoint_ptr, CdiPoolHandle rx_payload_state_pool_handle,
                                          int payload_num)
 {
     // Get masked version of payload number (only use LSBs).
-    int current_payload_index = payload_num & (MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER-1);
+    int current_payload_index = payload_num & (CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER-1);
 
     RxPayloadState* payload_state_ptr = endpoint_ptr->rx_state.payload_state_array_ptr[current_payload_index];
 
@@ -258,13 +258,13 @@ void RxReorderPayloadSendReadyPayloads(CdiEndpointState* endpoint_ptr)
     }
 
     // Now, check if we are at or above the maximum number of buffered packets used to reorder payloads.
-    if (endpoint_ptr->rx_state.rxreorder_buffered_packet_count >= MAX_RX_PACKET_OUT_OF_ORDER_WINDOW) {
+    if (endpoint_ptr->rx_state.rxreorder_buffered_packet_count >= CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW) {
         // At the limit, so walk the payload state array and flush payload(s) until we get back below the limit.
         CdiConnectionState* con_state_ptr = endpoint_ptr->connection_state_ptr;
         CdiLogLevel log_level = con_state_ptr->rx_state.received_first_payload ? kLogError : kLogDebug;
         CDI_LOG_THREAD(log_level,
-                        "Connection[%s] Exceeded rx-reorder packet cache window size[%d]. Flushing payload(s).",
-                        con_state_ptr->saved_connection_name_str, MAX_RX_PACKET_OUT_OF_ORDER_WINDOW);
+                       "Connection[%s] Exceeded rx-reorder packet cache window size[%d]. Flushing payload(s).",
+                       con_state_ptr->saved_connection_name_str, CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW);
         FlushPartialPayload(endpoint_ptr);
     }
 }

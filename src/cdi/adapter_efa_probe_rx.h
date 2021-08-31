@@ -13,8 +13,10 @@
 #ifndef CDI_ADAPTER_EFA_PROBE_RX_H__
 #define CDI_ADAPTER_EFA_PROBE_RX_H__
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "adapter_api.h"
-#include "private.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -71,6 +73,6 @@ bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecoded
  * @param probe_ptr Pointer to probe endpoint state data.
  * @return Wait timeout value.
  */
-int ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr);
+uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr);
 
 #endif  // CDI_ADAPTER_EFA_PROBE_RX_H__

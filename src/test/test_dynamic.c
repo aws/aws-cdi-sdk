@@ -230,7 +230,8 @@ bool TestDynamicEndpoints(TestDynamicHandle handle)
 
             if (kEndpointEnabled == data_ptr->test_state) {
                 CDI_LOG_THREAD(kLogInfo, "Destroying endpoint Stream ID[%d]", stream_settings_ptr->stream_id);
-                CdiAvmStreamEndpointDestroy(connection_info_ptr->tx_stream_endpoint_handle_array[i]);
+                ret = (kCdiStatusOk == CdiAvmStreamEndpointDestroy(
+                    connection_info_ptr->tx_stream_endpoint_handle_array[i]));
                 connection_info_ptr->tx_stream_endpoint_handle_array[i] = NULL;
                 data_ptr->state_change_time_ms = current_time_ms + ENDPOINT_DISABLED_TIME_MS;
                 data_ptr->test_state = kEndpointDisabled;

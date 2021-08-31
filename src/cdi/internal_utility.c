@@ -32,7 +32,7 @@
 //*********************************************************************************************************************
 
 /// Enum/String keys for ProbeState. NOTE: Must match ProbeState.
-static const EnumStringKey probe_state_key_array[] = {
+static const CdiEnumStringKey probe_state_key_array[] = {
     { kProbeStateIdle,                   "Idle" },
     { kProbeStateSendReset,              "SendReset" },
     { kProbeStateSendProtocolVersion,    "SendProtocolVersion" },
@@ -41,6 +41,7 @@ static const EnumStringKey probe_state_key_array[] = {
     { kProbeStateWaitForStart,           "WaitForStart" },
     { kProbeStateEfaStart,               "EfaStart"},
     { kProbeStateEfaProbe,               "EFAProbe" },
+    { kProbeStateEfaTxProbeAcks,         "EFAProbeAcks" },
     { kProbeStateEfaConnected,           "EFAConnected" },
     { kProbeStateEfaConnectedPing,       "EFAPing" },
     { kProbeStateEfaReset,               "EfaReset" },
@@ -49,7 +50,7 @@ static const EnumStringKey probe_state_key_array[] = {
 };
 
 /// Enum/String keys for ProbeCommand. NOTE: Must match ProbeCommand.
-static const EnumStringKey probe_command_key_array[] = {
+static const CdiEnumStringKey probe_command_key_array[] = {
     { kProbeCommandReset,     "Reset" },
     { kProbeCommandPing,      "Ping" },
     { kProbeCommandConnected, "Connected" },
@@ -59,7 +60,7 @@ static const EnumStringKey probe_command_key_array[] = {
 };
 
 /// Enum/String keys for EndpointState. NOTE: Must match EndpointState.
-static const EnumStringKey endpoint_manager_command_key_array[] = {
+static const CdiEnumStringKey endpoint_manager_command_key_array[] = {
     { kEndpointStateIdle,       "Idle" },
     { kEndpointStateReset,      "Reset" },
     { kEndpointStateStart,      "Start" },
@@ -73,8 +74,8 @@ static const EnumStringKey endpoint_manager_command_key_array[] = {
 
 /// @brief Update InternalEnumStringKeyTypes in internal_utility.h whenever an entry is added to this function's switch
 /// statement.
-static const EnumStringKey* UtilityKeyGetArray(EnumStringKeyTypes key_type) {
-    const EnumStringKey* key_array_ptr = NULL;
+static const CdiEnumStringKey* UtilityKeyGetArray(InternalEnumStringKeyTypes key_type) {
+    const CdiEnumStringKey* key_array_ptr = NULL;
     switch (key_type) {
         case kKeyProbeState:                key_array_ptr = probe_state_key_array; break;
         case kKeyProbeCommand:              key_array_ptr = probe_command_key_array; break;
@@ -90,6 +91,6 @@ static const EnumStringKey* UtilityKeyGetArray(EnumStringKeyTypes key_type) {
 
 const char* InternalUtilityKeyEnumToString(InternalEnumStringKeyTypes key_type, int enum_value)
 {
-    const EnumStringKey* key_array = UtilityKeyGetArray(key_type);
+    const CdiEnumStringKey* key_array = UtilityKeyGetArray(key_type);
     return CdiUtilityEnumValueToString(key_array, enum_value);
 }

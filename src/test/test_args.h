@@ -89,6 +89,7 @@ typedef enum {
     kTestOptionLocalIP,
     kTestOptionDestPort,
     kTestOptionRemoteIP,
+    kTestOptionShareThread,
     kTestOptionCore,
     kTestOptionPayloadSize,
     kTestOptionNumTransactions,
@@ -108,7 +109,9 @@ typedef enum {
     kTestOptionLogComponent,
     kTestOptionNumLoops,
     kTestOptStatsConfigPeriod,
+#ifndef CDI_NO_MONITORING
     kTestOptStatsConfigCloudWatch,
+#endif
     kTestOptionHelp,
     kTestOptionHelpVideo,
     kTestOptionHelpAudio,
@@ -176,7 +179,7 @@ typedef struct {
     /// When true, Rx mode is enabled.
     bool rx;
     /// String defining the connection name assigned to this connection.
-    char connection_name_str[MAX_CONNECTION_NAME_STRING_LENGTH];
+    char connection_name_str[CDI_MAX_CONNECTION_NAME_STRING_LENGTH];
     /// Enum representing the connection protocol type.
     TestConnectionProtocolType connection_protocol;
     /// When true, receiver stays alive even after the first test finishes.
@@ -208,17 +211,23 @@ typedef struct {
     uint32_t rate_period_microseconds;
     /// The number of nanoseconds in the selected frame rate. Used for PTP time with high precision to limit time drift.
     uint64_t rate_period_nanoseconds;
-    /// The 0-based packet polling thread's CPU core number; -1 disables pinning to a specific core.
+    /// The identifier of the single poll thread to share with this connection; 0 or -1 creates a unique poll thread
+    /// associated only with this connection.
+    int shared_thread_id;
+    /// The 0-based packet poll thread's CPU core number; -1 disables pinning to a specific core.
     int thread_core_num;
     /// The number of streams in this connection.
     int number_of_streams;
     /// Array of stream settings, where each element represents a unique stream.
-    StreamSettings stream_settings[MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION];
+    StreamSettings stream_settings[CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION];
     /// @brief Statistics gathering period in seconds.
     int stats_period_seconds;
     /// @brief Connection contains multiple endpoints.
     bool multiple_endpoints;
 } TestSettings;
+
+/// Forward reference.
+typedef struct TestConnectionInfo TestConnectionInfo;
 
 /**
  * @brief A structure that holds all of the global test settings set from the command-line.
@@ -240,10 +249,10 @@ typedef struct {
     CdiLogMethod base_log_method;
 
     /// @brief Pointer to the base log file name.
-    char base_log_filename_str[MAX_LOG_FILENAME_LENGTH];
+    char base_log_filename_str[CDI_MAX_LOG_FILENAME_LENGTH];
 
     /// @brief The SDK log file string.
-    char sdk_log_filename_str[MAX_LOG_FILENAME_LENGTH];
+    char sdk_log_filename_str[CDI_MAX_LOG_FILENAME_LENGTH];
 
     /// @brief Handle to global file log for the test application.
     CdiLogHandle test_app_global_log_handle;
@@ -264,7 +273,19 @@ typedef struct {
     bool use_cloudwatch;
 
     /// @brief Statistics gathering CloudWatch configuration data.
-    CloudWatchConfigData cloudwatch_config;
+    CdiCloudWatchConfigData cloudwatch_config;
+
+    /// @brief Total number of connections.
+    int total_num_connections;
+
+    /// @brief Pointer to array of connection info structures.
+    TestConnectionInfo* connection_info_array;
+
+    /// @brief Number of connections that have been established.
+    int num_connections_established;
+
+    /// @brief signal used when all connections have been established.
+    CdiSignalType all_connected_signal;
 } GlobalTestSettings;
 
 /**
@@ -298,7 +319,7 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
  * @param log_component_ptr A pointer to the array of selected log components; this is held in the global_test_settings
  *                          structure.
  */
-void LogComponentToString(const EnumStringKey* key_array, char* log_component_str, CdiLogComponent* log_component_ptr);
+void LogComponentToString(const CdiEnumStringKey* key_array, char* log_component_str, CdiLogComponent* log_component_ptr);
 
 /**
  * A helper function that takes in command-line arguments, sanitizes them for syntax and correctness, and then assigns

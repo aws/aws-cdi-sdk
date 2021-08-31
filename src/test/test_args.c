@@ -54,7 +54,7 @@ enum PortNumLimits {
 /**
   * Enum/String array that contains valid test pattern modes.
  */
-static const EnumStringKey patterns_key_array[] = {
+static const CdiEnumStringKey patterns_key_array[] = {
     /// SAME pattern stores uses the pattern_start value unmodified for every pattern word.
     { kTestPatternSame,       "SAME" },
     /// INC pattern will start at pattern_start and increment the value by one for every pattern word.
@@ -75,7 +75,7 @@ static const EnumStringKey patterns_key_array[] = {
 /**
  * Enum/String array that contains valid connection protocols.
  */
-static const EnumStringKey protocols_key_array[] = {
+static const CdiEnumStringKey protocols_key_array[] = {
     { kTestProtocolRaw,       "RAW" },
     { kTestProtocolAvm,       "AVM" },
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
@@ -263,6 +263,7 @@ static void PrintRiffHelp(void)
     TestConsoleLog(kLogInfo, "");
 }
 
+#ifndef CDI_NO_MONITORING
 /**
  * @brief Prints the statistics help message.
  */
@@ -286,6 +287,13 @@ static void PrintStatsHelp(const OptDef* opt_array_ptr)
     TestConsoleLog(kLogInfo, "  --stats_cloudwatch MyNameSpace us-west-2 MyStream");
     TestConsoleLog(kLogInfo, "  --stats_cloudwatch NULL NULL MyStream");
 }
+#else
+static void PrintStatsHelp(const OptDef* unused)
+{
+    (void)unused;
+    TestConsoleLog(kLogInfo, "CloudWatch statistics gathering is not available.");
+}
+#endif
 
 /**
  * User-defined command-line options. These are the short options and the long options for our command line arguments.
@@ -358,6 +366,8 @@ static OptDef my_options[] =
         "Set a connection-specific destination port."},
     { "rip",  "remote_ip",    1, "<ip address>",     NULL,
         "Only for Tx connections, the IP address of the remote network adapter."},
+    { "tc", "thread_conn",    1, "<id>",       NULL,
+        "Share a single poll thread with all connections that use this ID. ID must be > 0."},
     { "core", "core",         1, "<core num>",       NULL,
         "Set the desired CPU core for this connection."},
     { "psz",  "payload_size", 1, "<byte_size>",      NULL,
@@ -378,8 +388,8 @@ static OptDef my_options[] =
         "Set the receive buffer delay for a payload in this connection in milliseconds. This\n"
         "option directly controls the buffer_delay_ms setting in the CdiRxConfigData used when\n"
         "creating a connection, and its default is 0 or \"disabled\" (no buffer). To enable and\n"
-        "use the SDK default value specify \"automatic\" (see ENABLED_RX_BUFFER_DELAY_DEFAULT_MS).\n"
-        "The maximum allowable value is defined by MAXIMUM_RX_BUFFER_DELAY_MS."},
+        "use the SDK default value specify \"automatic\" (see CDI_ENABLED_RX_BUFFER_DELAY_DEFAULT_MS).\n"
+        "The maximum allowable value is defined by CDI_MAXIMUM_RX_BUFFER_DELAY_MS."},
     { "pat",  "pattern",      1, "<pattern choice>", patterns_key_array,
         "Choose a pattern mode for a stream's test data.\n"
         "All payloads will contain this same repeating pattern starting at the value given\n"
@@ -434,11 +444,13 @@ static OptDef my_options[] =
         "will run forever."},
     { "stp",  "stats_period", 1, "<period_sec>",     NULL,
         "Set the connection-specific statistics gathering period in seconds."},
+#ifndef CDI_NO_MONITORING
     { "st",   "stats_cloudwatch", 3, "<stats args>", NULL,
         "Global option. Set the CloudWatch statistics gathering parameters. All parameters are\n"
         "required and must be specified in this order:\n"
         "<namespace> <region> <dimension domain>\n"
         "Use --help_stats for more detailed help for this option."},
+#endif
     { "h",    "help",         0, NULL,               NULL, "Print the usage message."},
     { "hv",   "help_video",   0, NULL,               NULL, "Print the specific usage message for the --avm_video option."},
     { "ha",   "help_audio",   0, NULL,               NULL, "Print the specific usage message for the --avm_audio option."},
@@ -463,6 +475,65 @@ static void InitOptionsTable(void)
     my_options[kTestOptionLogLevel].arg_choices_array_ptr     = CdiUtilityKeyGetArray(kKeyLogLevel);
     my_options[kTestOptionLogComponent].arg_choices_array_ptr = CdiUtilityKeyGetArray(kKeyLogComponent);
 }
+
+/**
+ * Check a string to see if it is a 32 bit base-N number.
+ * @param  str             The string we are checking to see if it represents a base-N number. The integer representation
+ *                         of the number string in str. Set to NULL if the return number in num_ptr is not needed.
+ * @param  base_n_num_ptr  The integer representation of the number string in str. Set to NULL if the return number is
+ *                         not needed.
+ * @param  base            The numerical base (N) to use for the compare.
+ * @return                 True if string represents a base-N number; false if string does not
+ */
+static bool IsBaseNNumber(const char* str, int* base_n_num_ptr, const int base)
+{
+    char* end_ptr = NULL;
+    int base_n_num = (int)strtol(str, &end_ptr, base);
+
+    // The pointer to the return number is optional, so check for NULL pointer.
+    if (base_n_num_ptr != NULL) {
+        *base_n_num_ptr = base_n_num;
+    }
+
+    return *end_ptr == '\0';
+}
+
+
+/**
+ * Check a string to see if it is a base-10 number.
+ * @param   str             The string we are checking to see if it represents a base-10 number.
+ * @param   base10_num_ptr  The integer representation of the number string in str. Maye be NULL when the return number
+ *                          is not needed.
+ * @return                  True if string represents a base-10 number; false if string does not
+ */
+static bool IsBase10Number(const char* str, int* base10_num_ptr)
+{
+    return IsBaseNNumber(str, base10_num_ptr, 10);
+}
+
+
+/**
+ * Check a string to see if it is a 64 bit base-N number.
+ * @param  str             The string we are checking to see if it represents a base-N number.The integer representation
+ *                         of the number string in str. Set to NULL if the return number in num_ptr is not needed.
+ * @param  base_n_num_ptr  The 64 bit integer representation of the number string in str. May be NULL when the return
+ *                         number is not needed.
+ * @param  base            The numerical base (N) to use for the compare.
+ * @return                 True if string represents a base-N number; false if string does not
+ */
+bool Is64BitBaseNNumber(const char* str, uint64_t* base_n_num_ptr, const int base)
+{
+    char* end_ptr = NULL;
+    uint64_t base_n_num = strtoull(str, &end_ptr, base);
+
+    // The pointer to the return number is optional, so check for NULL pointer.
+    if (base_n_num_ptr != NULL) {
+        *base_n_num_ptr = base_n_num;
+    }
+
+    return *end_ptr == '\0';
+}
+
 
 /**
  * @brief Converts a string to a base-10 number if it can be found at the start of the string. If a number is found,
@@ -623,7 +694,7 @@ static void SetConnectionRatePeriods(TestSettings* test_settings_ptr)
 
     // Frame rate period in nanoseconds used for fallback audio rtp time period if actual sample time cannot be
     // calculated.
-    test_settings_ptr->rate_period_nanoseconds = (((uint64_t)NANOSECONDS_PER_SECOND * test_settings_ptr->rate_denominator) /
+    test_settings_ptr->rate_period_nanoseconds = (((uint64_t)CDI_NANOSECONDS_PER_SECOND * test_settings_ptr->rate_denominator) /
                                                  test_settings_ptr->rate_numerator);
 
     // How many 90kHz video samples can fit into the frame time.
@@ -745,7 +816,7 @@ static bool GetLogComponents(const char* component_str, CdiLogComponent* log_com
     // Parse the component string for valid component settings.
     if (ret) {
         char input_str_cpy[MAX_CHARACTERS_LOG_COMPONENTS];
-        const EnumStringKey* log_component_key_array = CdiUtilityKeyGetArray(kKeyLogComponent);
+        const CdiEnumStringKey* log_component_key_array = CdiUtilityKeyGetArray(kKeyLogComponent);
 
         // Make a copy of the component argument and parse for the ' ' separator character.
         CdiOsStrCpy(input_str_cpy, sizeof(input_str_cpy), component_str);
@@ -813,6 +884,38 @@ static bool AvmTypeSetAndIncrement(StreamSettings* const stream_settings_ptr,
 }
 
 /**
+ *  @brief Verify that stream identifiers are unique. Helper for VerifyTestSettings.
+ *
+ * @param test_settings_ptr A pointer to the test settings data structure for the current connection to be evaluated.
+ *
+ * @return true if stream identifiers are unique, false otherwise.
+ */
+static bool IsUniqueStreamIdentifiers(TestSettings* const test_settings_ptr) {
+    bool is_unique = true;
+
+    int n = test_settings_ptr->number_of_streams;
+    int* stream_ids = CdiOsMemAllocZero(n * sizeof(int));
+    assert(stream_ids);
+
+    for (int i = 0; i < n; i++) {
+        stream_ids[i] = test_settings_ptr->stream_settings[i].stream_id;
+    }
+
+    for (int i = 0; i < n; i++) {
+        int stream_id = test_settings_ptr->stream_settings[i].stream_id;
+        for (int j = 0; j < i; j++) {
+            if (stream_id == stream_ids[j]) {
+                TestConsoleLog(kLogError, "Stream identifier[%d] is used more than once.", stream_id);
+                is_unique = false;
+            }
+        }
+    }
+    CdiOsMemFree(stream_ids);
+
+    return is_unique;
+}
+
+/**
  * @brief After all settings for a given connection have been collected by the options parser, this function will check
  * that they are all legal, and error out if they are not.
  *
@@ -823,12 +926,11 @@ static bool AvmTypeSetAndIncrement(StreamSettings* const stream_settings_ptr,
 static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
     bool arg_error = false;
     const char* connection_name_str = test_settings_ptr->connection_name_str;
-    // Check that stream ID, but default it if it is not.
 
     // Check the thread core setting, and let the user know if it isn't specified.
     if (test_settings_ptr->thread_core_num == OPTARG_INVALID_CORE) {
         TestConsoleLog(kLogInfo, "Connection[%s]: The (optional) --core (-core) argument not specified, so this "
-                                 "connection will not be pinned to a core.", connection_name_str);
+                                "connection will not be pinned to a core.", connection_name_str);
     }
 
     // Check the connection name.
@@ -914,6 +1016,11 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
         arg_error = true;
     }
 
+    // Check for unique stream identifiers.
+    if (!arg_error && kTestProtocolAvm == test_settings_ptr->connection_protocol) {
+        arg_error = !IsUniqueStreamIdentifiers(test_settings_ptr);
+    }
+
     // Check options specified for each stream.
     for (int stream_index = 0; stream_index < test_settings_ptr->number_of_streams; stream_index++) {
         StreamSettings* stream_settings_ptr = &test_settings_ptr->stream_settings[stream_index];
@@ -926,9 +1033,9 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
                                                          test_settings_ptr->connection_protocol));
                 arg_error = true;
             }
-            if (CDI_INVALID_ENUM_VALUE == stream_settings_ptr->stream_id) {
-                TestConsoleLog(kLogError, "Connection[%s]: The --id (-id) argument is required for protocol type "
-                                            "AVM", connection_name_str);
+            if (stream_settings_ptr->stream_id < 0) {
+                TestConsoleLog(kLogError, "Connection[%s]: The --id (-id) argument is required and must be nonnegative "
+                                          "for protocol type AVM", connection_name_str);
                 arg_error = true;
             }
         } else {
@@ -942,13 +1049,13 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
             }
             if (CDI_INVALID_ENUM_VALUE != stream_settings_ptr->stream_id) {
                 TestConsoleLog(kLogError, "Connection[%s]: The --id (-id) argument cannot be used with protocol type "
-                                            "RAW.", connection_name_str);
+                                          "RAW.", connection_name_str);
                 arg_error = true;
             }
         }
 
         // Check to make sure the payload size is set.
-        if (stream_settings_ptr->payload_size == 0) {
+        if (0 == stream_settings_ptr->payload_size) {
             TestConsoleLog(kLogError, "Connection[%s]: The --payload_size (-psz) option is required.",
                                       connection_name_str);
             arg_error = true;
@@ -1087,10 +1194,10 @@ static bool ProcessLogFilenameOption(bool is_single_file, const char* filename_s
         }
 
         // Verify that the directory of the user-provided path exists.
-        char filename[MAX_LOG_FILENAME_LENGTH] = {0};
-        char directory[MAX_LOG_FILENAME_LENGTH] = {0};
-        if (!CdiOsSplitPath(settings_ptr->base_log_filename_str, filename, MAX_LOG_FILENAME_LENGTH,
-                            directory, MAX_LOG_FILENAME_LENGTH)) {
+        char filename[CDI_MAX_LOG_FILENAME_LENGTH] = {0};
+        char directory[CDI_MAX_LOG_FILENAME_LENGTH] = {0};
+        if (!CdiOsSplitPath(settings_ptr->base_log_filename_str, filename, CDI_MAX_LOG_FILENAME_LENGTH,
+                            directory, CDI_MAX_LOG_FILENAME_LENGTH)) {
             CDI_LOG_THREAD(kLogError, "CdiOsSplitPath failed, filename or directory buffers are too small.");
             ret = false;
         }
@@ -1128,7 +1235,7 @@ static bool ParseGlobalOptions(int argc, const char** argv_ptr, OptArg* opt_ptr)
     bool arg_error = false;
     GlobalTestSettings* global_test_settings_ptr = GetGlobalTestSettings();
     CdiAdapterData* adapter_data_ptr = &global_test_settings_ptr->adapter_data;
-    const EnumStringKey* log_level_key_array = CdiUtilityKeyGetArray(kKeyLogLevel);
+    const CdiEnumStringKey* log_level_key_array = CdiUtilityKeyGetArray(kKeyLogLevel);
 
     // Set default global options.
     global_test_settings_ptr->connection_timeout_seconds = CONNECTION_WAIT_TIMEOUT_SECONDS;
@@ -1208,6 +1315,7 @@ static bool ParseGlobalOptions(int argc, const char** argv_ptr, OptArg* opt_ptr)
                     arg_error = true;
                 }
                 break;
+#ifndef CDI_NO_MONITORING
             case kTestOptStatsConfigCloudWatch:
                 global_test_settings_ptr->use_cloudwatch = true;
 
@@ -1229,6 +1337,7 @@ static bool ParseGlobalOptions(int argc, const char** argv_ptr, OptArg* opt_ptr)
                     arg_error = true;
                 }
                 break;
+#endif
             default:
                 // Add do-nothing default statement to keep compiler from complaining about not enumerating all cases.
                 break;
@@ -1254,7 +1363,7 @@ static bool ParseGlobalOptions(int argc, const char** argv_ptr, OptArg* opt_ptr)
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
-void LogComponentToString(const EnumStringKey* key_array, char* log_component_str, CdiLogComponent* log_component_ptr)
+void LogComponentToString(const CdiEnumStringKey* key_array, char* log_component_str, CdiLogComponent* log_component_ptr)
 {
     int msg_index = 0;
     int buffer_space_left = MAX_CHARACTERS_LOG_COMPONENTS - msg_index;
@@ -1309,8 +1418,8 @@ void LogComponentToString(const EnumStringKey* key_array, char* log_component_st
 void PrintTestSettings(const TestSettings* const test_settings_ptr, const int num_connections) {
     GlobalTestSettings* global_test_settings_ptr = GetGlobalTestSettings();
     CdiAdapterData* adapter_data_ptr = &global_test_settings_ptr->adapter_data;
-    const EnumStringKey* log_level_key_array = CdiUtilityKeyGetArray(kKeyLogLevel);
-    const EnumStringKey* log_component_key_array = CdiUtilityKeyGetArray(kKeyLogComponent);
+    const CdiEnumStringKey* log_level_key_array = CdiUtilityKeyGetArray(kKeyLogLevel);
+    const CdiEnumStringKey* log_component_key_array = CdiUtilityKeyGetArray(kKeyLogComponent);
     char log_components_array[MAX_CHARACTERS_LOG_COMPONENTS] = {0};
     LogComponentToString(log_component_key_array, log_components_array, global_test_settings_ptr->log_component);
 
@@ -1329,6 +1438,7 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
                     GetEmptyStringIfNull(CdiUtilityEnumValueToString(log_level_key_array,
                                         global_test_settings_ptr->log_level)));
     TestConsoleLog(kLogInfo, "    Log Component : %s", log_components_array);
+#ifndef CDI_NO_MONITORING
     TestConsoleLog(kLogInfo, "    CloudWatch Enabled: %s",
                    CdiUtilityBoolToString(global_test_settings_ptr->use_cloudwatch));
     TestConsoleLog(kLogInfo, "        Namespace     : %s",
@@ -1337,7 +1447,7 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
                    GetEmptyStringIfNull(global_test_settings_ptr->cloudwatch_config.region_str));
     TestConsoleLog(kLogInfo, "     Dimension Domain : %s",
                    GetEmptyStringIfNull(global_test_settings_ptr->cloudwatch_config.dimension_domain_str));
-
+#endif
     // Output connection based test settings.
     TestConsoleLog(kLogInfo, "");
     for (int i = 0; i < num_connections; i++) {
@@ -1372,6 +1482,9 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
             TestConsoleLog(kLogInfo, "    Remote IP    : %s",
                         GetEmptyStringIfNull(test_settings_ptr[i].remote_adapter_ip_str));
         }
+        if (test_settings_ptr[i].shared_thread_id > 0) {
+            TestConsoleLog(kLogInfo, "    Shared Thread ID : %d", test_settings_ptr[i].shared_thread_id);
+        }
         if (test_settings_ptr[i].thread_core_num == OPTARG_INVALID_CORE) {
             TestConsoleLog(kLogInfo, "    Core         : unpinned");
         } else {
@@ -1386,7 +1499,7 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
                        test_settings_ptr[i].rate_denominator);
         TestConsoleLog(kLogInfo, "    Tx Timeout   : %d", test_settings_ptr[i].tx_timeout);
         if (-1 == test_settings_ptr[i].rx_buffer_delay_ms) {
-            TestConsoleLog(kLogInfo, "    Rx Buf Delay : -1 (enabled automatic default [%d]ms)", ENABLED_RX_BUFFER_DELAY_DEFAULT_MS);
+            TestConsoleLog(kLogInfo, "    Rx Buf Delay : -1 (enabled automatic default [%d]ms)", CDI_ENABLED_RX_BUFFER_DELAY_DEFAULT_MS);
         } else {
             TestConsoleLog(kLogInfo, "    Rx Buf Delay : %d", test_settings_ptr[i].rx_buffer_delay_ms);
         }
@@ -1504,6 +1617,7 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
         bool got_global_option = false;
         int current_option_index = opt_index;
         arg_error |= !GetOpt(argc, argv_ptr, &opt_index, my_options, &opt);
+        if (arg_error) { break; }
         StreamSettings* stream_settings_ptr = &test_settings_ptr[connection_index].stream_settings[stream_index];
         bool is_parsing_stream_option = (0 != test_settings_ptr[connection_index].number_of_streams);
         switch ((TestOptionNames)opt.option_index) {
@@ -1527,8 +1641,8 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 }
                 break;
             case kTestOptionConnectionName:
-                CdiOsStrCpy(test_settings_ptr[connection_index].connection_name_str, MAX_CONNECTION_NAME_STRING_LENGTH,
-                            opt.args_array[0]);
+                CdiOsStrCpy(test_settings_ptr[connection_index].connection_name_str,
+                            CDI_MAX_CONNECTION_NAME_STRING_LENGTH, opt.args_array[0]);
                 break;
             case kTestOptionTransmit:
                 test_settings_ptr[connection_index].tx = true;
@@ -1618,6 +1732,13 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                     }
                 }
             }
+                break;
+            case kTestOptionShareThread:
+                // Check to make sure the thread ID value is a number.
+                if (!IsBase10Number(opt.args_array[0], &test_settings_ptr[connection_index].shared_thread_id)) {
+                    TestConsoleLog(kLogError, "Invalid --tid (-thread_id) argument [%s].", opt.args_array[0]);
+                    arg_error = true;
+                }
                 break;
             case kTestOptionCore:
                 // Check to make sure the core value is a number.
@@ -1949,9 +2070,9 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                     if (!IsBase10Number(opt.args_array[0], &test_settings_ptr[connection_index].rx_buffer_delay_ms)) {
                         TestConsoleLog(kLogError, "Invalid --rx_buffer_delay (-rbd) argument [%s].", opt.args_array[0]);
                         arg_error = true;
-                    } else if (test_settings_ptr[connection_index].rx_buffer_delay_ms > MAXIMUM_RX_BUFFER_DELAY_MS) {
+                    } else if (test_settings_ptr[connection_index].rx_buffer_delay_ms > CDI_MAXIMUM_RX_BUFFER_DELAY_MS) {
                         TestConsoleLog(kLogError, "Maximum [%d] --rx_buffer_delay (-rbd) argument exceeded.",
-                                    MAXIMUM_RX_BUFFER_DELAY_MS);
+                                       CDI_MAXIMUM_RX_BUFFER_DELAY_MS);
                         arg_error = true;
                     }
                 }
@@ -1960,7 +2081,7 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 stream_settings_ptr->pattern_type = TestPatternStringToEnum(opt.args_array[0]);
                 if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->pattern_type) {
                     TestConsoleLog(kLogError, "Invalid --pattern (-pat) argument [%s]. See list of options in help "
-                                    "message.", opt.args_array[0]);
+                                   "message.", opt.args_array[0]);
                     arg_error = true;
                 }
                 break;
@@ -1997,9 +2118,9 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                     if (!first_new_connection) {
                         // Increment the index so we are now collecting settings for the next connection.
                         connection_index++;
-                        if (connection_index == MAX_SIMULTANEOUS_CONNECTIONS) {
+                        if (connection_index == CDI_MAX_SIMULTANEOUS_CONNECTIONS) {
                             TestConsoleLog(kLogError, "Exceeded maximum simultaneous connections[%d].",
-                                           MAX_SIMULTANEOUS_CONNECTIONS);
+                                           CDI_MAX_SIMULTANEOUS_CONNECTIONS);
                             arg_error = true;
                         }
                     }
@@ -2007,6 +2128,7 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                     avm_types = 0;
                     test_settings_ptr[connection_index].buffer_type = CDI_INVALID_ENUM_VALUE;
                     test_settings_ptr[connection_index].connection_protocol = CDI_INVALID_ENUM_VALUE;
+                    test_settings_ptr[connection_index].shared_thread_id = OPTARG_INVALID_CORE;
                     test_settings_ptr[connection_index].thread_core_num = OPTARG_INVALID_CORE;
                     test_settings_ptr[connection_index].stats_period_seconds = REFRESH_STATS_PERIOD_SECONDS;
                     if (kTestOptionNewConnectionMultipleEndpoints == (TestOptionNames)opt.option_index) {
@@ -2029,9 +2151,9 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                         // Increment the index so we are now collecting settings for the next connection.
                         stream_index++;
                         // Use the Tx maximum connections for comparison because it will always be smaller than Rx.
-                        if (stream_index == MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION) {
+                        if (stream_index == CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION) {
                             TestConsoleLog(kLogError, "Exceeded maximum simultaneous streams[%d].",
-                                           MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION);
+                                           CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION);
                             arg_error = true;
                         }
                     }
@@ -2069,10 +2191,12 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
             case kTestOptionConnectionTimeout:
             case kTestOptionLogLevel:
             case kTestOptionNumLoops:
+#ifndef CDI_NO_MONITORING
             case kTestOptStatsConfigCloudWatch:
+#endif
                 got_global_option = true;
         }
-        if (!got_global_option & first_new_connection) {
+        if (!got_global_option && first_new_connection) {
             // Make sure no non-global options were specified before we get here.
             TestConsoleLog(kLogError,
                 "You must specify --new_conn (-X) or --new_conns (-XS) options before any connection-specific "
@@ -2082,7 +2206,7 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
     }
 
     // Make sure the user specified at least one connection.
-    if (first_new_connection) {
+    if (!arg_error && first_new_connection) {
         TestConsoleLog(kLogError, "You must specify at least one connection using the --new_conn (-X) or --new_conns "
                        "(-XS) options.");
         arg_error = true;

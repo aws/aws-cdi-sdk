@@ -22,7 +22,6 @@
 #include "adapter_efa_probe_tx.h"
 #include "cdi_os_api.h"
 #include "endpoint_manager.h"
-#include "internal_rx.h"
 #include "internal_utility.h"
 #include "protocol.h"
 
@@ -173,11 +172,17 @@ bool ProbeControlEfaConnectionStart(ProbeEndpointState* probe_ptr)
         endpoint_ptr->msg_from_endpoint_func_ptr = ProbeTxEfaMessageFromEndpoint;
         // Reset EFA Tx packet/ack received counters.
         probe_ptr->tx_probe_state.send_command_retry_count = 0;
+        probe_ptr->tx_probe_state.packets_acked_count = 0;
+        probe_ptr->tx_probe_state.packets_ack_wait_count = 0;
 
-        CdiOsSignalSet(adapter_con_ptr->poll_do_work_signal); // Ensure PollThread() is ready for work.
+        // Set initial value of payload in-flight reference count to one (represents one payload). All probe packets use
+        // a single payload.
+        CdiOsAtomicStore32(&endpoint_ptr->tx_in_flight_ref_count, 1);
+        CdiOsSignalSet(adapter_con_ptr->tx_poll_do_work_signal); // Ensure PollThread() is ready for work.
     } else {
         endpoint_ptr->msg_from_endpoint_func_ptr = ProbeRxEfaMessageFromEndpoint;
         // Reset EFA Rx packet/ping received counters.
+        probe_ptr->rx_probe_state.send_reset_retry_count = 0;
         probe_ptr->rx_probe_state.packets_received_count = 0;
         probe_ptr->rx_probe_state.pings_received_count = 0;
     }
@@ -224,19 +229,11 @@ void ProbeControlQueueStateChange(ProbeEndpointState* probe_ptr, ProbeState prob
 void ProbeControlEfaConnectionEnableApplication(ProbeEndpointState* probe_ptr)
 {
     AdapterEndpointState* endpoint_ptr = probe_ptr->app_adapter_endpoint_handle;
-    AdapterConnectionState* adapter_con_ptr = endpoint_ptr->adapter_con_state_ptr;
 
     // Setup message functions and related parameters to point to the application variants.
     endpoint_ptr->msg_from_endpoint_func_ptr = probe_ptr->app_msg_from_endpoint_func_ptr;
     endpoint_ptr->msg_from_endpoint_param_ptr = probe_ptr->app_msg_from_endpoint_param_ptr;
 
-    if (kEndpointDirectionSend == adapter_con_ptr->direction) {
-        // Tx probe is done with EFA, so can let PollThread() sleep.
-        CdiOsSignalClear(adapter_con_ptr->poll_do_work_signal);
-    }
-
-    // Post control command to change to EFA connected mode. This will change the endpoint's connection state to
-    // kCdiConnectionStatusConnected.
     ProbeControlQueueStateChange(probe_ptr, kProbeStateEfaConnected);
 }
 

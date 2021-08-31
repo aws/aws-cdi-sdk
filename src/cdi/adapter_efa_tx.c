@@ -52,8 +52,6 @@
 static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec *msg_iov_ptr,
                        int iov_count, const void* context_ptr, bool flush_packets)
 {
-    bool ret = true;
-
     struct fid_ep *endpoint_ptr = endpoint_state_ptr->endpoint_ptr;
 
     // If we have reached our limit of caching sending the Tx packet or we don't have more to immediately send, then
@@ -65,35 +63,31 @@ static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec 
         endpoint_state_ptr->tx_state.tx_packets_sent_since_flush = 0; // Reset counter.
     }
 
-    while (true) {
-        struct fi_msg msg = {
-            .msg_iov = msg_iov_ptr,
-            .desc = NULL,
-            .iov_count = iov_count,
-            .addr = 0,
-            .context = (void*)context_ptr,  // cast needed to override constness
-            .data = 0
-        };
-        ssize_t fi_ret = fi_sendmsg(endpoint_ptr, &msg, flags);
-        if (0 == fi_ret) {
-            break;
-        }
+    void *desc = fi_mr_desc(endpoint_state_ptr->tx_state.memory_region_ptr);
+    struct fi_msg msg = {
+        .msg_iov = msg_iov_ptr,
+        .desc = &desc,
+        .iov_count = iov_count,
+        .addr = 0,
+        .context = (void*)context_ptr,  // cast needed to override constness
+        .data = 0
+    };
 
-        if (-FI_EAGAIN != fi_ret) {
-            CDI_LOG_THREAD(kLogError, "Got[%d] from fi_sendmsg().", fi_ret);
-            ret = false;
+    const int max_num_tries = 5;
+    int num_tries = 0;
+    ssize_t fi_ret = 0;
+    do {
+        fi_ret = fi_sendmsg(endpoint_ptr, &msg, flags);
+        if (0 == fi_ret || -FI_EAGAIN != fi_ret) {
             break;
         }
-        // We only get here if the underlying EFA hardware is unable to send packets, causing the libfabric pipeline to
-        // fill. It cannot accept another packet.
-        // Until additional features in libfabric and the EFA driver are implemented, we must return
-        // an error here and require the caller to restart the connection.
-        CDI_LOG_THREAD(kLogError, "Got -FI_EAGAIN from fi_sendmsg(). This is not expected.");
-        ret = false;
-        break;
+    } while (++num_tries != max_num_tries);
+
+    if (0 != fi_ret) {
+        CDI_LOG_THREAD(kLogError, "Got [%ld (%s)] from fi_sendmsg(), tried [%d] times.",
+            fi_ret, fi_strerror(-fi_ret), num_tries);
     }
-
-    return ret;
+    return 0 == fi_ret;
 }
 
 /**
@@ -217,6 +211,9 @@ CdiReturnStatus EfaTxEndpointReset(EfaEndpointState* endpoint_state_ptr)
 {
     ProbeEndpointReset(endpoint_state_ptr->probe_endpoint_handle);
 
+    endpoint_state_ptr->tx_state.tx_packets_in_process = 0;
+    endpoint_state_ptr->tx_state.tx_packets_sent_since_flush = 0;
+
     return kCdiStatusOk;
 }
 
@@ -288,7 +285,8 @@ CdiReturnStatus EfaTxEndpointStart(EfaEndpointState* endpoint_state_ptr)
     CdiReturnStatus rs = kCdiStatusOk;
 
     //  Initialize address vector (av) destination address.
-    endpoint_state_ptr->remote_fi_addr = FI_ADDR_UNSPEC;
+    assert(endpoint_state_ptr->address_vector_ptr);
+    assert(FI_ADDR_UNSPEC == endpoint_state_ptr->remote_fi_addr); // fi_av_insert has not yet been called
     int count = 1;
     uint64_t flags = 0;
     void* context_ptr = NULL;
@@ -309,10 +307,13 @@ CdiReturnStatus EfaTxEndpointStart(EfaEndpointState* endpoint_state_ptr)
 
 void EfaTxEndpointStop(EfaEndpointState* endpoint_state_ptr)
 {
-    if (endpoint_state_ptr->address_vector_ptr) {
+    if (endpoint_state_ptr->address_vector_ptr && FI_ADDR_UNSPEC != endpoint_state_ptr->remote_fi_addr) {
         int count = 1;
         uint64_t flags = 0;
-        // Try to remove the remote address. Ok if it doesn't exist.
-        fi_av_remove(endpoint_state_ptr->address_vector_ptr, &endpoint_state_ptr->remote_fi_addr, count, flags);
+        int ret = fi_av_remove(endpoint_state_ptr->address_vector_ptr, &endpoint_state_ptr->remote_fi_addr, count, flags);
+        if (0 != ret) {
+            CDI_LOG_THREAD(kLogWarning, "Unexpected return [%d] from fi_av_remove.", ret);
+        }
+        endpoint_state_ptr->remote_fi_addr = FI_ADDR_UNSPEC;
     }
 }

@@ -10,6 +10,7 @@
  * This file contains the functions and other definitions that comprise the CDI AVM baseline profile.
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,7 +51,7 @@ static int profile_type_count_array[CDI_BASELINE_AVM_PAYLOAD_TYPE_ENUM_COUNT] = 
 /**
  * Table for converting between the supported AVM media types and the URIs associated with them.
  */
-static const EnumStringKey avm_uri_strings[] = {
+static const CdiEnumStringKey avm_uri_strings[] = {
     // kCdiAvmNotBaseline is intentionally missing.
     { kCdiAvmVideo,     "https://cdi.elemental.com/specs/baseline-video" },
     { kCdiAvmAudio,     "https://cdi.elemental.com/specs/baseline-audio" },
@@ -59,7 +60,7 @@ static const EnumStringKey avm_uri_strings[] = {
 };
 
 /// Enum/string keys for CdiAvmPayloadType.
-static const EnumStringKey payload_type_key_array[] = {
+static const CdiEnumStringKey payload_type_key_array[] = {
     { kCdiAvmNotBaseline, "not baseline" },
     { kCdiAvmVideo,       "Video" },
     { kCdiAvmAudio,       "Audio" },
@@ -261,6 +262,8 @@ CdiReturnStatus CdiAvmParseBaselineConfiguration(const CdiAvmConfig* config_ptr,
 CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConfig* config_ptr,
                                                   CdiAvmBaselineConfigCommon* baseline_config_ptr)
 {
+    assert(config_ptr); // It is not valid to call CdiAvmParseBaselineConfiguration with config_ptr == NULL.
+
     CdiReturnStatus ret = kCdiStatusNonFatal;
 
     // Ensure that uri and data_size meet specifications.
@@ -271,10 +274,7 @@ CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConfig* config_ptr
         CDI_LOG_THREAD(kLogError, "data_size value[%u] exceeds specification[%u]", config_ptr->data_size,
                        sizeof(config_ptr->data));
     } else {
-        int key = CDI_INVALID_ENUM_VALUE;
-        if (NULL != config_ptr) {
-            key = CdiUtilityStringToEnumValue(avm_uri_strings, config_ptr->uri);
-        }
+        int key = CdiUtilityStringToEnumValue(avm_uri_strings, config_ptr->uri);
         CdiAvmBaselineConfigCommon common_config = { 0 };
         if (CDI_INVALID_ENUM_VALUE != key) {
             // This is a valid baseline profile, set its type.
@@ -295,7 +295,10 @@ CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConfig* config_ptr
                     // Successfully parsed the version, now try to find the corresponding profile.
                     BaselineProfileData* profile_data_ptr = FindProfileVersion(common_config.payload_type,
                                                                                &common_config.version);
-                    if (profile_data_ptr) {
+                    if (NULL == baseline_config_ptr) {
+                        CDI_LOG_THREAD(kLogError, "No output address (baseline_config_ptr) provided.");
+                        ret = kCdiStatusFatal;
+                    } else if (profile_data_ptr) {
                         // Clear the entire structure then plug in the payload type and version number.
                         memset(baseline_config_ptr, 0, profile_data_ptr->vtable_api.structure_size);
                         baseline_config_ptr->payload_type = common_config.payload_type;
@@ -306,6 +309,7 @@ CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConfig* config_ptr
                             ret = kCdiStatusOk; // Successfully parsed, so change ret status to ok.
                         }
                     } else {
+                        baseline_config_ptr->payload_type = kCdiAvmNotBaseline;
                         ret = kCdiStatusProfileNotSupported;
                     }
                 }
@@ -313,10 +317,6 @@ CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConfig* config_ptr
                 CDI_LOG_THREAD(kLogError, "Unable to parse profile version string 'cdi_profile_version='.");
             }
         }
-    }
-
-    if (kCdiStatusOk != ret) {
-        baseline_config_ptr->payload_type = kCdiAvmNotBaseline;
     }
 
     return ret;
@@ -345,7 +345,7 @@ CdiReturnStatus CdiAvmGetBaselineUnitSize2(const CdiAvmBaselineConfigCommon* bas
 const char* CdiAvmKeyEnumToString(CdiAvmBaselineEnumStringKeyTypes key_type, int enum_value,
                                   const CdiAvmBaselineProfileVersion* version_ptr)
 {
-    const EnumStringKey* array_ptr = CdiAvmKeyGetArray(key_type, version_ptr);
+    const CdiEnumStringKey* array_ptr = CdiAvmKeyGetArray(key_type, version_ptr);
     if (array_ptr) {
         return CdiUtilityEnumValueToString(array_ptr, enum_value);
     }
@@ -355,17 +355,17 @@ const char* CdiAvmKeyEnumToString(CdiAvmBaselineEnumStringKeyTypes key_type, int
 int CdiAvmKeyStringToEnum(CdiAvmBaselineEnumStringKeyTypes key_type, const char* name_str,
                           const CdiAvmBaselineProfileVersion* version_ptr)
 {
-    const EnumStringKey* array_ptr = CdiAvmKeyGetArray(key_type, version_ptr);
+    const CdiEnumStringKey* array_ptr = CdiAvmKeyGetArray(key_type, version_ptr);
     if (array_ptr) {
         return CdiUtilityStringToEnumValue(array_ptr, name_str);
     }
     return CDI_INVALID_ENUM_VALUE;
 }
 
-const EnumStringKey* CdiAvmKeyGetArray(CdiAvmBaselineEnumStringKeyTypes key_type,
+const CdiEnumStringKey* CdiAvmKeyGetArray(CdiAvmBaselineEnumStringKeyTypes key_type,
                                        const CdiAvmBaselineProfileVersion* version_ptr)
 {
-    const EnumStringKey* array_ptr = NULL;
+    const CdiEnumStringKey* array_ptr = NULL;
 
     if (kKeyAvmPayloadType == key_type) {
         array_ptr = payload_type_key_array;

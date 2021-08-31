@@ -292,7 +292,7 @@ static CdiReturnStatus TestTxSendPayload(TestConnectionInfo* connection_info_ptr
                 stream_info_ptr->config_payload_skip_count++;
             }
 
-            // Size of the unit this stream's payload is transfering (pixels, audio samples, etc.,).
+            // Size of the unit this stream's payload is transferring (pixels, audio samples, etc.,).
             payload_cfg_data.core_config_data.unit_size = stream_settings_ptr->unit_size;
 
             CdiAvmConfig* avm_config_ptr = send_config ? &stream_settings_ptr->avm_config : NULL;
@@ -351,7 +351,6 @@ static bool TestTxTrySendStreamPayload(TestConnectionInfo* connection_info_ptr, 
     if (kCdiConnectionStatusConnected != status) {
         got_error = !TestWaitForConnection(connection_info_ptr, GetGlobalTestSettings()->connection_timeout_seconds);
     }
-
     if (!got_error) {
         int rate_period_microseconds = test_settings_ptr->rate_period_microseconds;
         bool resend_payload = false;
@@ -528,7 +527,7 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
                 uint64_t overtime = current_ptp_time - next_ptp_start_time;
                 if (overtime >= (uint64_t)test_settings_ptr->tx_timeout) {
                     uint64_t max_overtime = (uint64_t)test_settings_ptr->tx_timeout *
-                                            MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
+                                            CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION;
                     if (overtime >= max_overtime) {
                         // Exceeded max amount of time. Wait for Tx queue to drain so we can recover and get back on
                         // cadence.
@@ -853,6 +852,7 @@ THREAD TestTxCreateThread(void* arg_ptr)
         // Set up transmitter parameters and create the Tx connection.
         connection_info_ptr->config_data.tx.dest_ip_addr_str = test_settings_ptr->remote_adapter_ip_str;
         connection_info_ptr->config_data.tx.dest_port = test_settings_ptr->dest_port;
+        connection_info_ptr->config_data.tx.shared_thread_id = test_settings_ptr->shared_thread_id;
         connection_info_ptr->config_data.tx.thread_core_num = test_settings_ptr->thread_core_num;
         connection_info_ptr->config_data.tx.connection_log_method_data_ptr = &log_method_data;
 
@@ -869,7 +869,7 @@ THREAD TestTxCreateThread(void* arg_ptr)
         int pool_size = connection_info_ptr->config_data.tx.max_simultaneous_tx_payloads;
         // Will allocate enough pool items to allow for 1 + the maximum number of simultaneous connections.
         if (0 == pool_size) {
-            pool_size = MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION + 1;
+            pool_size = CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION + 1;
         }
         pool_size++;
 

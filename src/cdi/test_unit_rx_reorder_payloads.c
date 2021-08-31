@@ -73,8 +73,8 @@ CdiReturnStatus TestUnitRxReorderPayloads(void)
     rs = StatsCreate(&con_state, NULL, NULL, NULL, NULL, &con_state.stats_state_ptr);
 
     if (kCdiStatusOk == rs) {
-        if (!CdiQueueCreate("PayloadRequests AppPayloadCallbackData Queue", APP_PAYLOADS_MAX, FIXED_QUEUE_SIZE,
-                            FIXED_QUEUE_SIZE,
+        if (!CdiQueueCreate("PayloadRequests AppPayloadCallbackData Queue", APP_PAYLOADS_MAX, CDI_FIXED_QUEUE_SIZE,
+                            CDI_FIXED_QUEUE_SIZE,
                             sizeof(AppPayloadCallbackData), kQueueSignalPopWait, // Queue can block on pops.
                             &con_state_ptr->app_payload_message_queue_handle)) {
             rs = kCdiStatusNotEnoughMemory;
@@ -178,8 +178,8 @@ CdiReturnStatus TestUnitRxReorderPayloads(void)
         int saved_window_count = endpoint_ptr->rx_state.rxreorder_buffered_packet_count;
         if (2 == i) {
             CDI_LOG_THREAD(kLogInfo, "Forcing rxreorder_buffered_packet_count=[%d]. NOTE: Should generate an SDK error.",
-                           MAX_RX_PACKET_OUT_OF_ORDER_WINDOW);
-            endpoint_ptr->rx_state.rxreorder_buffered_packet_count = MAX_RX_PACKET_OUT_OF_ORDER_WINDOW;
+                           CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW);
+            endpoint_ptr->rx_state.rxreorder_buffered_packet_count = CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW;
         }
 
         endpoint_ptr->rx_state.rxreorder_buffered_packet_count += PAYLOAD_PACKET_COUNT;
@@ -187,7 +187,7 @@ CdiReturnStatus TestUnitRxReorderPayloads(void)
         RxReorderPayloadSendReadyPayloads(endpoint_ptr);
         if (2 == i) {
             endpoint_ptr->rx_state.rxreorder_buffered_packet_count = saved_window_count -
-                (MAX_RX_PACKET_OUT_OF_ORDER_WINDOW - endpoint_ptr->rx_state.rxreorder_buffered_packet_count);
+                (CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW - endpoint_ptr->rx_state.rxreorder_buffered_packet_count);
         }
 
         // Simulate processing application payload messages.
@@ -230,7 +230,7 @@ CdiReturnStatus TestUnitRxReorderPayloads(void)
         }
 
         // Get masked version of payload index.
-        int current_payload_index = payload_state_ptr->payload_num & (MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER-1);
+        int current_payload_index = payload_state_ptr->payload_num & (CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER-1);
         endpoint_ptr->rx_state.payload_state_array_ptr[current_payload_index] = NULL;
         CdiPoolPut(con_state_ptr->rx_state.rx_payload_state_pool_handle, payload_state_ptr);
     }

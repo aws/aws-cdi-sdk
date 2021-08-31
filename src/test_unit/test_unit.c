@@ -10,8 +10,6 @@
  * This file contains definitions and functions for the CDI unit test application.
 */
 
-#include <assert.h>
-
 #include "cdi_test_unit_api.h"
 #include "test_common.h"
 
@@ -97,7 +95,7 @@ static bool ParseCommandLine(int argc, const char** argv, TestSettings* test_set
  */
 int main(int argc, const char** argv)
 {
-    CdiLoggerInitialize(); // Intialize logger so we can use the CDI_LOG_THREAD() macro to generate console messages.
+    CdiLoggerInitialize(); // Initialize logger so we can use the CDI_LOG_THREAD() macro to generate console messages.
 
     // Setup default test settings.
     TestSettings settings = {

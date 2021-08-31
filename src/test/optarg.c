@@ -185,7 +185,7 @@ static int CheckArg(const char* arg_str, const OptDef* opt_array_ptr, OptArg* fo
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-void PrintKeyArrayNames(const EnumStringKey* key_array, const int indent)
+void PrintKeyArrayNames(const CdiEnumStringKey* key_array, const int indent)
 {
     // If key_array exists, then scan through it printing each name_str member.
     // Note that we comma separate the list and don't want to print ", " after the last member.

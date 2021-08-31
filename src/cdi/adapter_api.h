@@ -13,7 +13,9 @@
 #ifndef ADAPTER_API_H__
 #define ADAPTER_API_H__
 
-#include "adapter_api.h"
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "endpoint_manager.h"
 #include "cdi_raw_api.h"
 
@@ -36,6 +38,7 @@ typedef enum {
 typedef struct {
     CdiSinglyLinkedListEntry list_entry; ///< This member is needed for these to be members of a list.
     CdiSgList sg_list; ///< List of buffer fragments that comprise the packet's data.
+    bool payload_last_packet; ///< True if last packet of a payload.
     union {
         struct TxState {
             AdapterPacketAckStatus ack_status; ///< Status of the packet.
@@ -131,6 +134,13 @@ struct AdapterEndpointState {
 
     CdiProtocolHandle protocol_handle; ///< Handle of protocol being used. Value is NULL if none configured.
 
+    /// @brief Number of Tx payloads/packets in flight. When a payload is being queued to transmit, the count is
+    /// incremented by one. As each packet within a payload is being queued, the value is also incremented by 1. After
+    /// each packet has been ACKed, this value is decremented by 1. In addition, when the last packet of a payload has
+    /// been ACKed the value is decremented by 1. This is done to ensure that the value remains non-zero until all the
+    /// packets of a payload have been ACKed.
+    uint32_t tx_in_flight_ref_count;
+
     void* type_specific_ptr; ///< Adapter specific endpoint data.
 };
 
@@ -144,6 +154,17 @@ typedef struct {
     /// @brief Number of packet buffers to reserve for incoming payloads.
     int reserve_packet_buffers;
 } RxAdapterConnectionState;
+
+/**
+ * @brief Values used to determine current running state of a poll thread.
+ *
+ */
+typedef enum {
+    kPollStart, ///< Poll thread is starting and has not ran through a pool loop yet.
+    kPollRunning, ///< Poll thread has ran through at least one poll loop.
+    kPollStopping, ///< Poll thread is stopping.
+    kPollStopped ///< Poll thread stopped.
+} PollState;
 
 /**
  * @brief This defines a structure that contains the state information for a data adapter connection (type is
@@ -165,6 +186,51 @@ typedef struct {
 } AdapterControlConnectionState;
 
 /**
+ * @brief This defines a structure that contains the state information for a single instance of a poll thread.
+ */
+typedef struct {
+    CdiListEntry list_entry; ///< Allow these structures to live in a list in the Adapter.
+
+    CdiThreadID thread_id; ///< thread ID used by both Tx/Rx endpoints.
+
+    int shared_thread_id; ///< User defined shared poll thread identifier.
+
+    /// @brief The core to dedicate to this hardware poll thread. The value is the 0-based CPU number or -1 to
+    /// disable pinning the thread to a specific core.
+    int thread_core_num;
+
+    EndpointDataType data_type; ///< The type of endpoint data this poll thread supports.
+
+    /// @brief True if connection requires polling, otherwise connection does not require polling. NOTE: Connections
+    /// that share the same poll thread must either be all polling or non-polling (cannot have a mix of both types).
+    bool is_poll;
+
+    bool only_transmit; ///< True if all endpoints using this poll thread only transmit.
+
+    CdiSignalType connection_list_changed_signal; ///< Signal set when connection_list has been changed.
+    CdiSignalType connection_list_processed_signal; ///< Signal set when connection_list has been processed.
+
+    /// @brief Lock used to protect access to connection_list.
+    CdiCsID connection_list_lock;
+
+    CdiList connection_list; ///< List of connections (AdapterConnectionState*) used by this poll thread.
+
+    /// @brief Signal used to start poll thread. A separate signal is used for endpoints (see
+    /// AdapterEndpointState.start_signal).
+    CdiSignalType start_signal;
+} PollThreadState;
+
+/**
+ * @brief Type used to hold thread utilization state data.
+ */
+typedef struct {
+    uint64_t top_time;          ///< Time at start of each poll loop.
+    uint64_t busy_accumulator;  ///< Number of productive microseconds accumulated over an averaging period.
+    uint64_t idle_accumulator;  ///< Number of idle microseconds accumulated over an averaging period.
+    uint64_t start_time;        ///< Time to use for start of each averaging period.
+} ThreadUtilizationState;
+
+/**
  * @brief Structure used to hold adapter connection state.
  */
 struct AdapterConnectionState {
@@ -180,30 +246,35 @@ struct AdapterConnectionState {
     CdiLogHandle log_handle;
 
     EndpointDirection direction;          ///< The direction that this endpoint supports.
-    RxAdapterConnectionState rx_state;    ///< Valid if direction = kEndpointDirectionReceive.
+    RxAdapterConnectionState rx_state;    ///< Valid if direction supports receive.
 
-    EndpointDataType data_type;           ///< The type of data this endpoint supports.
     union {
-        /// @brief Valid if data_type = kEndpointTypeData. Data connection specific state data.
+        /// @brief Valid if PollThreadState.data_type = kEndpointTypeData. Data connection specific state data.
         AdapterDataConnectionState data_state;
-        /// @brief Valid if data_type = kEndpointTypeControl. Control interface connection specific state data.
+        /// @brief Valid if PollThreadState.data_type = kEndpointTypeControl. Control interface connection specific
+        /// state data.
         AdapterControlConnectionState control_state;
     };
 
-    int port_number;                      ///< Port number related to this connection.
+    PollState poll_state; ///< State of poll operation for this adapter connection (start, running or stopped).
 
-    /// @brief Signal/flag used to notify PollThread() that it can sleep. For a Tx connection this signal is set
-    /// whenever a Tx payload transaction begins. It is cleared after all the packets for the payload have been queued
-    /// to be sent and the Tx payload queue is empty. Probe also sets the signal in ProbeControlEfaConnectionStart() and
-    /// clears it in ProbeControlEfaConnectionEnableApplication(). For an Rx connection this signal is set whenever an
-    /// Rx payload has been received. It is cleared by the PollThread().
-    CdiSignalType poll_do_work_signal;
+    bool can_transmit; ///< True if connection can transmit.
+    bool can_receive; ///< True if connection can receive.
 
-    CdiThreadID poll_thread_id;    ///< Poll thread ID used by both Tx/Rx endpoints.
+    /// @brief Used for computing the CPU utilization of the poll thread for the connection.
+    ThreadUtilizationState load_state;
 
-    /// @brief Signal used to start adapter connection threads. A separate signal is used for endpoints (see
-    /// AdapterEndpointState.start_signal).
-    CdiSignalType start_signal;
+    int port_number; ///< Port number related to this connection.
+
+    /// @brief Valid if direction supports transmit. Tx Signal/flag used to notify PollThread() that it can sleep. This
+    /// signal is set whenever a Tx payload transaction begins. Probe also sets the signal in
+    /// ProbeControlEfaConnectionStart(). It is cleared after all the Tx packets for the payload have been sent, ACKs
+    /// received and the Tx payload queue is empty. See PollThread(). It also is cleared whenever an adapter endpoint is
+    /// reset. See CdiAdapterResetEndpoint().
+    CdiSignalType tx_poll_do_work_signal;
+
+    PollThreadState* poll_thread_state_ptr; ///< Pointer to poll thread state data associated with this connection.
+
     CdiSignalType shutdown_signal; ///< Signal used to shutdown adapter connection threads.
 
     void* type_specific_ptr;       ///< Adapter specific connection data.
@@ -278,6 +349,9 @@ struct CdiAdapterState {
     /// Set to kMagicAdapter when allocated, checked at every API function to help ensure validity.
     uint32_t magic;
 
+    /// @brief Lock used to protect access to adapter state data.
+    CdiCsID adapter_lock;
+
     /// @brief Copy of the adapter's IP address string. "adapter_data.adapter_ip_addr_str" (see below) points to this
     /// value.
     char adapter_ip_addr_str[MAX_IP_STRING_LENGTH];
@@ -288,11 +362,15 @@ struct CdiAdapterState {
     /// @brief Pointer to the table of adapter specific operation functions.
     struct AdapterVirtualFunctionPtrTable* functions_ptr;
 
-    /// @brief Lock used to protect access to connections_list.
-    CdiCsID connections_list_lock;
+    /// @brief Lock used to protect access to connection_list.
+    CdiCsID connection_list_lock;
 
     /// @brief List of connections using this adapter.
-    CdiList connections_list;
+    CdiList connection_list;
+
+    /// @brief List of poll threads using this adapter (holds PollThreadState*). NOTE: Must acquire adapter_lock before
+    /// using.
+    CdiList poll_thread_list;
 
     /// @brief Data specific to the type of underlying adapter.
     void* type_specific_ptr;
@@ -338,8 +416,12 @@ typedef struct {
     /// the port number on the local host to listen to.
     int port_number;
 
-    /// @brief The core to dedicate to this connection's hardware polling thread. The value is the 0-based CPU number or
-    /// -1 to disable pinning the thread to a specific core.
+    /// @brief Identifier of poll thread to associate with this connection. Specify -1 to create a unique poll thread
+    /// only used by this connection.
+    int shared_thread_id;
+
+    /// @brief The core to dedicate to this connection's hardware poll thread. The value is the 0-based CPU number or -1
+    /// to disable pinning the thread to a specific core.
     int thread_core_num;
 
     /// @brief Valid if direction = kEndpointDirectionReceive or kEndpointDirectionBidirectional.
@@ -571,5 +653,13 @@ CdiReturnStatus CdiAdapterShutdown(CdiAdapterHandle adapter);
  * @param handle The handle of the endpoint to flush resources.
  */
 void CdiAdapterPollThreadFlushResources(AdapterEndpointHandle handle);
+
+/**
+ * Tx packet has ACKed.
+ *
+ * @param handle The handle of the endpoint that a Tx packet is related to.
+ * @param packet_ptr Pointer to packet.
+ */
+void CdiAdapterTxPacketComplete(AdapterEndpointHandle handle, const Packet* packet_ptr);
 
 #endif // ADAPTER_API_H__

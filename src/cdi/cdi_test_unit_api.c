@@ -22,19 +22,21 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
-/// External declaration.
+/// External declarations.
 extern CdiReturnStatus TestUnitAll(void);
-/// External declaration.
+/// External declarations.
+extern CdiReturnStatus TestUnitAvmApi(void);
+/// External declarations.
 extern CdiReturnStatus TestUnitSgl(void);
-/// External declaration.
+/// External declarations.
 extern CdiReturnStatus TestUnitTimeout(void);
-/// External declaration.
+/// External declarations.
 extern CdiReturnStatus TestUnitTDigest(void);
-/// External declaration.
+/// External declarations.
 extern CdiReturnStatus TestUnitRxReorderPackets(void);
-/// External declaration.
+/// External declarations.
 extern CdiReturnStatus TestUnitRxReorderPayloads(void);
-/// External declaration.
+/// External declarations.
 extern CdiReturnStatus TestUnitList(void);
 
 /// Type used as a pointer to function that runs a unit test.
@@ -45,8 +47,9 @@ typedef CdiReturnStatus (*RunTestAPI)(void);
 //*********************************************************************************************************************
 
 /// Enum/string keys for CdiConnectionStatus.
-static const EnumStringKey test_unit_name_key_array[] = {
+static const CdiEnumStringKey test_unit_name_key_array[] = {
     { kTestUnitAll,                 "All" },
+    { kTestUnitAvmApi,              "AvmApi" },
     { kTestUnitSgl,                 "Sgl" },
     { kTestUnitTimeout,             "Timeout" },
     { kTestUnitTDigest,             "TDigest" },
@@ -89,7 +92,7 @@ static bool RunTest(CdiTestUnitName test_name, RunTestAPI test_api)
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-const EnumStringKey* TestUnitGetKeyArray(void)
+const CdiEnumStringKey* CdiTestUnitGetKeyArray(void)
 {
     return test_unit_name_key_array;
 }
@@ -98,24 +101,32 @@ bool CdiTestUnitRun(CdiTestUnitName test_name)
 {
     bool pass = true;
 
-    if (kTestUnitAll == test_name || kTestUnitSgl == test_name) {
+    if (kTestUnitAvmApi == test_name) {
+        if (!RunTest(kTestUnitAvmApi, TestUnitAvmApi)) pass = false;
+    }
+    if (kTestUnitSgl == test_name) {
         if (!RunTest(kTestUnitSgl, TestUnitSgl)) pass = false;
     }
     if (kTestUnitTimeout == test_name) {
         if (!RunTest(kTestUnitTimeout, TestUnitTimeout)) pass = false;
     }
-    if (kTestUnitAll == test_name || kTestUnitTDigest == test_name) {
+    if (kTestUnitTDigest == test_name) {
         if (!RunTest(kTestUnitTDigest, TestUnitTDigest)) pass = false;
     }
-    if (kTestUnitAll == test_name || kTestUnitRxpacketReorder == test_name) {
+    if (kTestUnitRxpacketReorder == test_name) {
         if (!RunTest(kTestUnitRxpacketReorder, TestUnitRxReorderPackets)) pass = false;
     }
-    if (kTestUnitAll == test_name || kTestUnitRxPayloadReorder == test_name) {
+    if (kTestUnitRxPayloadReorder == test_name) {
         if (!RunTest(kTestUnitRxPayloadReorder, TestUnitRxReorderPayloads)) pass = false;
     }
-    if (kTestUnitAll == test_name || kTestUnitList == test_name) {
+    if (kTestUnitList == test_name) {
         if (!RunTest(kTestUnitList, TestUnitList)) pass = false;
     }
 
+    if (kTestUnitAll == test_name) {
+        for (int i=1; i < kTestUnitLast; i++) {
+            pass = pass && CdiTestUnitRun(i);
+        }
+    }
     return pass;
 }

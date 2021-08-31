@@ -12,7 +12,7 @@
 
 #include "adapter_api.h"
 
-#include <sys/types.h>
+#include <sys/uio.h>
 
 #include "internal.h"
 #include "internal_log.h"
@@ -111,7 +111,7 @@ static struct AdapterVirtualFunctionPtrTable socket_endpoint_functions = {
  */
 static THREAD SocketReceiveThread(void* arg)
 {
-    AdapterEndpointState *endpoint_state_ptr = (AdapterEndpointState*)arg;
+    AdapterEndpointState* endpoint_state_ptr = (AdapterEndpointState*)arg;
     SocketEndpointState* private_state_ptr = (SocketEndpointState*)endpoint_state_ptr->type_specific_ptr;
 
     // Check whether the thread should be shut down.
@@ -338,7 +338,7 @@ static CdiReturnStatus SocketEndpointClose(AdapterEndpointHandle endpoint_handle
 {
     CdiReturnStatus ret = kCdiStatusOk;
 
-    AdapterEndpointState *endpoint_state_ptr = (AdapterEndpointState*)endpoint_handle;
+    AdapterEndpointState* endpoint_state_ptr = (AdapterEndpointState*)endpoint_handle;
     SocketEndpointState* private_state_ptr = (SocketEndpointState*)endpoint_state_ptr->type_specific_ptr;
 
     // SocketEndpointOpen() ensures that the private state is fully formed else the pointer is NULL.
@@ -441,14 +441,14 @@ static CdiReturnStatus SocketEndpointSend(const AdapterEndpointHandle handle, co
  */
 static CdiReturnStatus SocketEndpointRxBuffersFree(const AdapterEndpointHandle handle, const CdiSgList* sgl_ptr)
 {
-    AdapterEndpointState *endpoint_state_ptr = (AdapterEndpointState*)handle;
+    AdapterEndpointState* endpoint_state_ptr = (AdapterEndpointState*)handle;
     SocketEndpointState* private_state_ptr = (SocketEndpointState*)endpoint_state_ptr->type_specific_ptr;
 
     // Iterate through the SGL returning each ReceiveBufferRecord in it.
     CdiSglEntry* entry_ptr = sgl_ptr->sgl_head_ptr;
     while (entry_ptr) {
         ReceiveBufferRecord* receive_buffer_ptr = CONTAINER_OF(entry_ptr, ReceiveBufferRecord, sgl_entry);
-        CdiSglEntry *next_ptr = entry_ptr->next_ptr; // Save next entry, since Put() will free its memory.
+        CdiSglEntry* next_ptr = entry_ptr->next_ptr; // Save next entry, since Put() will free its memory.
         CdiPoolPut(private_state_ptr->receive_buffer_pool, receive_buffer_ptr);
         entry_ptr = next_ptr;
     }
@@ -467,7 +467,7 @@ static CdiReturnStatus SocketEndpointRxBuffersFree(const AdapterEndpointHandle h
  */
 static CdiReturnStatus SocketEndpointGetPort(const AdapterEndpointHandle handle, int* ret_port_number_ptr)
 {
-    AdapterEndpointState *endpoint_state_ptr = (AdapterEndpointState*)handle;
+    AdapterEndpointState* endpoint_state_ptr = (AdapterEndpointState*)handle;
     SocketEndpointState* private_state_ptr = (SocketEndpointState*)endpoint_state_ptr->type_specific_ptr;
 
     if (!CdiOsSocketGetPort(private_state_ptr->socket, ret_port_number_ptr)) {
@@ -510,7 +510,7 @@ CdiReturnStatus SocketNetworkAdapterInitialize(CdiAdapterState* adapter_state_pt
         rs = kCdiStatusNotEnoughMemory;
     }
 
-    if (rs == kCdiStatusOk) {
+    if (kCdiStatusOk == rs) {
         // Set up the virtual function pointer table for this adapter type.
         adapter_state_ptr->functions_ptr = &socket_endpoint_functions;
         // Provide the number of bytes usable by the connection layer to the connection.

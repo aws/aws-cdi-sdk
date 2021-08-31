@@ -50,7 +50,6 @@
 #endif  // _POSIX_C_SOURCE < 200112L
 #endif  // !defined(_POSIX_C_SOURCE)
 
-#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <time.h>
@@ -69,7 +68,7 @@
 #define CDI_SDK_VERSION             2
 
 /// @brief CDI major version.
-#define CDI_SDK_MAJOR_VERSION       2
+#define CDI_SDK_MAJOR_VERSION       3
 
 /// @brief CDI minor version.
 #define CDI_SDK_MINOR_VERSION       0
@@ -94,19 +93,19 @@
 #define CDI_PROBE_VERSION                4
 
 /// @brief Define to limit the max number of allowable Tx or Rx connections that can be created in the SDK.
-#define MAX_SIMULTANEOUS_CONNECTIONS                (30)
+#define CDI_MAX_SIMULTANEOUS_CONNECTIONS                (30)
 
 /// @brief Define to limit the max number of allowable Tx or Rx endpoints for a single connection that can be created in
 /// the SDK.
-#define MAX_ENDPOINTS_PER_CONNECTION                (5)
+#define CDI_MAX_ENDPOINTS_PER_CONNECTION                (5)
 
 /// @brief Define to limit the max number of allowable payloads that can be simultaneously sent on a single connection
 /// in the SDK. NOTE: This value is used to mask the MSBs of array indices so this value must be a power of two.
-#define MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION  (8)
+#define CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION  (8)
 
 /// @brief Define to limit the max number of allowable payload SGL entries that can be simultaneously sent on a single
 /// connection in the SDK. 3500 SGL entries supports 4K at 10-bits packed using 2110-20.
-#define MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION   (MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION*3500)
+#define CDI_MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION   (CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION*3500)
 
 /// @brief Define to limit the max number of allowable payloads that can be simultaneously received on a single
 /// connection in the SDK. This number should be larger than the respective Tx limit since more payloads can
@@ -115,35 +114,35 @@
 /// This number must also be as large or larger than the maximum SRD packet ordering window so that we can be sure
 /// we make enough room in our state arrays for tracking all possible payloads that could be in flight at the same time.
 /// NOTE: This value must be a power of two because it is used to mask the MSBs of array indices. @see RxPacketReceive
-#define MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION  (32)
+#define CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION  (32)
 
 /// @brief Define to limit the max number of payloads that can arrive out of order and be put back in order. Value must
 /// be a power of 2.
-#define MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER          (4096)
+#define CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER          (4096)
 
 /// @brief Define to limit the max number packets of that can arrive out of order and be put back in order.
-#define MAX_RX_PACKET_OUT_OF_ORDER_WINDOW           (4000)
+#define CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW           (4000)
 
 /// @brief Maximum connection name string length.
-#define MAX_CONNECTION_NAME_STRING_LENGTH           (128)
+#define CDI_MAX_CONNECTION_NAME_STRING_LENGTH           (128)
 
 /// @brief Maximum stream name string length.
-#define MAX_STREAM_NAME_STRING_LENGTH               (MAX_CONNECTION_NAME_STRING_LENGTH+10)
+#define CDI_MAX_STREAM_NAME_STRING_LENGTH               (CDI_MAX_CONNECTION_NAME_STRING_LENGTH+10)
 
 /// @brief Maximum log filename string length.
-#define MAX_LOG_FILENAME_LENGTH                     (1024)
+#define CDI_MAX_LOG_FILENAME_LENGTH                     (1024)
 
 /// @brief When Rx Buffer delay is enabled using "-1", this is the delay used in milliseconds. This is 4 video frames at
 /// 60FPS (4*16.6ms= 66.4ms). This value is the recommended buffer size for transport between instances that are not
 /// in a cluster placement group.
-#define ENABLED_RX_BUFFER_DELAY_DEFAULT_MS          (67)
+#define CDI_ENABLED_RX_BUFFER_DELAY_DEFAULT_MS          (67)
 
 /// @brief Maximum Rx buffer delay in milliseconds. This is approximately 6 video frames at 60FPS (6*16.6ms= ~100ms).
-#define MAXIMUM_RX_BUFFER_DELAY_MS                  (100)
+#define CDI_MAXIMUM_RX_BUFFER_DELAY_MS                  (100)
 
 /// @brief The millisecond divisor used to calculate how many additional packet buffers to allocate for the Rx buffer.
 /// A value of 10 here corresponds to 100FPS (10ms).
-#define RX_BUFFER_DELAY_BUFFER_MS_DIVISOR           (10)
+#define CDI_RX_BUFFER_DELAY_BUFFER_MS_DIVISOR           (10)
 
 // Declare forward references for internal structures that are not directly available through the API.
 struct CdiAdapterState;
@@ -153,7 +152,7 @@ struct CdiMemoryState;
 typedef struct CdiLogMethodData CdiLogMethodData;
 
 /**
- * @brief Type used as the handle (pointer to an opaque structure) for a network adapter. Each handle represents a
+ * @brief Type used as the handle (pointer to an opaque structure) for a network adapter. Each handle represents an
  * instance of a network adapter.
  */
 typedef struct CdiAdapterState* CdiAdapterHandle;
@@ -250,7 +249,7 @@ typedef enum {
     /// Attempt to allocate a non-memory resource failed.
     kCdiStatusAllocationFailed      = 19,
 
-    /// Attempt to open a connection (E.g. socket) failed.
+    /// Attempt to open a connection (e.g. socket) failed.
     kCdiStatusOpenFailed            = 20,
 
     /// Attempt was made to create an identical endpoint that is already in use.
@@ -539,8 +538,8 @@ typedef struct {
     /// not use the SRD hardware. This provides a secondary channel of communication.
     uint32_t probe_command_retry_count;
 
-    /// The true load on the polling thread's CPU core in units of hundredths of a percent. The normal range of this
-    /// value is between 0 and 10000 (0% to 100.00%) but it may be -1 to indicate a computation error. This value is
+    /// The true load on the poll thread's CPU core in units of hundredths of a percent. The normal range of this value
+    /// is between 0 and 10000 (0% to 100.00%) but it may be -1 to indicate a computation error. This value is
     /// determined by computing the portion of each five second window that is spent doing productive work, as opposed
     /// to spinning while it has nothing to do.
     int poll_thread_load;
@@ -557,7 +556,7 @@ typedef struct {
 
     /// @brief A string that defines the name of the stream. This is a copy of the string, since the associated endpoint
     /// can be destroyed while this data is queuing to CloudWatch.
-    char stream_name_str[MAX_STREAM_NAME_STRING_LENGTH];
+    char stream_name_str[CDI_MAX_STREAM_NAME_STRING_LENGTH];
 
     CdiPayloadCounterStats payload_counter_stats; ///< Statistics data specific to payloads that don't reset.
     CdiPayloadTimeIntervalStats payload_time_interval_stats; ///< Statistics data specific to payloads that reset.
@@ -616,7 +615,16 @@ typedef struct {
     /// match the value configured for the receiving connection.
     int dest_port;
 
-    /// @brief The core to dedicate to this connection's packet send polling thread. A value of -1 disables pinning the
+    /// @brief To reduce CPU core usage, multiple connections can share the same poll thread by specifying a shared poll
+    /// thread identifier. Any connection that uses the same identifier will share a single instance of the poll thread.
+    /// Dynamically adding/removing connections while payloads are transferring may cause them to be late. Therefore,
+    /// connections that share the same poll thread should be created and connected before payloads are transferred. If
+    /// the thread identifier is 0 or negative (ie. -1), a unique poll thread is created and associated only with this
+    /// connection. NOTE: If enabled (greater than 0), then all connections with matching shared_thread_id must also
+    /// match in their setting of thread_core_num.
+    int shared_thread_id;
+
+    /// @brief The core to dedicate to this connection's packet send poll thread. A value of -1 disables pinning the
     /// thread to a specific core otherwise the value must be between 0 (inclusive) and the number of CPU cores
     /// (exclusive) in the host. The packet send thread continuously polls the underlying hardware for a time to send
     /// packets when the packet send queue is not empty so it can consume a large portion of the available time on
@@ -627,7 +635,7 @@ typedef struct {
     /// SDK. This number should be smaller than the respective receive limit since more payloads can potentially be in
     /// flight in the receive logic. This is because Tx packets can get acknowledged to the transmitter before being
     /// fully processed by the receiver, allowing the transmitter to send more.
-    /// NOTE: If it's 0, then MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION will be used.
+    /// NOTE: If it's 0, then CDI_MAX_SIMULTANEOUS_TX_PAYLOADS_PER_CONNECTION will be used.
     int max_simultaneous_tx_payloads;
 
     /// @brief The max number of sgl entries in use at one time for each transmit connection in the SDK. This number
@@ -635,7 +643,7 @@ typedef struct {
     /// maximum size of the payloads being sent. A 4K video payload will have at least one entry per packet sent so
     /// large payloads can have many SGL entries. The SGL entries for a given payload should all be returned by the
     /// transmit callback function.
-    /// NOTE: If it's 0, then MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION will be used.
+    /// NOTE: If it's 0, then CDI_MAX_SIMULTANEOUS_TX_PAYLOAD_SGL_ENTRIES_PER_CONNECTION will be used.
     int max_simultaneous_tx_payload_sgl_entries;
 
     /// @brief Pointer to name of the connection. It is used as an identifier when generating log messages that are
@@ -735,7 +743,16 @@ typedef struct {
     /// unprivileged port numbers.
     int dest_port;
 
-    /// @brief The core to dedicate to this connection's packet reception polling thread. A value of -1 disables pinning
+    /// @brief To reduce CPU core usage, multiple connections can share the same poll thread by specifying a shared poll
+    /// thread identifier. Any connection that uses the same identifier will share a single instance of the poll thread.
+    /// Dynamically adding/removing connections while payloads are transferring may cause them to be late. Therefore,
+    /// connections that share the same poll thread should be created and connected before payloads are transferred. If
+    /// the thread identifier is 0 or negative (ie. -1), a unique poll thread is created and associated only with this
+    /// connection. NOTE: If enabled (greater than 0), then all connections with matching shared_thread_id must also
+    /// match in their setting of thread_core_num.
+    int shared_thread_id;
+
+    /// @brief The core to dedicate to this connection's packet reception poll thread. A value of -1 disables pinning
     /// the thread to a specific core otherwise the value must be between 0 (inclusive) and the number of CPU cores
     /// (exclusive) in the host. The packet receive thread continuously polls the underlying hardware for packets so it
     /// always consumes 100% of the available time on whatever CPU it's running whether pinned or not.
@@ -745,7 +762,7 @@ typedef struct {
     CdiBufferType rx_buffer_type;
 
     /// @brief Number of milliseconds to delay invoking the user-registered callback function for incoming payloads. Use
-    /// 0 to disable, -1 to enable and the SDK automatic default value (ENABLED_RX_BUFFER_DELAY_DEFAULT_MS) or use a
+    /// 0 to disable, -1 to enable and the SDK automatic default value (CDI_ENABLED_RX_BUFFER_DELAY_DEFAULT_MS) or use a
     /// value up to MAXIMUM_RX_BUFFER_DELAY_MS.
     int buffer_delay_ms;
 
@@ -760,7 +777,7 @@ typedef struct {
     /// fully processed by the receiver, allowing the transmitter to send more. This number must also be as large or
     /// larger than the maximum SRD packet ordering window so that we can be sure we make enough room in our state
     /// arrays for tracking all possible payloads that could be in flight at the same time.
-    /// NOTE: If it's 0, then MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION will be used.
+    /// NOTE: If it's 0, then CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION will be used.
     int max_simultaneous_rx_payloads_per_connection;
 
     /// @brief User defined callback parameter passed to a registered user RX callback function. This allows the
@@ -815,7 +832,7 @@ typedef struct {
     /// @brief Pointer to a string that defines a dimension called "Domain" that is associated with each metric. This
     /// value is required and cannot be NULL.
     const char* dimension_domain_str;
-} CloudWatchConfigData;
+} CdiCloudWatchConfigData;
 
 /**
  * @brief SDK configuration data used by the CdiCoreInitialize() API function.
@@ -830,7 +847,7 @@ typedef struct {
     /// @brief Pointer to configuration data specific to CloudWatch. The statics gathering period is uniquely defined
     /// for each connection (see #CdiStatsConfigData.stats_period_seconds) when the connection is created and can be
     /// changed at any time using CdiCoreStatsReconfigure(). If this value is NULL, then CloudWatch will not be used.
-    const CloudWatchConfigData* cloudwatch_config_ptr;
+    const CdiCloudWatchConfigData* cloudwatch_config_ptr;
 } CdiCoreConfigData;
 
 //*********************************************************************************************************************

@@ -63,7 +63,7 @@ typedef struct {
 
     /// @brief A string that defines a dimension called "Stream" that is associated with each metric. A stream is single
     /// endpoint within a connection. One or more streams can exist in a connection.
-    char dimension_stream_str[MAX_STREAM_NAME_STRING_LENGTH];
+    char dimension_stream_str[CDI_MAX_STREAM_NAME_STRING_LENGTH];
 
     /// @brief Time when last statistic of the set was gathered. Units is in milliseconds since epoch.
     uint64_t timestamp_in_ms_since_epoch;
@@ -76,7 +76,7 @@ typedef struct {
     CdiPayloadTimeIntervalStats payload_time_interval_stats; ///< Payload time stats.
 
     bool connected;       ///< true if the connection is up, false if the connection is not connected.
-    int cpu_utilization;  ///< CPU load of polling thread in hundreths of a percent.
+    int cpu_utilization;  ///< CPU load of poll thread in hundreths of a percent.
     bool is_receiver;     ///< true if this endpoint is a receiver, false if a transmitter.
 } CloudWatchTransferStats;
 
@@ -106,7 +106,7 @@ extern "C" {
  *
  * @return A value from the CdiReturnStatus enumeration.
  */
-CdiReturnStatus CloudWatchSdkMetricsCreate(const CloudWatchConfigData* config_ptr,
+CdiReturnStatus CloudWatchSdkMetricsCreate(const CdiCloudWatchConfigData* config_ptr,
                                            CloudWatchSdkMetricsHandle* ret_handle_ptr);
 
 /**

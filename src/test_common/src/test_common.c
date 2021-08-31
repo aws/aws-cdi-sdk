@@ -20,7 +20,7 @@
 //*********************************************************************************************************************
 
 /// @brief The maximum number of command line tokens allowed in a text file when using the @ command line option.
-#define MAX_CMD_TOKENS_IN_FILE        (1000)
+#define MAX_CMD_TOKENS_IN_FILE        (10000)
 
 /**
  * Structure use to hold command line state data.

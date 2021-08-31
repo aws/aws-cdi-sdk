@@ -33,8 +33,8 @@
  * Refer to @ref cdi_os_api.h for API details.
  */
 
-#if !defined OS_API_H__
-#define OS_API_H__
+#ifndef CDI_OS_API_H__
+#define CDI_OS_API_H__
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -53,23 +53,25 @@
     #include <windows.h>
     #include <winsock2.h>
 #elif defined (_LINUX)
+    #include <netinet/in.h>
     #include <pthread.h>
     #include <semaphore.h>
     #include <signal.h>
     #include <string.h>
     #include <strings.h>
+    #include <unistd.h>
 #else
 #error Either _WIN32 or _LINUX must be defined.
 #endif
 
-#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <sys/uio.h>
 #include <time.h>
 
 #include "cdi_utility_api.h"
+
+struct iovec;
 
 #if defined _WIN32
     #define CDI_STDIN GetStdHandle(STD_INPUT_HANDLE)    ///< Definition of OS agnostic standard input stream.
@@ -139,6 +141,8 @@
         long si_pid;
         long si_uid;
     };
+
+    struct sockaddr_in;
 
     typedef HANDLE CdiStaticMutexType;
     #define CDI_STATIC_MUTEX_INITIALIZER    NULL
@@ -1025,4 +1029,4 @@ CDI_INTERFACE void CdiOsShutdown(void);
 }
 #endif
 
-#endif // OS_API_H__
+#endif // CDI_OS_API_H__

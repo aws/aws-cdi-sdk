@@ -246,11 +246,14 @@ void EndpointManagerThreadWait(EndpointManagerHandle handle);
 bool EndpointManagerPoll(CdiEndpointHandle* handle_ptr);
 
 /**
- * Called by Poll thread when it is about to exit.
+ * Called by poll thread when it is about to exit. Must continue to call this as part of the polling cycle until true is
+ * returned.
  *
  * @param handle Handle of Endpoint Manager.
+ *
+ * @return true if ok to exit.
  */
-void EndpointManagerPollThreadExit(EndpointManagerHandle handle);
+bool EndpointManagerPollThreadExit(EndpointManagerHandle handle);
 
 /**
  * Return the signal that is used to notify registered threads that they must call EndpointManagerThreadWait() so a

@@ -16,7 +16,6 @@
  */
 
 #include <stdbool.h>
-#include <stdint.h>
 
 #include "cdi_core_api.h"
 
@@ -29,6 +28,7 @@
  */
 typedef enum {
     kTestUnitAll, ///< Test all unit tests.
+    kTestUnitAvmApi, ///< Test unit AVM functions.
     kTestUnitSgl, ///< Test unit SGL.
     kTestUnitTimeout, ///< Test unit timeout.
     kTestUnitTDigest, ///< Test unit T-digest.
@@ -52,7 +52,7 @@ extern "C"
  *
  * @return Pointer to enum string array.
  */
-const EnumStringKey* TestUnitGetKeyArray(void);
+const CdiEnumStringKey* CdiTestUnitGetKeyArray(void);
 
 /**
  * Function used to convert a string to a matching enum value.
