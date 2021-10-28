@@ -5,6 +5,33 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
+CDI (Cloud Digital Interface) SDK Version 2.3.1 - 10/29/21
+---------------------------------------------------------------------------
+
+What's New
+------------
+* Added new logger macros CDI_LOG_WHEN() and CDI_LOG_THREAD_WHEN() that provide log message filtering and occurrence
+  count logic.
+* Added new command line options to the cdi_test application that disables validation of received payload user data.
+  This should be used when the cdi_test application is receiving payloads sent by applications other than cdi_test. See
+  "-nopud" or "--no_payload_user_data".
+* Renamed macro THREAD to CDI_THREAD in cdi_os_api.h.
+* Moved "#ifdef __cplusplus" usage from public API header files to be part of the CDI_INTERFACE define.
+* Added a new API CdiAvmValidateBaselineVersionString.
+
+Bug Fixes
+------------
+* Fixed a bug in the CDI receiver code for linear buffers (buffer type LINEAR). The bug caused CDI applications
+  receiving data in linear buffer mode to generate error messages instead of processing received payloads.
+* Fixed some bugs in the cdi_test application. Cdi_test skipped the payload data check for some configurations, it did
+  not terminate with an error code for some Rx payload errors, and it incorrectly skipped some Rx checks with pattern
+  type NONE.
+* Fixed a bug in statistics gathering and the cdi_test application if wait time value wraps, causing a hang (very long
+  sleep).
+* Fixed bugs in the multiline logger API that may cause applications to crash when multiline loggers are disabled.
+* Fixed a bug in CdiAvmRegisterBaselineProfile. The fix prevents registration of already registered baseline profiles.
+
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 2.3.0 - 08/30/21
 ---------------------------------------------------------------------------
 

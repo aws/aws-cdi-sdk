@@ -97,10 +97,6 @@ typedef struct {
  */
 typedef void (*CdiRawTxCallback)(const CdiRawTxCbData* data_ptr);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -148,20 +144,20 @@ CDI_INTERFACE CdiReturnStatus CdiRawRxCreate(CdiRxConfigData* config_data_ptr, C
 
 /**
  * Transmit a payload of data to the receiver. This function is asynchronous and will immediately return. The user
- * callback function CdiAvmTxCallback() registered using the CdiAvmTxCreate() API function will be invoked when the
+ * callback function CdiRawTxCallback() registered using the CdiRawTxCreate() API function will be invoked when the
  * payload has been acknowledged by the remote receiver or a transmission timeout occurred.
  *
- * MEMORY NOTE: The payload_config_ptr, video_config_ptr, CdiSgList and SGL entries memory can be modified or released
+ * MEMORY NOTE: The payload_config_ptr, CdiSgList and SGL entries memory can be modified or released
  * immediately after the function returns. However, the buffers pointed to in the SGL must not be modified or released
- * until after the CdiAvmTxCallback() has occurred.
+ * until after the CdiRawTxCallback() has occurred.
  *
  * NOTE: Newly created data structures that are passed in to this function should be properly initialized before being
  * programmed with user values. Use memset or a zero structure initializer (= {0}) to set the whole structure to zero
  * before setting the desired members to the actual values required.
  *
- * @param con_handle Connection handle returned by a previous call to CdiTxCreate().
+ * @param con_handle Connection handle returned by a previous call to CdiRawTxCreate().
  * @param payload_config_ptr Pointer to payload configuration data. Part of the data is sent along with the payload and
- *                           part is provided to the registered user TX callback function.
+ *                           part is provided to the registered user Tx callback function.
  * @param sgl_ptr Scatter-gather list containing the payload to be transmitted. The addresses in the SGL must point to
  *                locations that reside within the memory region specified in CdiAdapterData at ret_tx_buffer_ptr.
  * @param max_latency_microsecs Maximum latency in microseconds. If the transmission time of a payload exceeds this
@@ -172,9 +168,5 @@ CDI_INTERFACE CdiReturnStatus CdiRawRxCreate(CdiRxConfigData* config_data_ptr, C
 CDI_INTERFACE CdiReturnStatus CdiRawTxPayload(CdiConnectionHandle con_handle,
                                               const CdiCoreTxPayloadConfig* payload_config_ptr,
                                               const CdiSgList* sgl_ptr, int max_latency_microsecs);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_RAW_API_H__

@@ -135,13 +135,18 @@ static CdiReturnStatus InitializeBaselineProfiles(void)
  *
  * @param payload_type Enum value of payload type (same as profile type)
  * @param version_ptr Pointer to version to find. If NULL, finds first profile in table.
+ * @param warn_not_found When true, generate a warning when profile data could not be found.
  *
  * @return Pointer to found profile. NULL if none found.
  */
 static BaselineProfileData* FindProfileVersion(CdiBaselineAvmPayloadType payload_type,
-                                               const CdiAvmBaselineProfileVersion* version_ptr)
+    const CdiAvmBaselineProfileVersion* version_ptr, bool warn_not_found)
 {
     BaselineProfileData* profile_data_ptr = NULL;
+
+    if (kCdiAvmNotBaseline == payload_type) {
+        return NULL;
+    }
 
     // profile_type_count_array and baseline_profile_array are indexed with kCdiAvmVideo at element 0.
     const int payload_type_idx = payload_type - kCdiAvmVideo;
@@ -173,7 +178,7 @@ static BaselineProfileData* FindProfileVersion(CdiBaselineAvmPayloadType payload
         }
     }
 
-    if (NULL == profile_data_ptr) {
+    if (NULL == profile_data_ptr && warn_not_found) {
         CDI_LOG_THREAD(kLogWarning, "Unable to find baseline profile v[%02d.%02d] for payload type[%s].",
                        version_ptr->major, version_ptr->minor,
                        CdiAvmKeyEnumToString(kKeyAvmPayloadType, payload_type, NULL));
@@ -190,26 +195,29 @@ static BaselineProfileData* FindProfileVersion(CdiBaselineAvmPayloadType payload
 // Doxygen commenting for these functions is in cdi_baseline_profile_api.h.
 ////////////////////////////////////////////////////////////////////////////////
 
-CdiReturnStatus CdiAvmRegisterBaselineProfile(CdiBaselineAvmPayloadType profile_type,
+CdiReturnStatus CdiAvmRegisterBaselineProfile(CdiBaselineAvmPayloadType media_type,
                                               const char* profile_version_str,
                                               CdiAvmVTableApi* vtable_api_ptr)
 {
     CdiReturnStatus ret = kCdiStatusOk;
 
-    // profile_type_count_array and baseline_profile_array are indexed with kCdiAvmVideo at element 0.
-    const int profile_type_idx = profile_type - kCdiAvmVideo;
-
     CdiAvmBaselineProfileVersion version;
     if (!CdiAvmParseBaselineVersionString(profile_version_str, &version)) {
         CDI_LOG_THREAD(kLogError, "Unable to parse version string[%s]. Expected format is: xx.xx", profile_version_str);
-        return kCdiStatusFatal;
+        return kCdiStatusInvalidParameter;
     }
 
-    if (kCdiAvmNotBaseline == profile_type) {
-            ret = kCdiStatusFatal;
+    if (kCdiAvmNotBaseline == media_type) {
+        ret = kCdiStatusInvalidParameter;
+    }
+
+    if (initialized && NULL != FindProfileVersion(media_type, &version, false)) {
+        ret = kCdiStatusDuplicateBaselineVersion;
     }
 
     if (kCdiStatusOk == ret) {
+        // profile_type_count_array and baseline_profile_array are indexed with kCdiAvmVideo at element 0.
+        const int profile_type_idx = media_type - kCdiAvmVideo;
         int count = profile_type_count_array[profile_type_idx];
         if (count < CDI_ARRAY_ELEMENT_COUNT(baseline_profile_array[profile_type_idx])) {
             baseline_profile_array[profile_type_idx][count].version = version;
@@ -239,7 +247,7 @@ CdiReturnStatus CdiAvmMakeBaselineConfiguration2(const CdiAvmBaselineConfigCommo
     memset(config_ptr, 0, sizeof(*config_ptr));
 
     BaselineProfileData* profile_data_ptr = FindProfileVersion(baseline_config_ptr->payload_type,
-                                                               &baseline_config_ptr->version);
+                                                               &baseline_config_ptr->version, true);
     if (profile_data_ptr) {
         // Copy the URI.
         strncpy(config_ptr->uri, CdiUtilityEnumValueToString(avm_uri_strings, baseline_config_ptr->payload_type),
@@ -294,7 +302,7 @@ CdiReturnStatus CdiAvmParseBaselineConfiguration2(const CdiAvmConfig* config_ptr
                 } else {
                     // Successfully parsed the version, now try to find the corresponding profile.
                     BaselineProfileData* profile_data_ptr = FindProfileVersion(common_config.payload_type,
-                                                                               &common_config.version);
+                                                                               &common_config.version, false);
                     if (NULL == baseline_config_ptr) {
                         CDI_LOG_THREAD(kLogError, "No output address (baseline_config_ptr) provided.");
                         ret = kCdiStatusFatal;
@@ -331,10 +339,10 @@ CdiReturnStatus CdiAvmGetBaselineUnitSize(const CdiAvmBaselineConfig* baseline_c
 CdiReturnStatus CdiAvmGetBaselineUnitSize2(const CdiAvmBaselineConfigCommon* baseline_config_ptr,
                                            int* payload_unit_size_ptr)
 {
-    CdiReturnStatus ret = kCdiStatusNonFatal;
+    CdiReturnStatus ret = kCdiStatusFatal;
 
     BaselineProfileData* profile_data_ptr = FindProfileVersion(baseline_config_ptr->payload_type,
-                                                                &baseline_config_ptr->version);
+                                                                &baseline_config_ptr->version, true);
     if (profile_data_ptr) {
         ret = (profile_data_ptr->vtable_api.get_unit_size_ptr)(baseline_config_ptr, payload_unit_size_ptr);
     }
@@ -371,7 +379,7 @@ const CdiEnumStringKey* CdiAvmKeyGetArray(CdiAvmBaselineEnumStringKeyTypes key_t
         array_ptr = payload_type_key_array;
     } else {
         CdiBaselineAvmPayloadType payload_type = EnumStringKeyTypeToPayloadType(key_type);
-        BaselineProfileData* profile_data_ptr = FindProfileVersion(payload_type, version_ptr);
+        BaselineProfileData* profile_data_ptr = FindProfileVersion(payload_type, version_ptr, true);
         if (profile_data_ptr) {
             array_ptr = (profile_data_ptr->vtable_api.key_get_array_ptr)(key_type);
         }
@@ -388,9 +396,12 @@ bool CdiAvmParseBaselineVersionString(const char* version_str, CdiAvmBaselinePro
     int accumulator = 0;
     for (int i = 0; i <= 5; i++) {
         const char c = version_str[i];
-        if (minor && ('\0' == c)) {
-            ret_version_ptr->minor = accumulator;
-            ret = true;
+        if ('\0' == c) {
+            if (minor) {
+                ret_version_ptr->minor = accumulator;
+                ret = true;
+            }
+            break;
         } else if (!minor && ('.' == c)) {
             ret_version_ptr->major = accumulator;
             accumulator = 0;
@@ -404,3 +415,20 @@ bool CdiAvmParseBaselineVersionString(const char* version_str, CdiAvmBaselinePro
 
     return ret;
 }
+
+CdiReturnStatus CdiAvmValidateBaselineVersionString(CdiBaselineAvmPayloadType media_type, const char* version_str,
+    CdiAvmBaselineProfileVersion* ret_version_ptr)
+{
+    CdiAvmBaselineProfileVersion version;
+    if (NULL == version_str || !CdiAvmParseBaselineVersionString(version_str, &version)) {
+        return kCdiStatusInvalidParameter;
+    }
+    if (!FindProfileVersion(media_type, &version, false)) {
+        return kCdiStatusProfileNotSupported;
+    }
+    if (ret_version_ptr) {
+        *ret_version_ptr = version;
+    }
+    return kCdiStatusOk;
+}
+

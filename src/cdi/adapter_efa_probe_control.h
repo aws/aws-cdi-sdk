@@ -128,7 +128,7 @@ void ProbeControlMessageFromBidirectionalEndpoint(void* param_ptr, Packet* packe
  *
  * @return The return code is not used.
  */
-THREAD ProbeControlThread(void* ptr);
+CDI_THREAD ProbeControlThread(void* ptr);
 
 #endif  // CDI_ADAPTER_EFA_PROBE_CONTROL_H__
 

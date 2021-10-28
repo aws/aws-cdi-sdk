@@ -71,7 +71,7 @@
 #define CDI_SDK_MAJOR_VERSION       3
 
 /// @brief CDI minor version.
-#define CDI_SDK_MINOR_VERSION       0
+#define CDI_SDK_MINOR_VERSION       1
 
 /// @brief CDI protcol version.
 #define CDI_PROTOCOL_VERSION             2
@@ -253,7 +253,7 @@ typedef enum {
     kCdiStatusOpenFailed            = 20,
 
     /// Attempt was made to create an identical endpoint that is already in use.
-    kCdiStatusDuplicate             = 21,
+    kCdiStatusDuplicateConnection   = 21,
 
     /// Invalid SGL found when processing.
     kCdiStatusInvalidSgl            = 22,
@@ -303,6 +303,10 @@ typedef enum {
     /// Payloads are being received, but back pressure is preventing allocation of resources to store them. Payloads are
     /// being discarded until another status message is provided (ie. kCdiStatusOk).
     kCdiStatusRxPayloadBackPressure  = 36,
+
+    /// An attempt was made to register an already registered baseline profile.
+    kCdiStatusDuplicateBaselineVersion = 37,
+
 } CdiReturnStatus;
 
 /// @brief A structure for holding a PTP timestamp defined in seconds and nanoseconds. This PTP time as defined by
@@ -372,7 +376,7 @@ typedef struct {
     int remote_dest_port; ///< Remote destination port.
 
     /// @brief User defined connection callback parameter. For a transmitter, this value is set as part of the
-    /// CdiTxConfigData data provided as a parameter to one of the Cdi...TXCreate() API functions. For a receiver, this
+    /// CdiTxConfigData data provided as a parameter to one of the Cdi...TxCreate() API functions. For a receiver, this
     /// value is set as part of the CdiRxConfigData data provided to one of the Cdi...RxCreate() API functions.
     CdiUserCbParameter connection_user_cb_param;
 
@@ -484,15 +488,15 @@ typedef struct {
  */
 typedef struct {
     /// @brief Current number of payloads successfully transferred since the connection was created.
-    int num_payloads_transferred;
+    uint64_t num_payloads_transferred;
 
     /// @brief The number of payloads that have been dropped due to timeout conditions since the connection was created.
     /// Payloads are typically dropped because of network connectivity issues but will also occur when the receiving
     /// host is unresponsive among other possible causes.
-    int num_payloads_dropped;
+    uint64_t num_payloads_dropped;
 
     /// @brief Number of payloads that were transmitted late since the connection was created.
-    int num_payloads_late;
+    uint64_t num_payloads_late;
 
     /// @brief Number of bytes that were transmitted since the connection was created.
     uint64_t num_bytes_transferred;
@@ -719,7 +723,7 @@ typedef struct {
 
 /**
  * @brief Values used to determine type of receive buffer to configure for a receiver connection.
- * NOTE: Any changes made here MUST also be made to "buffer_type_key_array" in cdi_avm_api.c.
+ * NOTE: Any changes made here MUST also be made to "buffer_type_key_array" in cdi_utility_api.c.
  */
 typedef enum {
     /// @brief Use a linear buffer to store received payload data. Depending on hardware capabilities, this may require
@@ -854,10 +858,6 @@ typedef struct {
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * Initialize the SDK. Must be called once before using any other SDK APIs. When done, must call CdiCoreShutdown() once.
  *
@@ -926,10 +926,9 @@ CDI_INTERFACE CdiReturnStatus CdiCoreRxFreeBuffer(const CdiSgList* sgl_ptr);
  * number for byte_count than sgl->total_data_size. The number of bytes copied is the smaller of (sgl->total_data_size -
  * offset) or byte_count.
  *
- * @param sgl_ptr The scatter-gather list containing the data to be gathered.CdiReservePayloadMemory
+ * @param sgl_ptr The scatter-gather list containing the data to be gathered.
  * @param offset Number of bytes to skip in SGL before starting the copy.
- * @param dest_data_ptr Where to write the gathered data in linear format. Address must be withing the memory region
- *                      specified for mem_handle.
+ * @param dest_data_ptr Where to write the gathered data in linear format.
  * @param byte_count The number of bytes to copy.
  *
  * @return The number of bytes copied. This will be less than byte_count if fewer than that number of bytes are present
@@ -1012,9 +1011,5 @@ CDI_INTERFACE uint64_t CdiCoreGetTaiTimeMicroseconds();
  * @return const char* A character array which describes the requested code.
  */
 CDI_INTERFACE const char* CdiCoreStatusToString(CdiReturnStatus status);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_CORE_API_H__

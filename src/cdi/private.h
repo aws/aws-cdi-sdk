@@ -142,7 +142,7 @@ struct TxPayloadState {
     uint32_t max_latency_microsecs;             ///< Maximum latency in microseconds of time to transfer the payload.
     /// @brief The size of the units (pixels, audio samples, etc.) in bytes making up the payload. This is to ensure
     /// units are not split between packets within a payload.
-    int pattern_size_bytes;
+    int group_size_bytes;
 
     AppPayloadCallbackData app_payload_cb_data; ///< Used to hold data for application payload callback.
 

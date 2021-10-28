@@ -85,8 +85,8 @@ typedef void (*CdiFifoCallback)(const CdiFifoCbData* data_ptr);
  *
  * @return true if successful, otherwise false (not enough memory to allocate the FIFO).
  */
-CDI_INTERFACE bool CdiFifoCreate(const char* name_str, int item_count, int item_byte_size, 
-                                 CdiFifoFullCallback full_cb_ptr, CdiUserCbParameter full_user_cb_param, 
+CDI_INTERFACE bool CdiFifoCreate(const char* name_str, int item_count, int item_byte_size,
+                                 CdiFifoFullCallback full_cb_ptr, CdiUserCbParameter full_user_cb_param,
                                  CdiFifoHandle* ret_handle_ptr);
 
 /**
@@ -100,7 +100,7 @@ CDI_INTERFACE bool CdiFifoCreate(const char* name_str, int item_count, int item_
  *
  * @return true if successful, otherwise false (FIFO is empty).
  */
-CDI_INTERFACE bool CdiFifoRead(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, 
+CDI_INTERFACE bool CdiFifoRead(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait_signal,
                                void* item_dest_ptr);
 
 /**
@@ -120,7 +120,7 @@ CDI_INTERFACE void CdiFifoFlush(CdiFifoHandle handle);
  *
  * @return true if successful, otherwise false (FIFO is full).
  */
-CDI_INTERFACE bool CdiFifoWrite(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait_signal, 
+CDI_INTERFACE bool CdiFifoWrite(CdiFifoHandle handle, int timeout_ms, CdiSignalType abort_wait_signal,
                                 const void* item_ptr);
 
 /**
@@ -138,14 +138,14 @@ CDI_INTERFACE const char* CdiFifoGetName(CdiFifoHandle handle);
  * @param handle FIFO handle.
  * @param cb_ptr Pointer to callback function.
  */
-CDI_INTERFACE void CdiFifoDebugEnable(CdiFifoHandle handle, CdiFifoCallback cb_ptr);
+void CdiFifoDebugEnable(CdiFifoHandle handle, CdiFifoCallback cb_ptr);
 
 /**
  * Disable a previously enabled FIFO debug callback.
  *
  * @param handle FIFO handle.
  */
-CDI_INTERFACE void CdiFifoDebugDisable(CdiFifoHandle handle);
+void CdiFifoDebugDisable(CdiFifoHandle handle);
 #endif //DEBUG
 
 /**

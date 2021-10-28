@@ -392,7 +392,7 @@ void ProbeControlMessageFromBidirectionalEndpoint(void* param_ptr, Packet* packe
     }
 }
 
-THREAD ProbeControlThread(void* ptr)
+CDI_THREAD ProbeControlThread(void* ptr)
 {
     ProbeEndpointState* probe_ptr = (ProbeEndpointState*)ptr;
     AdapterEndpointState* endpoint_ptr = probe_ptr->app_adapter_endpoint_handle;

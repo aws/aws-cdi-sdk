@@ -35,17 +35,13 @@ typedef enum {
     kTestUnitRxpacketReorder, ///< Test unit Rx packet reorderer.
     kTestUnitRxPayloadReorder, ///< Test unit Rx payload reorderer.
     kTestUnitList, ///< Unit test for doubly linked list implementation.
+    kTestUnitLogger, ///< Test logger functions.
     kTestUnitLast, ///< End of list (for range checking, do no remove).
 } CdiTestUnitName;
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
-
-#ifdef __cplusplus
-extern "C"
-{
-#endif
 
 /**
  * @brief Get key array, only used internally by the CDI-SDK.
@@ -62,9 +58,5 @@ const CdiEnumStringKey* CdiTestUnitGetKeyArray(void);
  * @return true if all tests were successful, otherwise false.
  */
 CDI_INTERFACE bool CdiTestUnitRun(CdiTestUnitName test_name);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_UTILITY_API_H__

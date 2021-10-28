@@ -228,10 +228,6 @@ typedef struct {
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * Create an instance of an AVM transmitter. When the instance is no longer needed, use the CdiCoreConnectionDestroy()
  * API function to free-up resources that are being used by it.
@@ -347,7 +343,7 @@ CDI_INTERFACE CdiReturnStatus CdiAvmRxCreate(CdiRxConfigData* config_data_ptr, C
  *
  * @param con_handle Connection handle returned by a previous call to CdiAvmTxCreate().
  * @param payload_config_ptr Pointer to payload configuration data. Part of the data is sent along with the payload and
- *                           part is provided to the registered user TX callback function.
+ *                           part is provided to the registered user Tx callback function.
  * @param avm_config_ptr Pointer to configuration data that describes the contents of this payload and subsequent
  *                       payloads. The first time this function is called for a given stream identifier (in
  *                       payload_config_ptr->avm_extra_data) after the connection's status has changed to
@@ -364,8 +360,6 @@ CDI_INTERFACE CdiReturnStatus CdiAvmRxCreate(CdiRxConfigData* config_data_ptr, C
  *
  * @return A value from the CdiReturnStatus enumeration. kCdiStatusInvalidHandle will be returned if the connection
  *         handle was returned by CdiAvmTxStreamEndpointCreate() instead of CdiAvmTxCreate().
- *
- * @see CdiRawTxPayload() for additional detail about memory management.
  */
 CDI_INTERFACE CdiReturnStatus CdiAvmTxPayload(CdiConnectionHandle con_handle,
                                               const CdiAvmTxPayloadConfig* payload_config_ptr,
@@ -401,15 +395,10 @@ CDI_INTERFACE CdiReturnStatus CdiAvmTxPayload(CdiConnectionHandle con_handle,
  *                              value, the CdiAvmTxCallback() API function will be invoked with an error.
  *
  * @return A value from the CdiReturnStatus enumeration.
- *
- * @see CdiRawTxPayload() for additional detail about memory management.
  */
 CDI_INTERFACE CdiReturnStatus CdiAvmEndpointTxPayload(CdiEndpointHandle endpoint_handle,
                                                       const CdiAvmTxPayloadConfig* payload_config_ptr,
                                                       const CdiAvmConfig* avm_config_ptr, const CdiSgList* sgl_ptr,
                                                       int max_latency_microsecs);
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_AVM_API_H__

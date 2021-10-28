@@ -92,16 +92,50 @@ static bool PostRxBuffer(EfaEndpointState* endpoint_state_ptr, const struct iove
  */
 static bool Poll(EfaEndpointState* efa_endpoint_ptr)
 {
-    bool ret = false;
+    AdapterEndpointState* aep_ptr = efa_endpoint_ptr->adapter_endpoint_ptr;
+    const size_t msg_prefix_size = aep_ptr->adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
+    const int maximum_payload_bytes = aep_ptr->adapter_con_state_ptr->adapter_state_ptr->maximum_payload_bytes;
+
     struct fi_cq_data_entry comp_array[MAX_RX_BULK_COMPLETION_QUEUE_MESSAGES];
     int fi_ret = fi_cq_read(efa_endpoint_ptr->completion_queue_ptr, &comp_array,
                             MAX_RX_BULK_COMPLETION_QUEUE_MESSAGES);
     // If the returned value is greater than zero, then the value is the number of completion queue messages that
     // were returned in comp_array. If zero is returned, completion queue was empty. Otherwise a negative value
     // represents an error or -FI_EAGAIN.
+
+    // In message prefix mode some messages may not contain application data but are for the provider only. Keep track
+    // of how many such messages we receive.
+    int num_provider_messages = 0;
     if (fi_ret > 0) {
-        ret = true;
         for (int i = 0; i < fi_ret; i++) {
+            const size_t message_length = comp_array[i].len;
+
+            // Note: We have not seen this code path taken, so it is untested and possibly incorrect. The EFA provider
+            // probably does not sent provider-only messages, which means this code is superfluous.
+            if (message_length <= msg_prefix_size) {
+                num_provider_messages += 1;
+                if (0 == message_length) {
+                    CDI_LOG_THREAD(kLogWarning, "Unexpected zero-size message from fi_cq_read (buffer [%p]); skipping.",
+                        comp_array[i].buf);
+                } else {
+                    CDI_LOG_THREAD(kLogInfo, "Skipping small message of length: %zu", message_length);
+
+                    // This message is meant just for the provider (prefix mode) because there is no data beyond the
+                    // prefix section. There is nothing to process, so we immediately return the buffer to libfabric.
+                    struct iovec msg_iov = {
+                        .iov_len = maximum_payload_bytes + msg_prefix_size,
+                        .iov_base = comp_array[i].buf
+                    };
+
+                    if (!PostRxBuffer(efa_endpoint_ptr, &msg_iov, false)) {
+                        // Something went terribly wrong in libfabric. Notify the probe component so it can start the
+                        // connection reset process.
+                        ProbeEndpointError(efa_endpoint_ptr->probe_endpoint_handle);
+                    }
+                }
+                continue;
+            }
+
             CdiSglEntry* sgl_entry_ptr = NULL;
             // NOTE: This pool is not thread-safe, so must ensure that only one thread is accessing it at a time.
             if (!CdiPoolGet(efa_endpoint_ptr->rx_state.packet_sgl_entries_pool_handle, (void**)&sgl_entry_ptr)) {
@@ -112,7 +146,7 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
                 .sg_list = {
                     .sgl_head_ptr = sgl_entry_ptr,
                     .sgl_tail_ptr = sgl_entry_ptr,
-                    .total_data_size = comp_array[i].len,
+                    .total_data_size = message_length - msg_prefix_size,
                     .internal_data_ptr = NULL,
                 },
                 .tx_state = {
@@ -121,8 +155,8 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
             };
 
             if (sgl_entry_ptr) {
-                sgl_entry_ptr->address_ptr = comp_array[i].buf;
-                sgl_entry_ptr->size_in_bytes = comp_array[i].len;
+                sgl_entry_ptr->address_ptr = (char*)comp_array[i].buf + msg_prefix_size;
+                sgl_entry_ptr->size_in_bytes = message_length - msg_prefix_size;
                 sgl_entry_ptr->internal_data_ptr = NULL;
                 sgl_entry_ptr->next_ptr = NULL;
             }
@@ -130,13 +164,13 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
 #ifdef DEBUG_PACKET_SEQUENCES
             CdiProtocolHandle protocol_handle = efa_endpoint_ptr->adapter_endpoint_ptr->protocol_handle;
             CdiDecodedPacketHeader decoded_header = { 0 };
-            ProtocolPayloadHeaderDecode(protocol_handle, comp_array[i].buf, comp_array[i].len, &decoded_header);
+            ProtocolPayloadHeaderDecode(protocol_handle, sgl_entry_ptr->address_ptr, sgl_entry_ptr->size_in_bytes,
+                                        &decoded_header);
             CDI_LOG_THREAD(kLogInfo, "CQ T[%d] P[%d] S[%d] A[%p]", decoded_header.payload_type,
-                           decoded_header.payload_num, decoded_header.packet_sequence_num, comp_array[i].buf);
+                           decoded_header.payload_num, decoded_header.packet_sequence_num, sgl_entry_ptr->address_ptr);
 #endif
 
             // Send the completion message for the packet.
-            AdapterEndpointState* aep_ptr = efa_endpoint_ptr->adapter_endpoint_ptr;
             (aep_ptr->msg_from_endpoint_func_ptr)(aep_ptr->msg_from_endpoint_param_ptr, &packet,
                                                   kEndpointMessageTypePacketReceived);
 
@@ -148,7 +182,7 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
     } else if (fi_ret < 0 && fi_ret != -FI_EAGAIN) {
         CDI_LOG_THREAD(kLogError, "Got[%d (%s)] from fi_cq_read().", fi_ret, fi_strerror(-fi_ret));
     }
-    return ret;
+    return fi_ret > num_provider_messages;
 }
 
 /**
@@ -194,7 +228,7 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
 
         // Register the newly allocated and aligned region with libfabric.
         int fi_ret = fi_mr_reg(endpoint_state_ptr->domain_ptr, mem_ptr, aligned_packet_size * packet_count,
-                           FI_SEND | FI_RECV | FI_MULTI_RECV, 0, 0, 0,
+                           FI_RECV, 0, 0, 0,
                            &endpoint_state_ptr->rx_state.memory_region_ptr, NULL);
         if (0 == fi_ret) {
             // Give fragments of allocated memory to libfabric for receiving packet data into.
@@ -331,12 +365,14 @@ CdiReturnStatus EfaRxEndpointClose(EfaEndpointState* endpoint_state_ptr)
 
 CdiReturnStatus EfaRxEndpointRxBuffersFree(const AdapterEndpointHandle handle, const CdiSgList* sgl_ptr)
 {
-    AdapterEndpointState* adapter_state_ptr = (AdapterEndpointState*)handle;
-    EfaEndpointState* endpoint_state_ptr = (EfaEndpointState*)adapter_state_ptr->type_specific_ptr;
+    AdapterEndpointState* adapter_endpoint_ptr = (AdapterEndpointState*)handle;
+    EfaEndpointState* endpoint_state_ptr = (EfaEndpointState*)adapter_endpoint_ptr->type_specific_ptr;
     CdiReturnStatus rs = kCdiStatusOk;
 
+    const size_t msg_prefix_size = adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
     struct iovec msg_iov = {
-        .iov_len = adapter_state_ptr->adapter_con_state_ptr->adapter_state_ptr->maximum_payload_bytes
+        .iov_len = adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->maximum_payload_bytes +
+                   msg_prefix_size
     };
 
     // Free SGL data buffers and SGL entries.
@@ -345,7 +381,7 @@ CdiReturnStatus EfaRxEndpointRxBuffersFree(const AdapterEndpointHandle handle, c
         // Don't need to free resources if not connected, since all libfabric resources get reset whenever the
         // connection is lost.
         if (kCdiConnectionStatusConnected == handle->connection_status_code) {
-            msg_iov.iov_base = sgl_entry_ptr->address_ptr;
+            msg_iov.iov_base = (char*)sgl_entry_ptr->address_ptr - msg_prefix_size;
 
             // NOTE: This function is called from PollThread(), so no need to use libfabric's FI_THREAD_SAFE option.
             // Access to libfabric functions such as fi_recvmsg() and fi_cq_read() use PollThread().
@@ -374,8 +410,9 @@ CdiReturnStatus EfaRxPacketPoolCreate(EfaEndpointState* endpoint_state_ptr)
         endpoint_state_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->rx_state.reserve_packet_buffers;
     int max_payload_size =
         endpoint_state_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->maximum_payload_bytes;
-
-    if (!CreatePacketPool(endpoint_state_ptr, max_payload_size, reserve_packets)) {
+    size_t msg_prefix_size =
+        endpoint_state_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
+    if (!CreatePacketPool(endpoint_state_ptr, max_payload_size + msg_prefix_size, reserve_packets)) {
         rs = kCdiStatusNotEnoughMemory;
     }
 

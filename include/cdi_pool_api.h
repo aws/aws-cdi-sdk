@@ -10,7 +10,6 @@
  * This file declares the public API data types, structures and functions that comprise the CDI Pool Utility API.
  */
 
-// Page for CDI Pool API
 /*!
  * @page cdi_pool_api_home_page CDI Pool API
  *
@@ -131,10 +130,6 @@ typedef void (*CdiPoolCallback)(const CdiPoolCbData* data_ptr);
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * Get the size of the buffer needed to create a pool for the specified number of items and item size.
@@ -404,9 +399,5 @@ CDI_INTERFACE void CdiPoolCallbackDisable(CdiPoolHandle handle);
  * @param handle Memory pool handle.
  */
 CDI_INTERFACE void CdiPoolDestroy(CdiPoolHandle handle);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_POOL_API_H__

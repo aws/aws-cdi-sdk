@@ -13,13 +13,7 @@
 #ifndef TEST_TRANSMITTER_H__
 #define TEST_TRANSMITTER_H__
 
-#include <stdbool.h>
-
-#include "cdi_core_api.h"
-#include "cdi_avm_api.h"
-#include "cdi_raw_api.h"
-#include "cdi_test.h"
-#include "test_control.h"
+#include "cdi_os_api.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -37,7 +31,7 @@
  *
  * @return  True if no errors; false if errors;
  */
-THREAD TestTxCreateThread(void* arg_ptr);
+CDI_THREAD TestTxCreateThread(void* arg_ptr);
 
 #endif // TEST_TRANSMITTER_H__
 

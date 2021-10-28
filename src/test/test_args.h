@@ -17,7 +17,6 @@
 /// function needs to be implemented or not in that header file.
 #define USE_CONSOLE_LOGGER
 
-#include <assert.h>
 #include <stdbool.h>
 
 #include "cdi_baseline_profile_01_00_api.h"
@@ -108,10 +107,11 @@ typedef enum {
     kTestOptionLogLevel,
     kTestOptionLogComponent,
     kTestOptionNumLoops,
-    kTestOptStatsConfigPeriod,
+    kTestOptionStatsConfigPeriod,
 #ifndef CDI_NO_MONITORING
-    kTestOptStatsConfigCloudWatch,
+    kTestOptionStatsConfigCloudWatch,
 #endif
+    kTestOptionNoPayloadUserData,
     kTestOptionHelp,
     kTestOptionHelpVideo,
     kTestOptionHelpAudio,
@@ -171,7 +171,7 @@ typedef struct {
 } StreamSettings;
 
 /**
- * @brief A structure that holds all the test settings as set from the command line.
+ * @brief A structure that holds all the test settings for a connection as set from the command line.
  */
 typedef struct {
     /// When true, Tx mode is enabled.
@@ -226,7 +226,7 @@ typedef struct {
     bool multiple_endpoints;
 } TestSettings;
 
-/// Forward reference.
+/// Forward reference. Contains connection state and test settings.
 typedef struct TestConnectionInfo TestConnectionInfo;
 
 /**
@@ -274,6 +274,9 @@ typedef struct {
 
     /// @brief Statistics gathering CloudWatch configuration data.
     CdiCloudWatchConfigData cloudwatch_config;
+
+    /// @brief Flag to disable checks using payload_user_data when sender is not another cdi_test instance.
+    bool no_payload_user_data;
 
     /// @brief Total number of connections.
     int total_num_connections;

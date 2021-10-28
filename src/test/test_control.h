@@ -14,6 +14,7 @@
 #define TEST_CONTROL_H__
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "fifo_api.h"
 #include "cdi_pool_api.h"
@@ -32,6 +33,16 @@
 /// into this number of SGL entries, then we will use a smaller number of entries that can accommodate the given
 /// payload. Must be greater than 0.
 #define MAX_SGL_ENTRIES_PER_PAYLOAD            (7)
+
+extern CdiLoggerHandle test_app_logger_handle;
+
+/// @brief Send the log message to application's log for the connection specified by "connection_info_ptr->app_file_log_handle".
+#define TEST_LOG_CONNECTION(log_level, ...) \
+    CdiLogger(connection_info_ptr->app_file_log_handle, kLogComponentGeneric, log_level, __FUNCTION__, __LINE__, \
+              __VA_ARGS__)
+
+/// @brief The number of bytes in a test pattern word.
+#define BYTES_PER_PATTERN_WORD  (sizeof(uint64_t))
 
 /// Forward reference.
 typedef struct TestConnectionInfo TestConnectionInfo;
@@ -147,9 +158,9 @@ struct TestConnectionInfo {
     /// Flag to indicate if this connection has passed or failed its testing.
     bool pass_status;
 
-    /// Flag to indicate payload transmission error. Used to determine whether to quit or continue based on
+    /// Counter to count payload transmission errors. Used to determine whether to quit or continue based on
     /// --keep_alive setting.
-    bool payload_error;
+    uint64_t num_payload_errors;
 
     /// Signal to indicate when this connection is done testing (when payload_count matches total_payloads).
     CdiSignalType done_signal;
@@ -209,24 +220,6 @@ struct TestConnectionInfo {
     /// Instance of test dynamic component related to this connection.
     TestDynamicHandle test_dynamic_handle;
 };
-
-/// Structure for the 8 byte chunk header that proceeds every payload.
-typedef struct {
-    /// Four character code for indicating the form type. The test checks for form type 'CDI '.
-    char four_cc[4];
-    /// The size of the chunk data in bytes. This size becomes stream_info->next_payload_size if using riff file for
-    /// --read_file option.
-    uint32_t size;
-} RiffChunkHeader;
-
-/// Structure for the 12 byte file header at the start of every RIFF file.
-typedef struct {
-    /// Chunk header for the RIFF chunk of the RIFF file.
-    RiffChunkHeader chunk_header;
-    /// The four character code that indicates the form type of the RIFF file. The test app looks for code 'CDI '.
-    char form_type[4];
-} RiffFileHeader;
-
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
@@ -309,57 +302,6 @@ bool GetNextPayloadDataSgl(TestConnectionInfo* connection_info_ptr, int stream_i
  */
 bool GetNextPayloadDataLinear(TestConnectionInfo* connection_info_ptr, int stream_id, int payload_id,
                               CdiFileID read_file_handle, uint8_t* buffer_ptr, int buffer_size);
-
-/**
- * @brief Get the size of the next payload from a RIFF file. The RIFF file specifies payload size in the file.
- * Once the payload size has been read the size can be used in GetNextPayload() to read the next payload.
- *
- * @param   connection_info_ptr     Pointer to test connection information.
- * @param   stream_settings_ptr     Pointer to stream settings.
- * @param   read_file_handle        The file handle to read RIFF payload header from.
- * @param   ret_payload_size_ptr    Returns the size of the next payload to be read from the RIFF file.
- *
- * @return                          If successful return true, otherwise returns false.
- *
- * @see StartRiffPayloadFile()
- */
-bool GetNextRiffPayloadSize(TestConnectionInfo* connection_info_ptr, StreamSettings* stream_settings_ptr,
-                            CdiFileID read_file_handle, int* ret_payload_size_ptr);
-
-/**
- * @brief Reads the initial header information from the RIFF file and verifies that the file header indicates a valid
- * file. After this is performed the file is ready to read the next payload size using GetNextRiffPayloadSize().
- *
- *                                 RIFF format
- *                                   bytes
- *       0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15
- *      'R' 'I' 'F' 'F' / size 4 Bytes \/form = 'CDI '\/Chunk = 'ANC '\
- *      / chunk size 4B\/payload data is chunk_size in bytes in size...
- *      ...............................................................
- *      ...............................\/Chunk2='ANC '\/chunk2 size 4B\
- *      /payload number 2 is chunk2 size in bytes .....................
- *      ***************************************************************
- *      /Chunk-n='ANC '\/Chunk-n size \/Chunk N data of chunk-n size  \
- *      ...............................................................
- *
- * For additional RIFF file information please see https://johnloomis.org/cpe102/asgn/asgn1/riff.html.
- *
- * @param   stream_settings_ptr     Pointer to stream settings.
- * @param   read_file_handle        The file handle to read RIFF file header from.
- *
- * @return                          If successful return true, otherwise returns false.
- */
-bool StartRiffPayloadFile(StreamSettings* stream_settings_ptr, CdiFileID read_file_handle);
-
-/**
- * Helper function to do an integer-based division and ceiling function.
- *
- * @param   numerator    The numerator of the division.
- * @param   denominator  The denominator of the division.
- *
- * @return  The result of the division, with ceiling function applied.
- */
-int IntDivCeil(int numerator, int denominator);
 
 /**
  * Create a unique log file name for this application's connection and associate it with the current thread. This

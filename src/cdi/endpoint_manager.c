@@ -283,7 +283,7 @@ static void DestroyEndpoint(CdiEndpointHandle handle)
  *
  * @return The return value is not used.
  */
-static THREAD EndpointManagerThread(void* ptr)
+static CDI_THREAD EndpointManagerThread(void* ptr)
 {
     EndpointManagerState* mgr_ptr = (EndpointManagerState*)ptr;
 

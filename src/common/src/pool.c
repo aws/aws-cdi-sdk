@@ -16,6 +16,7 @@
 #include "cdi_pool_api.h"
 
 #include <assert.h>
+#include <inttypes.h>
 
 // The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
@@ -329,8 +330,8 @@ bool CdiPoolCreateUsingExistingBufferAndInitItems(const char* name_str, uint32_t
             ret = PoolCreate(name_str, item_count, 0, 0, item_byte_size, thread_safe, buffer_ptr, true, ret_handle_ptr,
                              init_fn, init_context_ptr);
         } else {
-            CDI_LOG_THREAD(kLogError, "Buffer[%s] size requested is larger than existing buffer. Requested size[%d]"
-                           " Available size[%d]", name_str, size_needed, buffer_byte_size);
+            CDI_LOG_THREAD(kLogError, "Buffer[%s] size requested is larger than existing buffer. Requested size "
+                           "[%"PRIu32"]; available size [%"PRIu32"].", name_str, size_needed, buffer_byte_size);
             ret = false;
         }
     }

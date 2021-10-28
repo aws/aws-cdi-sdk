@@ -132,7 +132,7 @@
 #define TX_PACKET_SEND_QUEUE_SIZE_GROW                 (10)
 
 /// @brief Maximum number of SGL entries for a single transmit packet.
-#define MAX_TX_SGL_PACKET_ENTRIES                      (10)
+#define MAX_TX_SGL_PACKET_ENTRIES                      (4)
 
 /// @brief Maximum number of packets that can be simultaneously queued for transmission without receiving a
 /// corresponding completion event (ACK or error).
@@ -162,6 +162,11 @@
 
 /// @brief Maximum number of times a queue may grow in size before an error occurs.
 #define MAX_QUEUE_GROW_COUNT                           (5)
+
+/// @brief The space reserved for the libfabric message prefix in our packet header. This must be set to be
+/// equal or larger than the largest prefix size needed by the EFA provider. It must be a multiple of 8.
+/// See https://ofiwg.github.io/libfabric/v1.13.0/man/fi_msg.3.html#notes
+#define MAX_MSG_PREFIX_SIZE                            (22 * 8)
 
 //*********************************************************************************************************************
 //********************************************* SETTINGS FOR EFA ADAPTER **********************************************

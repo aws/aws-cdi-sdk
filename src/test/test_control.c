@@ -15,7 +15,6 @@
 // headers.
 
 #include "test_control.h"
-#include "curses.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -24,6 +23,7 @@
 #include "cdi_logger_api.h"
 #include "cdi_test.h"
 #include "curses.h"
+#include "riff.h"
 #include "run_test.h"
 #include "test_console.h"
 #include "utilities_api.h"
@@ -51,7 +51,7 @@
  * @param   pattern_type          The enum (TestPatternTypes) value for the pattern type.
  * @param   payload_word_size     Sets how many 64 bit words fit in the buffer pointed to by pattern_buffer_ptr.
  * @param   pattern_buffer_ptr    The pointer to a buffer of payload_word_size that will be filled with
- *                                  payload_word_size number of words of pattern pattern_type.
+ *                                payload_word_size number of words of pattern pattern_type.
  *
  * @return                        If successful returns true, otherwise returns false.
  */
@@ -122,10 +122,6 @@ static bool TestPayloadPatternSet(uint64_t seed_value, TestPatternType pattern_t
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
-
-int IntDivCeil(int numerator, int denominator) {
-    return (numerator - 1) / denominator + 1;
-}
 
 bool TestWaitForConnection(TestConnectionInfo* connection_info_ptr, int timeout_seconds)
 {
@@ -312,13 +308,14 @@ void TestIncPayloadCount(TestConnectionInfo* connection_info_ptr, int stream_ind
     CdiOsSignalSet(connection_info_ptr->payload_done_signal);
 }
 
+
 bool PreparePayloadData(StreamSettings* stream_settings_ptr, int payload_buffer_size, CdiFileID* read_file_handle_ptr,
                         void* buffer_ptr)
 {
     bool return_val = true;
 
     // If the user has asked us to get our pattern from a file, then open the file the user gave us.
-    if (stream_settings_ptr->file_read_str != NULL) {
+    if (NULL != stream_settings_ptr->file_read_str) {
         return_val = CdiOsOpenForRead(stream_settings_ptr->file_read_str, read_file_handle_ptr);
         if (!return_val) {
             CDI_LOG_THREAD(kLogError, "Error opening file [%s] for reading.", stream_settings_ptr->file_read_str);
@@ -357,14 +354,14 @@ bool GetNextPayloadDataSgl(TestConnectionInfo* connection_info_ptr, int stream_i
             // If we are using a file, then load the buffer from the file.
             if (NULL != read_file_handle) {
                 // If we are using a file, then load the buffer from the file and read in payload_sized chunks.
-                for (CdiSglEntry* entry_ptr = sgl_ptr->sgl_head_ptr ; entry_ptr != NULL ;
+                for (CdiSglEntry* entry_ptr = sgl_ptr->sgl_head_ptr ; NULL != entry_ptr;
                         entry_ptr = entry_ptr->next_ptr) {
                     uint32_t bytes_read;
                     return_val = CdiOsRead(read_file_handle, entry_ptr->address_ptr, entry_ptr->size_in_bytes,
                                            &bytes_read);
 
                     // The payload was not read so go back to the top of the file.
-                    if (return_val && (bytes_read == 0))  {
+                    if (return_val && (0 == bytes_read))  {
                         if (CdiOsFSeek(read_file_handle, 0, SEEK_SET)) {
                             return_val = CdiOsRead(read_file_handle, entry_ptr->address_ptr, entry_ptr->size_in_bytes,
                                                    &bytes_read);
@@ -410,94 +407,6 @@ bool GetNextPayloadDataLinear(TestConnectionInfo* connection_info_ptr, int strea
         .total_data_size = buffer_size
     };
     return GetNextPayloadDataSgl(connection_info_ptr, stream_id, payload_id, read_file_handle, &sgl);
-}
-
-bool StartRiffPayloadFile(StreamSettings* stream_settings_ptr, CdiFileID read_file_handle)
-{
-    bool return_val = true;
-
-    RiffFileHeader file_header;
-
-    uint32_t bytes_read = 0;
-    return_val = CdiOsRead(read_file_handle, &file_header, sizeof(RiffFileHeader), &bytes_read);
-
-    if (!return_val || (bytes_read != sizeof(RiffFileHeader))) {
-        CDI_LOG_THREAD(kLogError, "Failed to read RIFF file header from file [%s].",
-                       stream_settings_ptr->file_read_str);
-        return_val = false;
-    }
-
-    // Parse the header file.
-    if (return_val) {
-        // Check for "RIFF" four_cc marker.
-        if (CdiOsStrNCmp(file_header.chunk_header.four_cc, "RIFF", 4) != 0) {
-            CDI_LOG_THREAD(kLogError, "File is not a RIFF file [%s], the four_cc code received is not 'RIFF'.",
-            stream_settings_ptr->file_read_str);
-            return_val = false;
-        }
-
-        // The file_header.chunk_header.four_cc is not being verified.
-
-        // Check for "CDI " Form Type.
-        if (CdiOsStrNCmp(file_header.form_type, "CDI ", 4) != 0) {
-            CDI_LOG_THREAD(kLogError, "RIFF file [%s]: Form Type received is not 'CDI '.",
-                           stream_settings_ptr->file_read_str, file_header.form_type);
-            return_val = false;
-        }
-    }
-
-    return return_val;
-}
-
-bool GetNextRiffPayloadSize(TestConnectionInfo* connection_info_ptr, StreamSettings* stream_settings_ptr,
-                            CdiFileID read_file_handle, int* ret_payload_size_ptr)
-{
-    bool return_val = true;
-
-    RiffChunkHeader chunk_header; // Buffer for holding chunk headers four_cc code and chunk size.
-
-    uint32_t bytes_read = 0;
-    if (read_file_handle) {
-        return_val = CdiOsRead(read_file_handle, &chunk_header, sizeof(RiffChunkHeader), &bytes_read);
-    } else {
-        TEST_LOG_CONNECTION(kLogError, "No file handle for RIFF File");
-    }
-
-    // Ran out of subchunk headers to read so retry at the top of the file.
-    if (return_val && (bytes_read == 0)) {
-        if (CdiOsFSeek(read_file_handle, 0, SEEK_SET)) {
-            return_val = StartRiffPayloadFile(stream_settings_ptr, read_file_handle);
-        }
-        if (return_val) {
-            return_val = CdiOsRead(read_file_handle, &chunk_header, sizeof(RiffChunkHeader), &bytes_read);
-        }
-    }
-
-    if (!return_val || (bytes_read != sizeof(RiffChunkHeader))) {
-        TEST_LOG_CONNECTION(kLogError, "Failed to read chunk header from file [%s]. Read [%d] header bytes.",
-        stream_settings_ptr->file_read_str, bytes_read);
-        return_val = false;
-    }
-
-    // For now check if the chunk ID is "ANC ". NOTE: this check may be removed or expanded in the future to support
-    // additional chunk IDs.
-    // payload types.
-    if (CdiOsStrNCmp(chunk_header.four_cc, "ANC ", 4) != 0) {
-        TEST_LOG_CONNECTION(kLogError, "RIFF File [%s] subchunk ID is not 'ANC '.", stream_settings_ptr->file_read_str);
-        return_val =false;
-    }
-
-    if (return_val) {
-        *ret_payload_size_ptr = chunk_header.size;
-        // Payload size just be larger than the larger RIFF file payload in the source file.
-        if (*ret_payload_size_ptr > stream_settings_ptr->payload_size) {
-            TEST_LOG_CONNECTION(kLogError, "Payload size from RIFF file [%d] is larger than the payload buffer [%d].",
-                                ret_payload_size_ptr, stream_settings_ptr->payload_size);
-            return_val = false;
-        }
-    }
-
-    return return_val;
 }
 
 bool TestCreateConnectionLogFiles(TestConnectionInfo* connection_info_ptr, CdiLogMethodData* log_method_data_ptr,

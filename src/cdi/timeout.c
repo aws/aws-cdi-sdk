@@ -86,7 +86,7 @@ static bool ServiceExpiredTimeout(CdiTimeoutInstanceHandle instance_handle, Time
  * timeout TimeoutDataState structure is not sent back to the memory pool until after the callback
  * function has completed.
  */
-static THREAD TimeoutCbThread(void* ptr)
+static CDI_THREAD TimeoutCbThread(void* ptr)
 {
     TimeoutInstanceState* state_ptr = (TimeoutInstanceState*)ptr;
 
@@ -117,7 +117,7 @@ static THREAD TimeoutCbThread(void* ptr)
  * user callback function. This separates the execution time of the callback function from the time of managing the
  * timers themselves.
  */
-static THREAD TimeoutMainThread(void* ptr)
+static CDI_THREAD TimeoutMainThread(void* ptr)
 {
     TimeoutInstanceState* state_ptr = (TimeoutInstanceState*)ptr;
 

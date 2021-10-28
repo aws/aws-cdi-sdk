@@ -206,12 +206,4 @@ struct CdiAvmBaselineConfig {
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#ifdef __cplusplus
-}
-#endif
-
 #endif // CDI_BASELINE_PROFILE_01_00_API_H__

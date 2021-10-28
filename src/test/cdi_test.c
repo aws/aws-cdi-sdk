@@ -65,6 +65,7 @@
 
 #include "cdi_test.h"
 
+#include <assert.h>
 #include <signal.h> // Defines above are required when using this include file.
 #include <stdbool.h>
 #include <stdio.h>
@@ -178,7 +179,7 @@ static void SignalHandler(int signal_number, siginfo_t* siginfo_ptr, void* conte
     }
 }
 
-#ifdef WIN32
+#ifdef _WIN32
 /**
  * Windows console control hander.
  *
@@ -211,7 +212,7 @@ static bool SetupSignalHandlers(void) {
     CdiOsSignalHandlerSet(SIGINT, SignalHandler);  // Handle Ctrl+C (doesn't do anything in windows).
     CdiOsSignalHandlerSet(SIGILL, SignalHandler);  // Handle illegal instruction
     CdiOsSignalHandlerSet(SIGFPE, SignalHandler);  // Handle floating point error
-#ifdef WIN32
+#ifdef _WIN32
     // NOTE: Ctrl+C in windows is not passed to the application, so must use Ctrl+Break instead to invoke our
     // handler.
     if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)Win32CtrlHandler, true)) {
@@ -511,7 +512,7 @@ int main(int argc, const char **argv)
         CdiCoreShutdown();
 
         // If we are looping the tests, specify a delay in between tests. A loop value of 0 indicates run forever.
-        if (global_test_settings.num_loops != 1) {
+        if (1 != global_test_settings.num_loops) {
             CdiOsSleep(MAIN_TEST_LOOP_WAIT_TIMEOUT_MS);
         }
     }
@@ -527,5 +528,5 @@ int main(int argc, const char **argv)
     CdiOsCritSectionDelete(signal_handler_lock);
     signal_handler_lock = NULL;
 
-    return (status == kProgramExecutionStatusExitError) ? 1 : 0;
+    return kProgramExecutionStatusExitError == status;
 }

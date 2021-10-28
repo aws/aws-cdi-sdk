@@ -28,6 +28,6 @@
  *
  * @return           True if no errors; false if errors;
  */
-THREAD TestRxCreateThread(void* arg_ptr);
+CDI_THREAD TestRxCreateThread(void* arg_ptr);
 
 #endif // TEST_RECEIVER_H__

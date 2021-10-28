@@ -18,8 +18,9 @@
 
 #include "cdi_queue_api.h"
 
-#include <stddef.h>
 #include <assert.h>
+#include <inttypes.h>
+#include <stddef.h>
 
 #include "cdi_logger_api.h"
 #include "singly_linked_list_api.h"
@@ -268,7 +269,7 @@ bool CdiQueueCreate(const char* name_str, uint32_t item_count, uint32_t grow_cou
     bool ret = true;
 
     if (1 > item_count) {
-        CDI_LOG_THREAD(kLogError, "Queue[%s] cannot be created with fewer than 1 item, count[%d]", name_str,
+        CDI_LOG_THREAD(kLogError, "Queue[%s] cannot be created with fewer than 1 item, count [%"PRIu32"]", name_str,
                        item_count);
         return false;
     }
@@ -280,7 +281,7 @@ bool CdiQueueCreate(const char* name_str, uint32_t item_count, uint32_t grow_cou
     uint32_t size_needed = sizeof(CdiSinglyLinkedListEntry) + (item_count * (sizeof(QueueItem) + item_byte_size));
     void* queue_item_array = CdiOsMemAllocZero(size_needed);
     if (NULL == queue_item_array) {
-        CDI_LOG_THREAD(kLogError, "Not enough memory to allocate queue[%s] with size[%d]", name_str, size_needed);
+        CDI_LOG_THREAD(kLogError, "Not enough memory to allocate queue[%s] with size [%"PRIu32"]", name_str, size_needed);
         return false;
     }
 

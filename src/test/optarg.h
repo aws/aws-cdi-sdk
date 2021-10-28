@@ -25,10 +25,10 @@
 #define OPTARG_MAX_OPTION_ARGS (20)
 
 /// @brief The maximum length of any option string.
-#define OPTARG_MAX_OPTION_LENGTH (15)
+#define OPTARG_MAX_OPTION_LENGTH (16)
 
 /// @brief The maximum length of any short option string.
-#define OPTARG_MAX_SHORT_OPTION_LENGTH (4)
+#define OPTARG_MAX_SHORT_OPTION_LENGTH (5)
 
 /// @brief The maximum length of any option argument string.
 #define OPTARG_MAX_ARG_STR_LENGTH (16)

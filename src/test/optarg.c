@@ -24,6 +24,7 @@
 #include "cdi_logger_api.h"
 #include "cdi_test.h"
 #include "test_console.h"
+#include "test_common.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -61,12 +62,12 @@ typedef enum {
 static bool SearchOptions(const char* opt_str, int type, const OptDef* opt_array_ptr, OptArg* found_opt_ptr)
 {
     bool ret = false;
-    int i;
     TestConsoleLog(kLogDebug, "Searching for the option [%s]", opt_str);
 
     // Loop through the user-defined options array and check either long or short options to see if we can find a
     // match.
-    for (i = 0; opt_array_ptr[i].short_name_str; i++) // loop while short_name_str != 0
+    int i = 0;
+    for (; opt_array_ptr[i].short_name_str; i++) // loop while short_name_str != 0
     {
         TestConsoleLog(kLogDebug, "Checking option [%s]", type == kOptLong ?
                  opt_array_ptr[i].long_name_str : opt_array_ptr[i].short_name_str);
@@ -181,6 +182,40 @@ static int CheckArg(const char* arg_str, const OptDef* opt_array_ptr, OptArg* fo
     return opt_type;
 }
 
+/**
+ * When the length of either the long option string or the argument string exceed their allotted length, but taken
+ * together they don't exceed the combined allotted lengh, then we adjust the whitespaces so that the printout meets
+ * the target length.
+ *
+ * @param long_name_str Long option string to be printed. May be NULL.
+ * @param argument_str Argument description to be printed. May be NULL.
+ * @param max_long_name_length_ptr Pointer to alloted length on input. Pointer to adjusted length on output.
+ * @param max_argument_length_ptr Pointer to alloted length on input. Pointer to adjuted length on output.
+ */
+void RigWhitespaces(const char* long_name_str, const char* argument_str, int* max_long_name_length_ptr,
+    int* max_argument_length_ptr)
+{
+    int allotted_long_name_length = *max_long_name_length_ptr;
+    int allotted_argument_length = *max_argument_length_ptr;
+    int allotted_combined_length = allotted_long_name_length + allotted_argument_length;
+    int long_name_length = long_name_str ? strlen(long_name_str) : 0;
+    int argument_length = argument_str ? strlen(argument_str) : 0;
+    int combined_length = long_name_length + argument_length;
+
+    if (combined_length <= allotted_combined_length) {
+        while (long_name_length > allotted_long_name_length && 0 < allotted_argument_length) {
+            allotted_long_name_length++;
+            allotted_argument_length--;
+        }
+        while (argument_length > allotted_argument_length && 0 < allotted_long_name_length) {
+            allotted_long_name_length--;
+            allotted_argument_length++;
+        }
+        *max_long_name_length_ptr = allotted_long_name_length;
+        *max_argument_length_ptr = allotted_argument_length;
+    }
+}
+
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -281,8 +316,8 @@ void PrintOption(const OptDef* option_ptr)
         //
         // Multi-line descriptions after the first line are formatted as follows:
         //
-        //                                              Description (continued after any newlines).
-        // <--   OPTARG_USAGE_DESCRIPTION_INDENT+2  --><--  variable len     -->
+        //                                            Description (continued after any newlines).
+        // <--   OPTARG_USAGE_DESCRIPTION_INDENT  --><--  variable len     -->
         //
 
         // Print the option information, checking for line breaks in the description field and properly formatting new
@@ -298,40 +333,41 @@ void PrintOption(const OptDef* option_ptr)
         char* desc_ptr = strtok(desc_copy, "\n");
         bool first_line = true;
         while (desc_ptr != NULL) {
+            int max_option_length = OPTARG_MAX_OPTION_LENGTH;
+            int max_arg_length = OPTARG_MAX_ARG_STR_LENGTH;
+            RigWhitespaces(option_ptr->long_name_str, option_ptr->argument_str, &max_option_length, &max_arg_length);
             if (first_line) {
                 // Short options are hardcoded below to be no more than 4 spaces, based on the #define
                 TestConsoleLog(kLogInfo, "%1s%-*s%5s%-*s%1s%-*s%3s%s",
                         "-",
                         OPTARG_MAX_SHORT_OPTION_LENGTH, option_ptr->short_name_str,
                         option_ptr->long_name_str == NULL ? "" : " | --",
-                        OPTARG_MAX_OPTION_LENGTH, option_ptr->long_name_str == NULL ? "" : option_ptr->long_name_str,
+                        max_option_length, option_ptr->long_name_str == NULL ? "" : option_ptr->long_name_str,
                         " ",
-                        OPTARG_MAX_ARG_STR_LENGTH, option_ptr->argument_str  == NULL ? "" : option_ptr->argument_str,
+                        max_arg_length, option_ptr->argument_str  == NULL ? "" : option_ptr->argument_str,
                         " : ",
                         desc_ptr); // required option, so it will not be NULL.
                 first_line = false;
             } else {
                 // Required option, so it will not be NULL.
-                TestConsoleLog(kLogInfo, "%*s%s", OPTARG_USAGE_DESCRIPTION_INDENT+2, "", desc_ptr);
+                TestConsoleLog(kLogInfo, "%*s%s", OPTARG_USAGE_DESCRIPTION_INDENT, "", desc_ptr);
             }
             desc_ptr = strtok(NULL, "\n");
         }
 
         // On next line, if there is a non-null pointer to an arg choices array, then we print it.
-        PrintKeyArrayNames(option_ptr->arg_choices_array_ptr, OPTARG_USAGE_DESCRIPTION_INDENT+2);
+        PrintKeyArrayNames(option_ptr->arg_choices_array_ptr, OPTARG_USAGE_DESCRIPTION_INDENT);
     }
 }
 
 void PrintUsage(const OptDef* opt_array_ptr, bool has_error)
 {
-    int i;
-
     TestConsoleLog(kLogInfo, "");
     TestConsoleLog(kLogInfo, "Usage:");
     TestConsoleLog(kLogInfo, "");
     // We know the last entry in the table is all 0's, and also that short options are required for all options, so we
     // can loop on short option names until we hit 0 and be sure to get them all.
-    for (i = 0; opt_array_ptr[i].short_name_str; i++) {
+    for (int i = 0; opt_array_ptr[i].short_name_str; i++) {
         PrintOption(&opt_array_ptr[i]);
     }
 
@@ -362,12 +398,12 @@ bool GetOpt(int argc, const char* argv[], int* index_ptr, OptDef* opt_array_ptr,
 
             // Command line options that have 1 optional argument.
             int num_optional_args = 0;
-            if (0 ==CdiOsStrCmp(argv[last_opt_index], "--avm_video") ||
-                0 ==CdiOsStrCmp(argv[last_opt_index], "--avm_audio") ||
-                0 ==CdiOsStrCmp(argv[last_opt_index], "--avm_anc") ||
-                0 ==CdiOsStrCmp(argv[last_opt_index], "--help_video") ||
-                0 ==CdiOsStrCmp(argv[last_opt_index], "--help_audio")) {
-                num_optional_args = 1;
+            const char* opt_with_optional_arg[] = { "--avm_video", "--avm_audio" , "--avm_anc", "--help_video",
+                "--help_audio", "--help_riff" };
+            for (int i = 0; i < ARRAY_ELEMENT_COUNT(opt_with_optional_arg); ++i) {
+                if (0 == CdiOsStrCmp(argv[last_opt_index], opt_with_optional_arg[i])) {
+                    num_optional_args = 1;
+                }
             }
 
             TestConsoleLog(kLogDebug, "Found option [%s] with [%d] arguments.", argv[last_opt_index],

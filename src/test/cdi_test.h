@@ -30,18 +30,13 @@
 /// @brief Default log component (ie. kLogComponentGeneric, kLogComponentPayloadConfig, etc).
 #define DEFAULT_LOG_COMPONENT       (kLogComponentProbe)
 
-/// @brief Macro for finding the number of entries in an array of strings.
-#define ARRAY_OF_STR_SIZE(thisarray) sizeof(thisarray)/sizeof(thisarray[0])
+/// @brief Number of elements in a static array.
+#define ARRAY_ELEMENT_COUNT(thisarray) ((int)(sizeof(thisarray)/sizeof(thisarray[0])))
 
-extern CdiLoggerHandle test_app_logger_handle;
-
-/// @brief Send the log message to application's log for the connection specified by "connection_info_ptr->app_file_log_handle".
-#define TEST_LOG_CONNECTION(log_level, ...) \
-    CdiLogger(connection_info_ptr->app_file_log_handle, kLogComponentGeneric, log_level, __FUNCTION__, __LINE__, \
-              __VA_ARGS__)
-
-/// @brief The number of bytes in a test pattern word.
-#define BYTES_PER_PATTERN_WORD  (sizeof(uint64_t))
+/// @brief Log through cdi_test's global log handle.
+#define TEST_LOG_GLOBAL(log_level, ...) \
+    CdiLogger(GetGlobalTestSettings()->test_app_global_log_handle, kLogComponentGeneric, log_level, __FUNCTION__, \
+        __LINE__, __VA_ARGS__)
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************

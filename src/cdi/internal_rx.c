@@ -279,11 +279,15 @@ static bool InitializePayloadState(CdiProtocolHandle protocol_handle, CdiEndpoin
             payload_state_ptr->payload_num = header_ptr->payload_num;
         }
 
-        if (con_state_ptr->rx_state.config_data.rx_buffer_type == kCdiLinearBuffer) {
+        if (kCdiLinearBuffer == con_state_ptr->rx_state.config_data.rx_buffer_type) {
             if (!CdiPoolGet(con_state_ptr->linear_buffer_pool, (void*)&payload_state_ptr->linear_buffer_ptr)) {
-                // Ensure this is NULL if the pool ran dry. This error condition will be reported to the application
-                // through the callback made when the payload has been completely received.
                 payload_state_ptr->linear_buffer_ptr = NULL;
+                BACK_PRESSURE_ERROR(con_state_ptr->back_pressure_state, kLogError,
+                    "Failed to get linear buffer from pool. Throwing away this payload[%d]. Timestamp[%u:%u]",
+                    payload_state_ptr->payload_num,
+                    app_payload_cb_data_ptr->core_extra_data.origination_ptp_timestamp.seconds,
+                    app_payload_cb_data_ptr->core_extra_data.origination_ptp_timestamp.nanoseconds);
+                ret = false;
             }
         } else {
             payload_state_ptr->linear_buffer_ptr = NULL;
@@ -312,12 +316,15 @@ static bool InitializePayloadState(CdiProtocolHandle protocol_handle, CdiEndpoin
  * @return true if the function completed successfully, false if a problem was encountered.
  */
 static bool CopyToLinearBuffer(CdiConnectionState* con_state_ptr, const Packet* packet_ptr,
-                               RxPayloadState* const payload_state_ptr, const CdiDecodedPacketHeader* header_ptr)
+                               RxPayloadState* payload_state_ptr, const CdiDecodedPacketHeader* header_ptr)
 {
     bool ret = true;
 
     // Using linear memory buffer.
-    int offset = header_ptr->data_offset_info.payload_data_offset;
+    int offset = 0;
+    if (kPayloadTypeDataOffset == header_ptr->payload_type) {
+        offset = header_ptr->data_offset_info.payload_data_offset;
+    }
     const int byte_count = packet_ptr->sg_list.total_data_size - header_ptr->encoded_header_size;
 
     // Ensure that the gather will end up fully within the linear buffer.
@@ -332,6 +339,7 @@ static bool CopyToLinearBuffer(CdiConnectionState* con_state_ptr, const Packet* 
         // portion.
         const int bytes_gathered = CdiCoreGather(&packet_ptr->sg_list, header_ptr->encoded_header_size,
                                                  payload_state_ptr->linear_buffer_ptr + offset, byte_count);
+        assert(-1 != bytes_gathered); // -1 means error
         assert(bytes_gathered <= byte_count);
         payload_state_ptr->data_bytes_received += bytes_gathered;
     }
@@ -373,7 +381,7 @@ static void FreePayloadBuffer(CdiSgList* sgl_ptr)
         // them at a time. This function is only called by PollThread().
         CdiConnectionState* con_state_ptr = memory_state_ptr->cdi_endpoint_handle->connection_state_ptr;
 
-        if (memory_state_ptr->buffer_type == kCdiLinearBuffer) {
+        if (kCdiLinearBuffer == memory_state_ptr->buffer_type) {
             // Return the linear buffer to its pool; its address is in the singular SGL entry.
             if (sgl_ptr->sgl_head_ptr && sgl_ptr->sgl_head_ptr->address_ptr) {
                 CdiPoolPut(con_state_ptr->linear_buffer_pool, sgl_ptr->sgl_head_ptr->address_ptr);
@@ -522,7 +530,9 @@ static void QueueBackPressurePayloadToApp(CdiConnectionState* con_state_ptr, Cdi
 
     // Increment the dropped payload count. This value is also incremented in TxPayloadThread(), so use atomic
     // operation here.
-    CdiOsAtomicInc32(&endpoint_ptr->transfer_stats.payload_counter_stats.num_payloads_dropped);
+    CDI_STATIC_ASSERT(sizeof(uint64_t) == sizeof(endpoint_ptr->transfer_stats.payload_counter_stats.num_payloads_dropped),
+        "counter is 64 bit");
+    CdiOsAtomicInc64(&endpoint_ptr->transfer_stats.payload_counter_stats.num_payloads_dropped);
 
     // Place the callback data in the queue to be sent to the application.
     if (!CdiQueuePush(con_state_ptr->rx_state.active_payload_complete_queue_handle, (void*)&cb_data)) {
@@ -644,7 +654,7 @@ CdiReturnStatus RxCreateInternal(CdiConnectionProtocolType protocol_type, CdiRxC
         }
     }
 
-    if (kCdiStatusOk == rs && config_data_ptr->rx_buffer_type == kCdiLinearBuffer) {
+    if (kCdiStatusOk == rs && kCdiLinearBuffer == config_data_ptr->rx_buffer_type) {
         // Allocate an extra couple of buffers for payloads being reassembled.
         if (!CdiPoolCreate("Rx Linear Buffer Pool", RX_LINEAR_BUFFER_COUNT + 2, NO_GROW_SIZE, NO_GROW_COUNT,
                            config_data_ptr->linear_buffer_size, true, &con_state_ptr->linear_buffer_pool)) {
@@ -950,8 +960,8 @@ void RxPacketReceive(void* param_ptr, Packet* packet_ptr, EndpointMessageType me
         }
     }
 
-    if (still_ok && kCdiLinearBuffer == con_state_ptr->rx_state.config_data.rx_buffer_type &&
-             NULL != payload_state_ptr->linear_buffer_ptr) {
+    if (still_ok && kCdiLinearBuffer == con_state_ptr->rx_state.config_data.rx_buffer_type) {
+        assert(NULL != payload_state_ptr->linear_buffer_ptr);
         // Gather this packet into the linear receive buffer.
         still_ok = CopyToLinearBuffer(con_state_ptr, packet_ptr, payload_state_ptr, &decoded_header);
     }

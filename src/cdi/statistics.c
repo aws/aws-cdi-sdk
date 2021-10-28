@@ -22,6 +22,8 @@
 #include "internal_log.h"
 #include "t_digest.h"
 
+#include <inttypes.h>
+
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
@@ -199,7 +201,7 @@ static void SendToCdiMetricsService(StatisticsState* stats_state_ptr, int destin
  *
  * @return The return value is not used.
  */
-static THREAD StatsThread(void* ptr)
+static CDI_THREAD StatsThread(void* ptr)
 {
     StatsThreadArgs* args_ptr = (StatsThreadArgs*)ptr;
     StatisticsState* stats_state_ptr = args_ptr->stats_state_ptr;
@@ -214,7 +216,7 @@ static THREAD StatsThread(void* ptr)
     signal_array[1] = stats_state_ptr->destination_info[args_ptr->metrics_destination_idx].thread_exit_signal;
 
     uint64_t base_time = CdiOsGetMilliseconds();
-    int interval_counter = 0;
+    uint64_t interval_counter = 0;
 
     uint32_t wait_time_ms = args_ptr->stats_period_ms;
     uint32_t signal_index = 0;
@@ -227,13 +229,13 @@ static THREAD StatsThread(void* ptr)
             // Got timeout (CDI_OS_SIG_TIMEOUT). Send latest stats to all registered callbacks.
             args_ptr->send_stats_message_ptr(stats_state_ptr, args_ptr->metrics_destination_idx);
             interval_counter++;
-            uint64_t next_start_time = base_time + (interval_counter * args_ptr->stats_period_ms) +
-                                       args_ptr->stats_period_ms;
+            uint64_t next_start_time = base_time + (interval_counter * (uint64_t)args_ptr->stats_period_ms) +
+                                       (uint64_t)args_ptr->stats_period_ms;
 
             uint64_t current_time = CdiOsGetMilliseconds();
             if (current_time > next_start_time) {
                 uint32_t late_time_ms = (uint32_t)(current_time - next_start_time);
-                CDI_LOG_THREAD(kLogError, "Connection[%s] Gather stats late by[%d] milliseconds.",
+                CDI_LOG_THREAD(kLogError, "Connection[%s] Gather stats late by [%"PRIu32"]ms.",
                                con_state_ptr->saved_connection_name_str, late_time_ms);
                 // Set new base time, reset interval counter and set wait time to zero (process next stat immediately).
                 base_time = current_time;
@@ -242,6 +244,16 @@ static THREAD StatsThread(void* ptr)
             } else {
                 // Calculate remaining wait time in order to stay on cadence.
                 wait_time_ms = next_start_time - current_time;
+
+                // Assure wait time is never greater than stats_period_ms.
+                if (wait_time_ms > args_ptr->stats_period_ms) {
+                    CDI_LOG_THREAD(kLogWarning, "Connection[%s] Wait time rolled. Wait time [%"PRIu32"]ms versus"
+                                   " stats period [%"PRIu32"]ms.", con_state_ptr->saved_connection_name_str,
+                                   wait_time_ms, args_ptr->stats_period_ms);
+                    wait_time_ms = args_ptr->stats_period_ms;
+                    base_time = current_time;
+                    interval_counter = 0;
+                }
             }
         }
     }
@@ -465,7 +477,7 @@ void StatsGatherPayloadStatsFromConnection(CdiEndpointState* endpoint_ptr, bool 
         if (max_latency_microsecs != 0 && elapsed_time > max_latency_microsecs) {
             payload_late = true;
             CDI_LOG_THREAD(kLogWarning,
-                           "Connection[%s] Stream[%s] Payload[%lu] was late by[%llu] microseconds. Max[%llu]",
+                           "Connection[%s] Stream[%s] Payload[%lu] was late by [%"PRIu64"]us. Max [%"PRIu64"]us.",
                            endpoint_ptr->connection_state_ptr->saved_connection_name_str, endpoint_ptr->stream_name_str,
                            counter_stats_ptr->num_payloads_transferred,
                            elapsed_time - max_latency_microsecs, max_latency_microsecs);
@@ -493,7 +505,8 @@ void StatsGatherPayloadStatsFromConnection(CdiEndpointState* endpoint_ptr, bool 
         counter_stats_ptr->num_bytes_transferred += bytes_transferred;
     } else {
         // This value is also incremented in TxPayloadThread(), so use atomic operation here.
-        CdiOsAtomicInc32(&counter_stats_ptr->num_payloads_dropped);
+        CDI_STATIC_ASSERT(sizeof(uint64_t) == sizeof(counter_stats_ptr->num_payloads_dropped), "counter is 64 bit");
+        CdiOsAtomicInc64(&counter_stats_ptr->num_payloads_dropped);
     }
 
     // Done with stats data, so release the lock.

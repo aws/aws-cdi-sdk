@@ -70,7 +70,7 @@ static inline uint64_t TaiNowMicroseconds()
  *
  * @return The return value is not used.
  */
-THREAD ReceiveBufferThread(void* ptr)
+CDI_THREAD ReceiveBufferThread(void* ptr)
 {
     ReceiveBufferState* state_ptr = (ReceiveBufferState*)ptr;
 
