@@ -76,6 +76,7 @@
     <ClCompile Include="..\src\cdi\rx_reorder_payloads.c" />
     <ClCompile Include="..\src\cdi\test_unit_avm_api.c" />
     <ClCompile Include="..\src\cdi\test_unit_list.c" />
+    <ClCompile Include="..\src\cdi\test_unit_logger.c" />
     <ClCompile Include="..\src\cdi\test_unit_rx_reorder_packets.c" />
     <ClCompile Include="..\src\cdi\test_unit_rx_reorder_payloads.c" />
     <ClCompile Include="..\src\cdi\test_unit_sgl.c" />

@@ -21,6 +21,7 @@
 
 #include "run_test.h"
 
+#include <assert.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -50,7 +51,7 @@ typedef struct {
     uint8_t** tx_buffer_ptr;   ///< The address of the transmit buffer pointer; its value is assigned to the SGL's
                                ///  address pointer and updated to account for the SGL's size.
     int payload_buffer_size;   ///< The number of bytes in this SGL to be divided among the SGL entries.
-    CdiBufferType buffer_type; ///< The type of buffer configured; if linear, only a sigle SGL entry is created while
+    CdiBufferType buffer_type; ///< The type of buffer configured; if linear, only a single SGL entry is created while
                                ///  the SGL type creates several.
 } PoolInitArgs;
 
@@ -61,6 +62,21 @@ typedef struct {
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
+
+/**
+ * Create a unique thread name for an Rx or Tx thread.
+ *
+ * @param direction Either "Rx" or "Tx".
+ * @param number Unique number for this thread.
+ *
+ * @return Returns the generated name.
+ */
+static char* ThreadName(const char* direction, int number)
+{
+    static char buf[CDI_MAX_THREAD_NAME];
+    snprintf(buf, CDI_MAX_THREAD_NAME, "Test%s%2d", direction, number);
+    return buf;
+}
 
 /**
  * Create resources that are common to both Tx and Rx connections.
@@ -137,8 +153,8 @@ static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int
     }
 
     int time_pos_x = 16; // Set starting X-position of elapsed time digits "00:00:00" as used in first line below:
-    const char* line1_str = "| Elapsed Time: 00:00:00  |                         Payload Latency (us)                  |      | Connection | Control |";
-    const char* line2_str = "|      Payload Counts     |    Overall    |                 Most Recent Series            |      |            | Command |";
+    const char* line1_str = "| Elapsed Time: 00:00:00  |                         Payload Latency (us)                  |       | Connection | Control |";
+    const char* line2_str = "|      Payload Counts     |    Overall    |                 Most Recent Series            |       |            | Command |";
     const char* line3_str = "| Success | Errors | Late |  Min  |  Max  |  Min  |  P50  |  P90  |  P99  |  Max  | Count | CPU%%  | Drop Count | Retries |";
     //       Example values: |00000000 |0000000 |00000 |000000 |000000 |000000 |000000 |000000 |000000 |000000 | 0000  | 00(00) |     0000   |  0000
     // NOTE: The "CPU%" contains two values. The first value is the CPU load of the poll thread for the specific
@@ -203,6 +219,7 @@ static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int
 
 /**
  * Pool operator function that gets called once for each item during the creation of the transmit buffer SGL pool.
+ * Updates context_ptr->tx_buffer_ptr as a side-effect.
  *
  * @param context_ptr pointer to the structure containing all of the values passed into CdiPoolCreateAndInitItems() for
  *                    a given connection's transmit buffer pool.
@@ -212,8 +229,9 @@ static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int
  */
 static bool InitPoolSgl(const void* context_ptr, void* item_ptr)
 {
-    bool ret = true;
+    assert(item_ptr);
 
+    bool ret = true;
     const PoolInitArgs* args_ptr = (PoolInitArgs*)context_ptr;
     CdiSgList* sgl_ptr = (CdiSgList*)item_ptr;
 
@@ -244,9 +262,7 @@ static bool InitPoolSgl(const void* context_ptr, void* item_ptr)
     ret = (0 == buffer_remaining && 0 < entry_count && entry_count <= max_entry_count);
 
     // Allocate memory for real SGL entries.
-    const size_t s1 = sizeof(CdiSglEntry);
-    const size_t s2 = s1 * entry_count;
-    CdiSglEntry* sgl_entry_ptr = (CdiSglEntry*)CdiOsMemAllocZero(s2);
+    CdiSglEntry* sgl_entry_ptr = (CdiSglEntry*)CdiOsMemAllocZero(sizeof(CdiSglEntry) * entry_count);
     if (sgl_entry_ptr && ret) {
         // Shuffle the entries. The final one is the same in source and destination, the others are reversed.
         for (int i = 0 ; i < entry_count - 1 ; i++) {
@@ -259,10 +275,13 @@ static bool InitPoolSgl(const void* context_ptr, void* item_ptr)
         sgl_entry_ptr[entry_count - 1].next_ptr = NULL;  // Terminate the list.
 
         // Set list to reference allocated entries.
-        sgl_ptr->sgl_head_ptr = &sgl_entry_ptr[0];
+        sgl_ptr->sgl_head_ptr = &sgl_entry_ptr[0]; // DestroyPoolSgl will free this.
         sgl_ptr->sgl_tail_ptr = &sgl_entry_ptr[entry_count - 1];
         sgl_ptr->total_data_size = args_ptr->payload_buffer_size;
     } else {
+        if (sgl_entry_ptr) {
+            CdiOsMemFree(sgl_entry_ptr);
+        }
         ret = false;
     }
 
@@ -285,8 +304,9 @@ static bool DestroyPoolSgl(const void* context_ptr, void* item_ptr)
     CdiSgList* sgl_ptr = (CdiSgList*)item_ptr;
 
     // Free the CdiSglEntry array allocated in InitPoolSgl().
-    CdiOsMemFree(sgl_ptr->sgl_head_ptr);
-
+    if (sgl_ptr->sgl_head_ptr) {
+        CdiOsMemFree(sgl_ptr->sgl_head_ptr);
+    }
     return true;
 }
 
@@ -348,9 +368,23 @@ static bool CreateTxBufferPools(TestConnectionInfo* connection_info_ptr, uint8_t
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
+/**
+ * Helper function to up-quantize an integer value.
+ *
+ * @param value   The value to quantize up.
+ * @param quantum The number to calculate a multiple of.
+ *
+ * @return The smallest multiple of quantum equal to or greater than value.
+ */
+static int NextMultipleOf(int value, int quantum)
+{
+    assert(value > 0);
+    return quantum * ((value - 1) / quantum + 1);
+}
+
+
 bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entries, int num_connections)
 {
-    CdiAdapterHandle adapter_handle = NULL;
     bool got_error = false;
 
     // Create a data structure for all connection info that we can assign the test settings to.
@@ -366,7 +400,6 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
         got_error = true;
     }
 
-
     if (!got_error) {
         bool wait_for_all_connections = false;
 
@@ -375,19 +408,19 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
             // Create connection data structure, add its pointer to the connections array, and initialize its elements.
             connection_info_array[i].my_index = i;
             connection_info_array[i].pass_status = true;
+            connection_info_array[i].num_payload_errors = 0;
             // Set the config_payload_skip_count to the user's input skip number so we will send config data on the
             // first payload.
-            int num_streams = test_settings_ptr->number_of_streams;
-            for (int j = 0; j < num_streams; j++) {
+            for (int j = 0; j < test_settings_ptr[i].number_of_streams; j++) {
                 connection_info_array[i].stream_info[j].config_payload_skip_count =
-                                                        test_settings_ptr->stream_settings[j].config_skip;
+                                                        test_settings_ptr[i].stream_settings[j].config_skip;
             }
             // Copy test settings into connection_info_array.
             connection_info_array[i].test_settings_ptr = &test_settings_ptr[i];
             // The maximum expected payload count after all transactions are sent is the number of transactions across
             // all streams.
             connection_info_array[i].total_payloads = connection_info_array[i].test_settings_ptr->number_of_streams *
-                                                        connection_info_array[i].test_settings_ptr->num_transactions;
+                                                      connection_info_array[i].test_settings_ptr->num_transactions;
 
             // If any of the connections use a shared thread, then setup to delay transmitting payloads until after all
             // connections have been established.
@@ -416,11 +449,12 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                 StreamSettings* stream_settings_ptr = &connection_info_array[i].test_settings_ptr->stream_settings[j];
 
                 // Round up to the nearest pattern.
-                stream_info_ptr->payload_buffer_size = IntDivCeil(stream_settings_ptr->payload_size,
-                                                                    BYTES_PER_PATTERN_WORD) * BYTES_PER_PATTERN_WORD;
+                stream_info_ptr->payload_buffer_size = NextMultipleOf(stream_settings_ptr->payload_size,
+                                                                      BYTES_PER_PATTERN_WORD);
 
                 // All streams within a connection have the same direction (Rx/Tx).
                 if (connection_info_array[i].test_settings_ptr->tx) {
+                    have_tx = true;
                     // Calculate the required size of each buffer and keep a running total of memory required so it can
                     // later be allocated using the adapter. Round buffer size up so each can be 8 byte aligned. See
                     // CdiCoreNetworkAdapterInitialize().
@@ -432,9 +466,8 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                     payload_pool_size++; // Make payload pool one larger than maximum simultaneous payloads.
 
                     stream_info_ptr->tx_pool_buffer_size = payload_pool_size *
-                        IntDivCeil(stream_info_ptr->payload_buffer_size, sizeof(uint64_t)) * sizeof(uint64_t);
+                        NextMultipleOf(stream_info_ptr->payload_buffer_size, sizeof(uint64_t));
                     total_tx_payload_bytes += stream_info_ptr->tx_pool_buffer_size;
-                    have_tx = true;
 
                     // Check if Transmitter has an inconsistent riff file configuration. This is checked here because
                     // there is no enforced ordering between the --riff and --file_read options. This is only checked
@@ -453,26 +486,27 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                                         connection_info_array[i].test_settings_ptr->stream_settings[j].payload_size;
 
                 // Default this setting to the video sample rate of 90kHz if it isn't set by test_args.
-                if (connection_info_array[i].test_settings_ptr->stream_settings[j].rtp_sample_rate == 0) {
+                if (0 == connection_info_array[i].test_settings_ptr->stream_settings[j].rtp_sample_rate) {
                     connection_info_array[i].test_settings_ptr->stream_settings[j].rtp_sample_rate =
                                                                                               PCR_VIDEO_SAMPLE_RATE;
                 }
             }
         }
 
-        if (total_tx_payload_bytes == 0 && have_tx) {
+        if (0 == total_tx_payload_bytes && have_tx) {
             got_error = true;
         }
     }
 
-    CdiAdapterData* adapter_data_ptr = &GetGlobalTestSettings()->adapter_data;
-
     // Register the adapter.
+    CdiAdapterHandle adapter_handle = NULL;
+    CdiAdapterData* adapter_data_ptr = &GetGlobalTestSettings()->adapter_data;
     if (!got_error) {
         CDI_LOG_THREAD(kLogInfo, "Registering an adapter.");
         adapter_data_ptr->tx_buffer_size_bytes = total_tx_payload_bytes;
         got_error = (kCdiStatusOk != CdiCoreNetworkAdapterInitialize(adapter_data_ptr, &adapter_handle));
     }
+
     // If the we are still happy at this point, then start up all the connections and run the tests.
     if (!got_error) {
         // Get pointer to Tx buffer allocated by adapter. Will use to allocate Tx payload memory pools for all
@@ -491,7 +525,8 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                     connection_info_ptr->config_data.rx.adapter_handle = adapter_handle;
 
                     // Start the thread that creates the Rx connection and checks received payloads.
-                    got_error = !CdiOsThreadCreate(TestRxCreateThread, &connection_info_ptr->thread_id, "TestRx",
+                    char* TestRx = ThreadName("Rx", connection_index);
+                    got_error = !CdiOsThreadCreate(TestRxCreateThread, &connection_info_ptr->thread_id, TestRx,
                                                    connection_info_ptr, NULL);
                     if (got_error) {
                         CDI_LOG_THREAD(kLogError, "Failed to create test receiver thread");
@@ -507,7 +542,8 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                     // Start the thread that creates the Tx connection and associated resources and sends requested
                     // payloads.
                     if (!got_error) {
-                        got_error = !CdiOsThreadCreate(TestTxCreateThread, &connection_info_ptr->thread_id, "TestTx",
+                        char* TestTx = ThreadName("Tx", connection_index);
+                        got_error = !CdiOsThreadCreate(TestTxCreateThread, &connection_info_ptr->thread_id, TestTx,
                                                        connection_info_ptr, NULL);
                         if (got_error) {
                             CDI_LOG_THREAD(kLogError, "Failed to create test transmitter thread");
@@ -528,8 +564,10 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
         // Roll up the pass/fail status words into one status and free Tx buffer pools.
         for (int connection_index = 0; connection_index < num_connections; connection_index++) {
             TestConnectionInfo* connection_info_ptr = &connection_info_array[connection_index];
+            TestSettings* test_settings_ptr = connection_info_ptr->test_settings_ptr;
             got_error = got_error || !connection_info_ptr->pass_status;
-            int num_streams = connection_info_ptr->test_settings_ptr->number_of_streams;
+            got_error = got_error || (0 != connection_info_ptr->num_payload_errors && !test_settings_ptr->keep_alive);
+            int num_streams = test_settings_ptr->number_of_streams;
             for (int j = 0; j < num_streams; j++) {
                 TestConnectionStreamInfo* stream_info_ptr = &connection_info_ptr->stream_info[j];
                 if (stream_info_ptr->tx_pool_handle) {

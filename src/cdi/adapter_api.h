@@ -384,6 +384,11 @@ struct CdiAdapterState {
     /// @brief The maximum number of SGL entries that can be used to represent a single Tx packet of data.
     int maximum_tx_sgl_entries;
 
+    /// @brief The size of any required message prefix buffer space that an application must provide in front of all
+    /// message send and receive buffers for use by the provider. The contents of the prefix space should
+    /// be treated as opaque. This will be zero for providers that don't support prefix mode.
+    int msg_prefix_size;
+
     /// @brief If true, tx_buffer_ptr is using hugepages, otherwise it is using heap memory.
     bool tx_buffer_is_hugepages;
 

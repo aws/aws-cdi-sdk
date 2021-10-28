@@ -60,10 +60,6 @@ typedef struct CdiSinglyLinkedListEntry CdiSinglyLinkedListEntry;
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * @brief Creates a queue. Memory is allocated by this function.
  *
@@ -260,9 +256,5 @@ CDI_INTERFACE void CdiQueueDebugDisable(CdiQueueHandle handle);
  * @param handle Queue handle.
  */
 CDI_INTERFACE void CdiQueueDestroy(CdiQueueHandle handle);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_QUEUE_API_H__

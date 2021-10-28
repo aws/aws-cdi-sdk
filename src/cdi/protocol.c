@@ -113,22 +113,22 @@ void ProtocolVersionDestroy(CdiProtocolHandle protocol_handle)
 int ProtocolPayloadHeaderInit(CdiProtocolHandle protocol_handle, CdiRawPacketHeader* header_ptr,
                               const TxPayloadState* payload_state_ptr)
 {
-    CdiProtocolState* state_ptr = (CdiProtocolState*)protocol_handle;
-    return (state_ptr->api_ptr->header_init)(header_ptr, payload_state_ptr);
+    CdiProtocolState* protocol_ptr = (CdiProtocolState*)protocol_handle;
+    return (protocol_ptr->api_ptr->header_init)(header_ptr, payload_state_ptr);
 }
 
 void ProtocolPayloadHeaderDecode(CdiProtocolHandle protocol_handle, void* encoded_data_ptr, int encoded_data_size,
                                  CdiDecodedPacketHeader* dest_header_ptr)
 {
-    CdiProtocolState* state_ptr = (CdiProtocolState*)protocol_handle;
-    (state_ptr->api_ptr->header_decode)(encoded_data_ptr, encoded_data_size, dest_header_ptr);
+    CdiProtocolState* protocol_ptr = (CdiProtocolState*)protocol_handle;
+    (protocol_ptr->api_ptr->header_decode)(encoded_data_ptr, encoded_data_size, dest_header_ptr);
 }
 
 void ProtocolPayloadPacketRxReorderInfo(CdiProtocolHandle protocol_handle, const CdiRawPacketHeader* header_ptr,
                                         CdiPacketRxReorderInfo* ret_info_ptr)
 {
-    CdiProtocolState* state_ptr = (CdiProtocolState*)protocol_handle;
-    (state_ptr->api_ptr->rx_reorder_info)(header_ptr, ret_info_ptr);
+    CdiProtocolState* protocol_ptr = (CdiProtocolState*)protocol_handle;
+    (protocol_ptr->api_ptr->rx_reorder_info)(header_ptr, ret_info_ptr);
 }
 
 

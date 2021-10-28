@@ -21,6 +21,7 @@
 #include "adapter_api.h"
 #include "adapter_efa_probe.h"
 #include "internal.h"
+#include "internal_utility.h"
 #include "private.h"
 
 //*********************************************************************************************************************
@@ -128,7 +129,7 @@ void PayloadPacketizerDestroy(CdiPacketizerStateHandle packetizer_state_handle)
 }
 
 bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizerStateHandle packetizer_state_handle,
-                                CdiRawPacketHeader* header_ptr, CdiPoolHandle packet_sgl_entry_pool_handle,
+                                char* header_ptr, CdiPoolHandle packet_sgl_entry_pool_handle,
                                 TxPayloadState* payload_state_ptr, CdiSgList* packet_sgl_ptr,
                                 bool* ret_is_last_packet_ptr)
 {
@@ -161,9 +162,15 @@ bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizer
             packetizer_state_ptr->packet_entry_hdr_ptr->next_ptr = NULL;
             packetizer_state_ptr->packet_entry_hdr_ptr->internal_data_ptr = NULL;
 
+            // Include message prefix buffer space in header part.
+            int msg_prefix_size = payload_state_ptr->cdi_endpoint_handle->adapter_endpoint_ptr->adapter_con_state_ptr->\
+                                  adapter_state_ptr->msg_prefix_size;
+            packetizer_state_ptr->header_size = msg_prefix_size;
+
             // Initialize the protocol specific packet header data.
             payload_state_ptr->payload_packet_state.packet_id = payload_state_ptr->cdi_endpoint_handle->tx_state.packet_id;
-            packetizer_state_ptr->header_size = ProtocolPayloadHeaderInit(protocol_handle, header_ptr, payload_state_ptr);
+            packetizer_state_ptr->header_size += ProtocolPayloadHeaderInit(protocol_handle,
+                (CdiRawPacketHeader*)(header_ptr + msg_prefix_size), payload_state_ptr);
 
             // Setup SGL entry for our header and add it to the packet SGL.
             packetizer_state_ptr->packet_entry_hdr_ptr->address_ptr = header_ptr;
@@ -174,16 +181,15 @@ bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizer
             // entries.
             packetizer_state_ptr->max_payload_bytes =
                 packet_state_ptr->maximum_packet_byte_size - packetizer_state_ptr->header_size;
-            if (payload_state_ptr->pattern_size_bytes > 0) {
+            if (payload_state_ptr->group_size_bytes > 0) {
                 // If the pattern size is larger than the max payload then do not modify the payload size.
-                if (payload_state_ptr->pattern_size_bytes <= packetizer_state_ptr->max_payload_bytes) {
-                    packetizer_state_ptr->max_payload_bytes = packetizer_state_ptr->max_payload_bytes /
-                                                              payload_state_ptr->pattern_size_bytes *
-                                                              payload_state_ptr->pattern_size_bytes;
+                if (payload_state_ptr->group_size_bytes <= packetizer_state_ptr->max_payload_bytes) {
+                    packetizer_state_ptr->max_payload_bytes = PrevMultipleOf(packetizer_state_ptr->max_payload_bytes,
+                                                                             payload_state_ptr->group_size_bytes);
                 } else {
                     CDI_LOG_THREAD(kLogWarning,
                                    "Payload unit size [%d] bytes is larger than available packet data [%d] bytes",
-                                   payload_state_ptr->pattern_size_bytes, packetizer_state_ptr->max_payload_bytes);
+                                   payload_state_ptr->group_size_bytes, packetizer_state_ptr->max_payload_bytes);
                 }
             }
 

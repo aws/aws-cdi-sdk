@@ -15,7 +15,6 @@
 
 #include "internal_utility.h"
 
-#include <assert.h>
 #include <stddef.h>
 
 #include "adapter_api.h"
@@ -80,7 +79,6 @@ static const CdiEnumStringKey* UtilityKeyGetArray(InternalEnumStringKeyTypes key
         case kKeyProbeState:                key_array_ptr = probe_state_key_array; break;
         case kKeyProbeCommand:              key_array_ptr = probe_command_key_array; break;
         case kKeyEndpointManagerCommand:    key_array_ptr = endpoint_manager_command_key_array; break;
-        default: assert(false);
     }
     return key_array_ptr;
 }

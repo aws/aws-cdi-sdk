@@ -38,26 +38,39 @@ extern CdiReturnStatus TestUnitRxReorderPackets(void);
 extern CdiReturnStatus TestUnitRxReorderPayloads(void);
 /// External declarations.
 extern CdiReturnStatus TestUnitList(void);
+/// External declarations.
+extern CdiReturnStatus TestUnitLogger(void);
 
 /// Type used as a pointer to function that runs a unit test.
 typedef CdiReturnStatus (*RunTestAPI)(void);
+
+/// Enum/name/function keys.
+typedef struct {
+    int enum_value;         ///< Enumerated value.
+    const char* test_name;  ///< Display name.
+    RunTestAPI test_runner; ///< Corresponding runner function.
+} RunTestParams;
 
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
 
-/// Enum/string keys for CdiConnectionStatus.
-static const CdiEnumStringKey test_unit_name_key_array[] = {
-    { kTestUnitAll,                 "All" },
-    { kTestUnitAvmApi,              "AvmApi" },
-    { kTestUnitSgl,                 "Sgl" },
-    { kTestUnitTimeout,             "Timeout" },
-    { kTestUnitTDigest,             "TDigest" },
-    { kTestUnitRxpacketReorder,     "RxPacketReorder" },
-    { kTestUnitRxPayloadReorder,    "RxPayloadReorder" },
-    { kTestUnitList,                "CdiList" },
-    { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
+/// Enum/string keys for CdiTestUnitRun.
+static const RunTestParams tests[] = {
+    { kTestUnitAll,                 "All",              NULL },
+    { kTestUnitAvmApi,              "AvmApi",           TestUnitAvmApi },
+    { kTestUnitSgl,                 "Sgl",              TestUnitSgl },
+    { kTestUnitTimeout,             "Timeout",          TestUnitTimeout },
+    { kTestUnitTDigest,             "TDigest",          TestUnitTDigest },
+    { kTestUnitRxpacketReorder,     "RxPacketReorder",  TestUnitRxReorderPackets },
+    { kTestUnitRxPayloadReorder,    "RxPayloadReorder", TestUnitRxReorderPayloads },
+    { kTestUnitList,                "List",             TestUnitList },
+    { kTestUnitLogger,              "Logger",           TestUnitLogger },
+    { CDI_INVALID_ENUM_VALUE, NULL, NULL } // End of the array
 };
+
+/// Enum/string keys for CdiConnectionStatus.
+static CdiEnumStringKey test_unit_name_key_array[sizeof(tests)/sizeof(tests[0])] = { 0 };
 
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
@@ -66,24 +79,25 @@ static const CdiEnumStringKey test_unit_name_key_array[] = {
 /**
  * @brief Log a pass/fail status message.
  *
- * @param test_name Test name
- * @param test_api Pointer to test function to call to run the test.
+ * @param test_key Key identifying a test.
  *
  * @return true if success, otherwise false.
  */
-static bool RunTest(CdiTestUnitName test_name, RunTestAPI test_api)
+static bool RunTest(CdiTestUnitName test_key)
 {
-    CDI_LOG_THREAD(kLogInfo, "Starting unit test [%s].", CdiUtilityKeyEnumToString(kKeyTestUnit, test_name));
+    const char* test_name = tests[test_key].test_name;
+    RunTestAPI test_runner = tests[test_key].test_runner;
+
+    CDI_LOG_THREAD(kLogInfo, "Starting unit test [%s].", test_name);
 
     // Run the test.
-    CdiReturnStatus rs = (test_api)();
+    CdiReturnStatus rs = (test_runner)();
 
     if (kCdiStatusOk == rs) {
-        CDI_LOG_THREAD(kLogInfo, "Unit test [%s] passed.", CdiUtilityKeyEnumToString(kKeyTestUnit, test_name));
+        CDI_LOG_THREAD(kLogInfo, "Unit test [%s] passed.", test_name);
         return true;
     } else {
-        CDI_LOG_THREAD(kLogInfo, "Unit test [%s] failed. Reason[%s].",
-                       CdiUtilityKeyEnumToString(kKeyTestUnit, test_name), CdiCoreStatusToString(rs));
+        CDI_LOG_THREAD(kLogInfo, "Unit test [%s] failed. Reason[%s].", test_name, CdiCoreStatusToString(rs));
     }
     return false;
 }
@@ -94,6 +108,10 @@ static bool RunTest(CdiTestUnitName test_name, RunTestAPI test_api)
 
 const CdiEnumStringKey* CdiTestUnitGetKeyArray(void)
 {
+    for (size_t i=0; i<sizeof(tests)/sizeof(tests[0]); ++i) {
+        test_unit_name_key_array[i].enum_value = tests[i].enum_value;
+        test_unit_name_key_array[i].name_str = tests[i].test_name;
+    }
     return test_unit_name_key_array;
 }
 
@@ -101,32 +119,15 @@ bool CdiTestUnitRun(CdiTestUnitName test_name)
 {
     bool pass = true;
 
-    if (kTestUnitAvmApi == test_name) {
-        if (!RunTest(kTestUnitAvmApi, TestUnitAvmApi)) pass = false;
-    }
-    if (kTestUnitSgl == test_name) {
-        if (!RunTest(kTestUnitSgl, TestUnitSgl)) pass = false;
-    }
-    if (kTestUnitTimeout == test_name) {
-        if (!RunTest(kTestUnitTimeout, TestUnitTimeout)) pass = false;
-    }
-    if (kTestUnitTDigest == test_name) {
-        if (!RunTest(kTestUnitTDigest, TestUnitTDigest)) pass = false;
-    }
-    if (kTestUnitRxpacketReorder == test_name) {
-        if (!RunTest(kTestUnitRxpacketReorder, TestUnitRxReorderPackets)) pass = false;
-    }
-    if (kTestUnitRxPayloadReorder == test_name) {
-        if (!RunTest(kTestUnitRxPayloadReorder, TestUnitRxReorderPayloads)) pass = false;
-    }
-    if (kTestUnitList == test_name) {
-        if (!RunTest(kTestUnitList, TestUnitList)) pass = false;
+    switch (test_name) {
+        case kTestUnitAll:
+            for (int i=1; i < kTestUnitLast; i++) {
+                pass = pass && CdiTestUnitRun(i);
+            }
+            break;
+        default:
+            pass = RunTest(test_name);
     }
 
-    if (kTestUnitAll == test_name) {
-        for (int i=1; i < kTestUnitLast; i++) {
-            pass = pass && CdiTestUnitRun(i);
-        }
-    }
     return pass;
 }

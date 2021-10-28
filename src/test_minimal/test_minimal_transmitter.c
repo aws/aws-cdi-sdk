@@ -11,6 +11,7 @@
 */
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdbool.h>
 
 #include "cdi_baseline_profile_01_00_api.h"
@@ -201,7 +202,7 @@ static void ProcessCoreTxCallback(TestConnectionInfo* connection_info_ptr, const
         uint64_t timeout_time = connection_info_ptr->payload_start_time + connection_info_ptr->test_settings.tx_timeout;
         uint64_t current_time = CdiOsGetMicroseconds();
         if (current_time > timeout_time) {
-            CDI_LOG_THREAD(kLogError, "Payload [%d] late by [%llu]microseconds.", count, current_time - timeout_time);
+            CDI_LOG_THREAD(kLogError, "Payload [%d] late by [%"PRIu64"]us.", count, current_time - timeout_time);
             connection_info_ptr->payload_error = true;
         }
     }

@@ -23,17 +23,19 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
-/// Used to define API interface export for windows variant.
-#if defined(_WIN32)
+/// Specify C linkage when compiling as C++ and define API interface export for Windows.
+#if defined(_WIN32) && defined(__cplusplus)
+#define CDI_INTERFACE extern "C" __declspec (dllexport)
+#elif defined(_WIN32)
 #define CDI_INTERFACE __declspec (dllexport)
+#elif defined(__cplusplus)
+#define CDI_INTERFACE extern "C"
 #else
 #define CDI_INTERFACE
 #endif
 
 /// Used to define an invalid enum found.
 #define CDI_INVALID_ENUM_VALUE  (-1)
-/// Used to define the maximum length of an audio group enum string.
-#define MAX_AUDIO_GROUP_STR_SIZE (10)
 
 /// @brief Forward structure declaration to create pointer to PTP timestamp.
 typedef struct CdiPtpTimestamp CdiPtpTimestamp;
@@ -42,8 +44,8 @@ typedef struct CdiPtpTimestamp CdiPtpTimestamp;
  * @brief Type used for holding arrays of enums and related string representations.
  */
 typedef struct {
-        int enum_value;       ///< Enumerated value.
-        const char* name_str; ///< Corresponding string representation.
+    int enum_value;       ///< Enumerated value.
+    const char* name_str; ///< Corresponding string representation.
 } CdiEnumStringKey;
 
 /**
@@ -74,11 +76,6 @@ typedef enum {
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
-
-#ifdef __cplusplus
-extern "C"
-{
-#endif
 
 /**
  * Function used to get a pointer to a key-value array of a type specified by key_type.
@@ -159,9 +156,5 @@ static inline const char* CdiUtilityBoolToString(bool b)
 {
     return b ? "true" : "false";
 }
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_UTILITY_API_H__

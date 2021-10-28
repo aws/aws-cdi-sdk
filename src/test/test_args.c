@@ -31,6 +31,7 @@
 #include "cdi_test.h"
 #include "cdi_utility_api.h"
 #include "optarg.h"
+#include "riff.h"
 #include "test_common.h"
 #include "test_console.h"
 #include "utilities_api.h"
@@ -146,8 +147,8 @@ static void PrintUsageVideo(const OptDef* opt_array_ptr, const OptArg* opt_ptr)
         .minor = 0
     };
     if (opt_ptr->num_args) {
-        if (!CdiAvmParseBaselineVersionString(opt_ptr->args_array[0], &version)) {
-            TestConsoleLog(kLogError, "Invalid --help_video xx.xx version.", opt_ptr->args_array[0]);
+        if (kCdiStatusOk != CdiAvmValidateBaselineVersionString(kCdiAvmVideo, opt_ptr->args_array[0], &version)) {
+            TestConsoleLog(kLogError, "Invalid --help_video version [%s].", opt_ptr->args_array[0]);
             return;
         }
     }
@@ -203,8 +204,8 @@ static void PrintUsageAudio(const OptDef* opt_array_ptr, const OptArg* opt_ptr)
         .minor = 0
     };
     if (opt_ptr->num_args) {
-        if (!CdiAvmParseBaselineVersionString(opt_ptr->args_array[0], &version)) {
-            TestConsoleLog(kLogError, "Invalid --help_audio xx.xx version.", opt_ptr->args_array[0]);
+        if (kCdiStatusOk != CdiAvmValidateBaselineVersionString(kCdiAvmAudio, opt_ptr->args_array[0], &version)) {
+            TestConsoleLog(kLogError, "Invalid --help_audio version [%s].", opt_ptr->args_array[0]);
             return;
         }
     }
@@ -229,10 +230,17 @@ static void PrintUsageAudio(const OptDef* opt_array_ptr, const OptArg* opt_ptr)
 }
 
 /**
- * @brief Prints the RIFF file help message.
+ * @brief Prints the audio usage message.
+ *
+ * @param opt_ptr Pointer to option argument.
  */
-static void PrintRiffHelp(void)
+static void PrintRiffHelp(const OptArg* opt_ptr)
 {
+    if (opt_ptr->num_args) {
+        ReportRiffFileContents(opt_ptr->args_array[0]);
+        return;
+    }
+
     TestConsoleLog(kLogInfo, "");
     TestConsoleLog(kLogInfo, "The RIFF file format is made up of chunks. Every chunk consists of a");
     TestConsoleLog(kLogInfo, "four character code followed by a 32 bit integer that indicates the");
@@ -254,9 +262,8 @@ static void PrintRiffHelp(void)
     TestConsoleLog(kLogInfo, "  <ChunkN='ANC '><ChunkN size 4B><ChunkN data of chunk-n size   >");
     TestConsoleLog(kLogInfo, "  ...............................................................");
     TestConsoleLog(kLogInfo, "");
-    TestConsoleLog(kLogInfo, "NOTE1: Transmitting RIFF files is only supported when using '--buffer_type LINEAR'.");
-    TestConsoleLog(kLogInfo, "NOTE2: If the transmitter is sending RIFF payloads the receiver must always use");
-    TestConsoleLog(kLogInfo, "        the --riff option or payload size errors could be generated.");
+    TestConsoleLog(kLogInfo, "NOTE: If the transmitter is sending RIFF payloads the receiver must also use");
+    TestConsoleLog(kLogInfo, "      the --riff option or payload size errors could be generated.");
     TestConsoleLog(kLogInfo, "");
     TestConsoleLog(kLogInfo, "For additional RIFF file information please see "
                              "https://johnloomis.org/cpe102/asgn/asgn1/riff.html.");
@@ -271,7 +278,7 @@ static void PrintStatsHelp(const OptDef* opt_array_ptr)
 {
     TestConsoleLog(kLogInfo, "");
     TestConsoleLog(kLogInfo, "Usage for --stats_... options:");
-    PrintOption(&opt_array_ptr[kTestOptStatsConfigCloudWatch]);
+    PrintOption(&opt_array_ptr[kTestOptionStatsConfigCloudWatch]);
     TestConsoleLog(kLogInfo, "");
     TestConsoleLog(kLogInfo, "To specify the stats gathering period for a connection, use the --stats_period option.");
     TestConsoleLog(kLogInfo, "");
@@ -353,8 +360,8 @@ static OptDef my_options[] =
         "the first transaction. Then skip this number of transactions before sending\n"
         "(or receiving) config data again."},
     { "ka",   "keep_alive",   0, NULL,               NULL,
-        "For the given connection, Tx continues sending transactions even when a payload\n"
-        "error is detected. This option is disabled by default."},
+        "For the given connection, Tx continues sending payloads and Rx continues receiving payloads\n"
+        "even when a payload error is detected. This option is disabled by default."},
     { "ad",   "adapter",      1, "<adapter type>",   NULL,
         "Global option. Choose an adapter for the test to run all connections on."},
     { "bt",   "buffer_type",  1, "<buffer type>",    NULL,
@@ -405,8 +412,7 @@ static OptDef my_options[] =
     { "riff", "riff",         0,  NULL,              NULL,
         "This option specifies that the file passed to --file_read or --file_write will\n"
         "be treated as a RIFF file. RIFF formatted files specify the size of each payload\n"
-        "instead of using --payload_size for fixed payload sizes. Transmitting RIFF files\n"
-        "is only supported with '--buffer_type LINEAR'. The receiver must always use the\n"
+        "instead of using --payload_size for fixed payload sizes. The receiver must also use the\n"
         "--riff option if the transmitter is sending RIFF payloads or else receiver\n"
         "payload size checking will fail.\n"
         "NOTE: See --help_riff for more information on expected file formatting."},
@@ -451,6 +457,11 @@ static OptDef my_options[] =
         "<namespace> <region> <dimension domain>\n"
         "Use --help_stats for more detailed help for this option."},
 #endif
+    { "nopud", "no_payload_user_data", 0, NULL,      NULL,
+        "Global option. To implement certain checks cdi_test uses the payload_user_data field that\n"
+        "is part of each payload. When cdi_test is used as a receiver for CDI from an application\n"
+        "other than cdi_test, these checks are expected to fail.\n"
+        "Use --no_payload_user_data to disable these checks."},
     { "h",    "help",         0, NULL,               NULL, "Print the usage message."},
     { "hv",   "help_video",   0, NULL,               NULL, "Print the specific usage message for the --avm_video option."},
     { "ha",   "help_audio",   0, NULL,               NULL, "Print the specific usage message for the --avm_audio option."},
@@ -495,7 +506,7 @@ static bool IsBaseNNumber(const char* str, int* base_n_num_ptr, const int base)
         *base_n_num_ptr = base_n_num;
     }
 
-    return *end_ptr == '\0';
+    return 0 == *end_ptr;
 }
 
 
@@ -531,7 +542,7 @@ bool Is64BitBaseNNumber(const char* str, uint64_t* base_n_num_ptr, const int bas
         *base_n_num_ptr = base_n_num;
     }
 
-    return *end_ptr == '\0';
+    return 0 == *end_ptr;
 }
 
 
@@ -586,18 +597,18 @@ static bool IsBoolStringValid(const char* bool_str, bool* result)
 {
     bool ret = false;
 
-    if (strlen(bool_str) == 1) {
-        if (bool_str[0] == '1') {
+    if (1 == strlen(bool_str)) {
+        if ('1' == bool_str[0]) {
             ret = true;
             *result = true;
-        } else if (bool_str[0] == '0') {
+        } else if ('0' == bool_str[0]) {
             ret = true;
             *result = false;
         }
-    } else if (CdiOsStrCaseCmp(bool_str, "true") == 0) {
+    } else if (0 == CdiOsStrCaseCmp(bool_str, "true")) {
         ret = true;
         *result = true;
-    } else if (CdiOsStrCaseCmp(bool_str, "false") == 0) {
+    } else if (0 == CdiOsStrCaseCmp(bool_str, "false")) {
         ret = true;
         *result = false;
     }
@@ -702,24 +713,6 @@ static void SetConnectionRatePeriods(TestSettings* test_settings_ptr)
                                                            / test_settings_ptr->rate_numerator;
 }
 
-/**
- * Return an empty string if the string specified is NULL, otherwise the specified string is returned. This allows a
- * simple way to use a string variable that may be NULL as a "%s" parameter to the TestConsoleLog() function.
- *
- * @param source_str Pointer to source string
- *
- * @return Pointer to source_str if it is not NULL, otherwise returns a pointer to an empty string.
- */
-static const char* GetEmptyStringIfNull(const char* source_str)
-{
-    static const char empty_str[] = "";
-
-    if (NULL == source_str) {
-        return empty_str;
-    }
-
-    return source_str;
-}
 
 /**
  * @brief Converts the CdiAvmAudioSampleRate enum into a period value in nanoseconds.
@@ -831,13 +824,13 @@ static bool GetLogComponents(const char* component_str, CdiLogComponent* log_com
 
             // Search for existing component.
             CdiLogComponent component = CdiUtilityStringToEnumValue(log_component_key_array, entry_str);
-            if ((int)component != CDI_INVALID_ENUM_VALUE) {
+            if (CDI_INVALID_ENUM_VALUE != (int)component) {
 
                 // If the component does not already exist, add to the array.
                 if (!LogComponentExists(log_component_array_ptr, &component)) {
                     log_component_array_ptr[i] = component;
                     i++;
-                } else if (component == kLogComponentGeneric) {
+                } else if (kLogComponentGeneric == component) {
                     TestConsoleLog(kLogWarning, "--log_component (-lc) argument [%s] is applied by default.",
                                     entry_str);
                 } else {
@@ -928,7 +921,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
     const char* connection_name_str = test_settings_ptr->connection_name_str;
 
     // Check the thread core setting, and let the user know if it isn't specified.
-    if (test_settings_ptr->thread_core_num == OPTARG_INVALID_CORE) {
+    if (OPTARG_INVALID_CORE == test_settings_ptr->thread_core_num) {
         TestConsoleLog(kLogInfo, "Connection[%s]: The (optional) --core (-core) argument not specified, so this "
                                 "connection will not be pinned to a core.", connection_name_str);
     }
@@ -938,23 +931,23 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
         TestConsoleLog(kLogInfo, "Connection[%s]: The (optional) --connection_name (-name) argument not specified, one"
                        " will be automatically generated.\n For receive connections, the destination port will be used."
                        " For transmit connections, the destination IP address\n and destination port will be used.",
-                       GetEmptyStringIfNull(test_settings_ptr->connection_name_str));
+                       CdiGetEmptyStringIfNull(test_settings_ptr->connection_name_str));
     }
 
     // Check to make sure num_transactions is set.
-    if (test_settings_ptr->num_transactions == 0) {
+    if (0 == test_settings_ptr->num_transactions) {
         TestConsoleLog(kLogInfo, "Connection[%s]: The --num_transactions (-tnum) option is either unspecified or set "
                                  "to 0. Setting test to run forever.", connection_name_str);
     }
 
     // Check to make sure the test rate is set.
-    if (test_settings_ptr->rate_numerator == 0) {
+    if (0 == test_settings_ptr->rate_numerator) {
         TestConsoleLog(kLogError, "Connection[%s]: The --rate (-rt) option is required.", connection_name_str);
         arg_error = true;
     }
 
     // Check to make sure the timeout is set, but default if it is not to using the rate value specified.
-    if (!arg_error && test_settings_ptr->tx_timeout == 0) {
+    if (!arg_error && 0 == test_settings_ptr->tx_timeout) {
         test_settings_ptr->tx_timeout = (1000000 * test_settings_ptr->rate_denominator) /
                                                    test_settings_ptr->rate_numerator;
         TestConsoleLog(kLogWarning, "Connection[%s]: The (optional) --tx_timeout (-to) option not specified, so "
@@ -978,7 +971,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
             // Receiver.
             TestConsoleLog(kLogInfo, "Connection[%s]: The --rx (-rx) option used, so this connection is in RX mode.",
                                      connection_name_str);
-            if (test_settings_ptr->remote_adapter_ip_str != NULL) {
+            if (NULL != test_settings_ptr->remote_adapter_ip_str) {
                 TestConsoleLog(kLogError, "Connection[%s]: The --remote_ip (-rip) option cannot be used in RX mode.",
                                           connection_name_str);
                 arg_error = true;
@@ -996,7 +989,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
         }
 
         // For single endpoint connections, make sure --dest_port (-dpt) option is provided.
-        if (!test_settings_ptr->multiple_endpoints && test_settings_ptr->dest_port == 0) {
+        if (!test_settings_ptr->multiple_endpoints && 0 == test_settings_ptr->dest_port) {
             TestConsoleLog(kLogError, "Connection[%s]: The --dest_port (-dpt) option is required and must be non-zero.",
                                       connection_name_str);
             arg_error = true;
@@ -1010,7 +1003,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
         test_settings_ptr->buffer_type = kCdiSgl;
     }
 
-    if (test_settings_ptr->number_of_streams == 0) {
+    if (0 == test_settings_ptr->number_of_streams) {
         TestConsoleLog(kLogError, "Connection[%s]: You must create at least one stream for this connection using the "
                                   "--new_stream (-S) option", connection_name_str);
         arg_error = true;
@@ -1063,7 +1056,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
 
         // Check the pattern type.
         if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->pattern_type) {
-            if (stream_settings_ptr->file_read_str != NULL) {
+            if (NULL != stream_settings_ptr->file_read_str) {
                 stream_settings_ptr->pattern_type = kTestPatternNone;
             } else if (test_settings_ptr->tx) {
                 TestConsoleLog(kLogInfo, "Connection[%s]: In tx mode. No --file_read or --pattern (-pat) options were "
@@ -1076,15 +1069,15 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
                 stream_settings_ptr->pattern_type = kTestPatternNone;
             }
         // We error out if the --file_read option is used but a test pattern is specified.
-        } else if ((stream_settings_ptr->file_read_str != NULL) &&
-                   (stream_settings_ptr->pattern_type != kTestPatternNone)) {
+        } else if ((NULL != stream_settings_ptr->file_read_str) &&
+                   (kTestPatternNone != stream_settings_ptr->pattern_type)) {
             TestConsoleLog(kLogError, "Connection[%s]: A --pattern was set but --file_read option (-fr) was also used.",
                                       connection_name_str);
             arg_error = true;
         }
 
         // Check that the pattern start value is set, but default it if it is not.
-        if (stream_settings_ptr->pattern_start == 0) {
+        if (0 == stream_settings_ptr->pattern_start) {
             TestConsoleLog(kLogWarning, "Connection[%s]: The (optional) --pat_start (-pst) option not specified, so "
                                         "defaulting to 0.", connection_name_str);
             stream_settings_ptr->pattern_start = 0;
@@ -1145,7 +1138,7 @@ static ProgramExecutionStatus ParseHelpOptions(int argc, const char** argv_ptr, 
                 rv = kProgramExecutionStatusExitOk;
                 break;
             case kTestOptionHelpRiff:
-                PrintRiffHelp();
+                PrintRiffHelp(opt_ptr);
                 rv = kProgramExecutionStatusExitOk;
                 break;
             case kTestOptionHelpStats:
@@ -1160,12 +1153,6 @@ static ProgramExecutionStatus ParseHelpOptions(int argc, const char** argv_ptr, 
             default:
                 // Add do-nothing default statement to keep compiler from complaining about not enumerating all cases.
                 break;
-
-        }
-        // If an error occurs during parsing, even if it is not regarding a help option, arg_error will be true here.
-        // If that happens, then we print the usage message here.
-        if (kProgramExecutionStatusExitError == rv) {
-            PrintUsage(my_options, true);
         }
     }
     return rv;
@@ -1316,7 +1303,7 @@ static bool ParseGlobalOptions(int argc, const char** argv_ptr, OptArg* opt_ptr)
                 }
                 break;
 #ifndef CDI_NO_MONITORING
-            case kTestOptStatsConfigCloudWatch:
+            case kTestOptionStatsConfigCloudWatch:
                 global_test_settings_ptr->use_cloudwatch = true;
 
                 // Collect statistics parameters into stats_config structure. If "NULL" was specified set string to "\0".
@@ -1338,6 +1325,10 @@ static bool ParseGlobalOptions(int argc, const char** argv_ptr, OptArg* opt_ptr)
                 }
                 break;
 #endif
+            case kTestOptionNoPayloadUserData:
+                global_test_settings_ptr->no_payload_user_data = true;
+                break;
+
             default:
                 // Add do-nothing default statement to keep compiler from complaining about not enumerating all cases.
                 break;
@@ -1427,26 +1418,28 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
 
     // Output global test settings.
     TestConsoleLog(kLogInfo, "Global Test Settings:");
-    TestConsoleLog(kLogInfo, "    Test Loops    : %d", global_test_settings_ptr->num_loops);
-    TestConsoleLog(kLogInfo, "    Multiple Logs : %s",
+    TestConsoleLog(kLogInfo, "    Test Loops       : %d", global_test_settings_ptr->num_loops);
+    TestConsoleLog(kLogInfo, "    Payload user data: %s",
+                    CdiUtilityBoolToString(!global_test_settings_ptr->no_payload_user_data));
+    TestConsoleLog(kLogInfo, "    Multiple Logs    : %s",
                     CdiUtilityBoolToString(!global_test_settings_ptr->use_single_connection_log_file));
-    TestConsoleLog(kLogInfo, "    Log Base Name : %s",\
+    TestConsoleLog(kLogInfo, "    Log Base Name    : %s",\
                     CdiGetEmptyStringIfNull(global_test_settings_ptr->base_log_filename_str));
-    TestConsoleLog(kLogInfo, "    Log Callback  : %s",
+    TestConsoleLog(kLogInfo, "    Log Callback     : %s",
                     CdiUtilityBoolToString(global_test_settings_ptr->base_log_method == kLogMethodCallback));
-    TestConsoleLog(kLogInfo, "    Log Level     : %s",
-                    GetEmptyStringIfNull(CdiUtilityEnumValueToString(log_level_key_array,
+    TestConsoleLog(kLogInfo, "    Log Level        : %s",
+                    CdiGetEmptyStringIfNull(CdiUtilityEnumValueToString(log_level_key_array,
                                         global_test_settings_ptr->log_level)));
     TestConsoleLog(kLogInfo, "    Log Component : %s", log_components_array);
 #ifndef CDI_NO_MONITORING
     TestConsoleLog(kLogInfo, "    CloudWatch Enabled: %s",
                    CdiUtilityBoolToString(global_test_settings_ptr->use_cloudwatch));
     TestConsoleLog(kLogInfo, "        Namespace     : %s",
-                   GetEmptyStringIfNull(global_test_settings_ptr->cloudwatch_config.namespace_str));
+                   CdiGetEmptyStringIfNull(global_test_settings_ptr->cloudwatch_config.namespace_str));
     TestConsoleLog(kLogInfo, "        Region        : %s",
-                   GetEmptyStringIfNull(global_test_settings_ptr->cloudwatch_config.region_str));
+                   CdiGetEmptyStringIfNull(global_test_settings_ptr->cloudwatch_config.region_str));
     TestConsoleLog(kLogInfo, "     Dimension Domain : %s",
-                   GetEmptyStringIfNull(global_test_settings_ptr->cloudwatch_config.dimension_domain_str));
+                   CdiGetEmptyStringIfNull(global_test_settings_ptr->cloudwatch_config.dimension_domain_str));
 #endif
     // Output connection based test settings.
     TestConsoleLog(kLogInfo, "");
@@ -1472,15 +1465,15 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
                        CdiGetEmptyStringIfNull(test_settings_ptr[i].connection_name_str));
         TestConsoleLog(kLogInfo, "    Keep Alive   : %s", CdiUtilityBoolToString(test_settings_ptr[i].keep_alive));
         TestConsoleLog(kLogInfo, "    Adapter      : %s",
-                       GetEmptyStringIfNull(CdiUtilityKeyEnumToString(kKeyAdapterType,
+                       CdiGetEmptyStringIfNull(CdiUtilityKeyEnumToString(kKeyAdapterType,
                                                                       adapter_data_ptr->adapter_type)));
-        TestConsoleLog(kLogInfo, "    Buff Type    : %s", GetEmptyStringIfNull(CdiUtilityKeyEnumToString(kKeyBufferType,
+        TestConsoleLog(kLogInfo, "    Buff Type    : %s", CdiGetEmptyStringIfNull(CdiUtilityKeyEnumToString(kKeyBufferType,
                                                                                test_settings_ptr[i].buffer_type)));
-        TestConsoleLog(kLogInfo, "    Local IP     : %s", GetEmptyStringIfNull(adapter_data_ptr->adapter_ip_addr_str));
+        TestConsoleLog(kLogInfo, "    Local IP     : %s", CdiGetEmptyStringIfNull(adapter_data_ptr->adapter_ip_addr_str));
         if (!test_settings_ptr[i].multiple_endpoints) {
             TestConsoleLog(kLogInfo, "    Dest Port    : %d", test_settings_ptr[i].dest_port);
             TestConsoleLog(kLogInfo, "    Remote IP    : %s",
-                        GetEmptyStringIfNull(test_settings_ptr[i].remote_adapter_ip_str));
+                        CdiGetEmptyStringIfNull(test_settings_ptr[i].remote_adapter_ip_str));
         }
         if (test_settings_ptr[i].shared_thread_id > 0) {
             TestConsoleLog(kLogInfo, "    Shared Thread ID : %d", test_settings_ptr[i].shared_thread_id);
@@ -1515,7 +1508,7 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
                 if (test_settings_ptr[i].multiple_endpoints) {
                     TestConsoleLog(kLogInfo, "        Dest Port    : %d", stream_settings_ptr->dest_port);
                     TestConsoleLog(kLogInfo, "        Remote IP    : %s",
-                                GetEmptyStringIfNull(stream_settings_ptr->remote_adapter_ip_str));
+                                CdiGetEmptyStringIfNull(stream_settings_ptr->remote_adapter_ip_str));
                 }
                 TestConsoleLog(kLogInfo, "        Payload Size : %d", stream_settings_ptr->payload_size);
                 if (kCdiAvmVideo == stream_settings_ptr->avm_data_type) {
@@ -1568,12 +1561,12 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
                 TestConsoleLog(kLogInfo, "        Payload Size : %d", stream_settings_ptr->payload_size);
             }
             TestConsoleLog(kLogInfo, "        Pattern      : %s",
-                           GetEmptyStringIfNull(TestPatternEnumToString(stream_settings_ptr->pattern_type)));
+                           CdiGetEmptyStringIfNull(TestPatternEnumToString(stream_settings_ptr->pattern_type)));
             TestConsoleLog(kLogInfo, "        Pat Start    : 0x%llx", stream_settings_ptr->pattern_start);
             TestConsoleLog(kLogInfo, "        File Read    : %s",
-                           GetEmptyStringIfNull(stream_settings_ptr->file_read_str));
+                           CdiGetEmptyStringIfNull(stream_settings_ptr->file_read_str));
             TestConsoleLog(kLogInfo, "        File Write   : %s",
-                           GetEmptyStringIfNull(stream_settings_ptr->file_write_str));
+                           CdiGetEmptyStringIfNull(stream_settings_ptr->file_write_str));
         }
         TestConsoleLog(kLogInfo, "");
     }
@@ -2037,10 +2030,9 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 stream_settings_ptr->ancillary_data_params.version.major = 1;
                 stream_settings_ptr->ancillary_data_params.version.minor = 0;
                 if (opt.num_args > my_options[opt.option_index].num_args) {
-                    if (!CdiAvmParseBaselineVersionString(opt.args_array[0],
+                    if (kCdiStatusOk != CdiAvmValidateBaselineVersionString(kCdiAvmAncillary, opt.args_array[0],
                                                           &stream_settings_ptr->ancillary_data_params.version)) {
-                        TestConsoleLog(kLogError, "Invalid --avm_anc (-anc) argument [%s] for 'version'.",
-                                    opt.args_array[0]);
+                        TestConsoleLog(kLogError, "Invalid --avm_anc (-anc) version [%s].", opt.args_array[0]);
                         arg_error = true;
                     }
                 }
@@ -2094,11 +2086,6 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 break;
             case kTestOptionUseRiffFile:
                 stream_settings_ptr->riff_file = true;
-                if ((test_settings_ptr->buffer_type != kCdiLinearBuffer) && test_settings_ptr->tx) {
-                    TestConsoleLog(kLogError, "Transmitting RIFF files is only supported with linear buffers. Please "
-                                   "use '--buffer_type LINEAR' when transmitting RIFF files.");
-                    arg_error = true;
-                }
                 break;
             case kTestOptionFileRead:
                 stream_settings_ptr->file_read_str = opt.args_array[0];
@@ -2118,7 +2105,7 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                     if (!first_new_connection) {
                         // Increment the index so we are now collecting settings for the next connection.
                         connection_index++;
-                        if (connection_index == CDI_MAX_SIMULTANEOUS_CONNECTIONS) {
+                        if (CDI_MAX_SIMULTANEOUS_CONNECTIONS == connection_index) {
                             TestConsoleLog(kLogError, "Exceeded maximum simultaneous connections[%d].",
                                            CDI_MAX_SIMULTANEOUS_CONNECTIONS);
                             arg_error = true;
@@ -2165,7 +2152,7 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 }
                 first_new_stream = false;
                 break;
-            case kTestOptStatsConfigPeriod:
+            case kTestOptionStatsConfigPeriod:
                 // Collect statistics parameters into stats_config structure.
                 if(!IsIntStringValid(opt.args_array[0], &test_settings_ptr[connection_index].stats_period_seconds)) {
                     TestConsoleLog(kLogError, "Invalid --stats_period (-stp) argument [%s] for 'period seconds'.",
@@ -2192,8 +2179,9 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
             case kTestOptionLogLevel:
             case kTestOptionNumLoops:
 #ifndef CDI_NO_MONITORING
-            case kTestOptStatsConfigCloudWatch:
+            case kTestOptionStatsConfigCloudWatch:
 #endif
+            case kTestOptionNoPayloadUserData:
                 got_global_option = true;
         }
         if (!got_global_option && first_new_connection) {
@@ -2218,10 +2206,6 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
         for (int i=0; i<=connection_index; i++) {
             arg_error = !VerifyTestSettings(&test_settings_ptr[i]);
         }
-    }
-
-    if (arg_error) {
-        PrintUsage(my_options, true);
     }
 
     // Pass back how many connections we found.

@@ -74,7 +74,9 @@ static bool EfaEnqueueSendProbePackets(ProbeEndpointState* probe_ptr)
             work_request_ptr->sgl_entry.address_ptr = packet_ptr->efa_data;
 
             // Set the CDI common header.
-            CdiRawPacketHeader* header_ptr = (CdiRawPacketHeader*)packet_ptr->efa_data;
+            int msg_prefix_size = probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle->adapter_endpoint_ptr-> \
+                                  adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
+            CdiRawPacketHeader* header_ptr = (CdiRawPacketHeader*)((char*)packet_ptr->efa_data + msg_prefix_size);
             payload_state.payload_packet_state.payload_type = kPayloadTypeProbe;
             payload_state.payload_packet_state.payload_num = 0;
             payload_state.payload_packet_state.packet_sequence_num = packet_ptr->packet_sequence_num;

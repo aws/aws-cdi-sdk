@@ -18,6 +18,7 @@
 
 #include "test_receiver.h"
 
+#include <inttypes.h>
 #include <stdbool.h>
 
 #include "cdi_avm_api.h"
@@ -25,6 +26,7 @@
 #include "cdi_logger_api.h"
 #include "cdi_test.h"
 #include "fifo_api.h"
+#include "riff.h"
 #include "test_control.h"
 #include "utilities_api.h"
 
@@ -38,7 +40,7 @@
 typedef struct {
     int         stream_index; ///< Zero-based stream index related to this payload.
     CdiSgList   sgl; ///< Scatter-Gather-List of payload.
-} RxPayloadState;
+} TestRxPayloadState;
 
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
@@ -80,11 +82,7 @@ static bool TestRxBufferCheck(const CdiSgList* sgl_ptr, TestConnectionInfo* conn
 
     // We loop through the received SGL either way, but we only check the received data if the user has requested we
     // do so via either the --file_read or --pattern options.
-    bool check_data = stream_info_ptr->rx_expected_data_buffer_ptr != NULL;
-    TestPatternType pattern_type = stream_settings_ptr->pattern_type;
-    if (kTestPatternIgnore == pattern_type || kTestPatternNone == pattern_type) {
-        check_data = false;
-    }
+    bool check_data = NULL != pattern_ptr;
 
     // We loop through the SGL and write to a file if a file exists as long as the write operation is not failing.
     // If a data error occurs the file output is continues to be written.
@@ -104,11 +102,12 @@ static bool TestRxBufferCheck(const CdiSgList* sgl_ptr, TestConnectionInfo* conn
         }
     }
 
-    // Stop looping on this SGL when we hit the end of the list.
-    while (this_sgl_ptr != NULL) {
+    int num_sgl_entries = 0;
+    while (NULL != this_sgl_ptr) {
         // Keep a running count of the number of bytes we have found in each SGL entry.  We check later to make sure
         // this matches the total number expected.
         bytes_in_sgl_payload += this_sgl_ptr->size_in_bytes;
+        num_sgl_entries++;
 
         // If the user has specified a file to write received data to, then write the data from this SGL entry
         // to that file.
@@ -155,14 +154,24 @@ static bool TestRxBufferCheck(const CdiSgList* sgl_ptr, TestConnectionInfo* conn
         return_val = false;
     }
 
+    // With linear buffer mode we expect exactly one SGL entry.
+    if (kCdiLinearBuffer == connection_info_ptr->test_settings_ptr->buffer_type && 1 != num_sgl_entries) {
+        TEST_LOG_CONNECTION(kLogError,
+            "Connection[%s] Stream ID[%d] SGL has [%d] entries but one is expected for LINEAR buffer type.",
+            test_settings_ptr->connection_name_str, stream_settings_ptr->stream_id, num_sgl_entries);
+        return_val = false;
+    }
+
     // Update receive payload pattern check buffer in preparation for the next payload. Note that this increments the
     // first word of the payload buffer.  The same behavior happens on the transmit side, where the payload's first
     // word is incremented before even the first payload is sent.
-    if (stream_info_ptr->rx_expected_data_buffer_ptr != NULL) {
+    if (NULL != stream_info_ptr->rx_expected_data_buffer_ptr) {
         if (stream_settings_ptr->riff_file && stream_info_ptr->user_data_read_file_handle) {
-            return_val = GetNextRiffPayloadSize(connection_info_ptr, stream_settings_ptr,
-                                                stream_info_ptr->user_data_read_file_handle,
-                                                &stream_info_ptr->next_payload_size);
+            if (!GetNextRiffPayloadSize(connection_info_ptr, stream_settings_ptr,
+                                        stream_info_ptr->user_data_read_file_handle,
+                                        &stream_info_ptr->next_payload_size)) {
+                return_val = false;
+            }
         }
         if (!GetNextPayloadDataLinear(connection_info_ptr, stream_settings_ptr->stream_id,
                                       stream_info_ptr->payload_count, stream_info_ptr->user_data_read_file_handle,
@@ -185,7 +194,7 @@ static bool TestRxBufferCheck(const CdiSgList* sgl_ptr, TestConnectionInfo* conn
  */
 static bool TestRxVerify(TestConnectionInfo* connection_info_ptr)
 {
-    RxPayloadState payload_state;
+    TestRxPayloadState payload_state;
     TestSettings* test_settings_ptr = connection_info_ptr->test_settings_ptr;
     int payload_count = 0;
 
@@ -205,6 +214,9 @@ static bool TestRxVerify(TestConnectionInfo* connection_info_ptr)
                 }
             }
 
+            // We want to count a payload error only once.
+            bool payload_error = false;
+
             // We sit here and wait for an SGL entry in the FIFO.  The FIFO is written by the receive callback routine
             // data checker function TestRxProcessCoreCallbackData() before returning.  When we can read from this
             // FIFO, we get the SGL pointer and check its data for correctness.  It is very important that, once we
@@ -215,20 +227,21 @@ static bool TestRxVerify(TestConnectionInfo* connection_info_ptr)
                 // Now check the received SGL data buffer for correctness based on expected pattern and payload size
                 // derived from command line arguments.  If we find an error, then mark the payload in error.
                 if (!TestRxBufferCheck(&payload_state.sgl, connection_info_ptr, payload_state.stream_index)) {
-                    connection_info_ptr->pass_status = false;
+                    payload_error = true;
                 }
 
                 // IMPORTANT: Now that we are done with the received SGL, free its memory.
                 if (payload_state.sgl.sgl_head_ptr) {
                     CdiReturnStatus rs = CdiCoreRxFreeBuffer(&payload_state.sgl);
-                    if (rs != kCdiStatusOk) {
+                    if (kCdiStatusOk != rs) {
                         TEST_LOG_CONNECTION(kLogError, "Connection[%s] Unable to free SGL buffer [%s].",
                                             test_settings_ptr->connection_name_str,
                                             CdiCoreStatusToString(rs));
-                        connection_info_ptr->pass_status = false;
+                        payload_error = true;
                     }
                 }
                 payload_count++;
+                connection_info_ptr->num_payload_errors += payload_error ? 1 : 0;
             } else {
                 // Got a connection shutdown signal. Clear it.
                 CdiOsSignalClear(connection_info_ptr->connection_shutdown_signal);
@@ -245,7 +258,7 @@ static bool TestRxVerify(TestConnectionInfo* connection_info_ptr)
  * additional verification by TestRxVerify(). This function is used in both the RAW and AVM receive payload flow.
  *
  * @param core_cb_data_ptr  Pointer to a CdiCoreCbData callback structure.
- * @param stream_index      The stream identifier.
+ * @param stream_index      The stream index.
  */
 static void TestRxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr, int stream_index)
 {
@@ -262,18 +275,30 @@ static void TestRxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr,
     // Note "err_msg_str" is a pointer to the error message string, which is only valid until this function returns.
     // To avoid doing a memcpy of it, we will simply evaluate the error status here.
     if (kCdiStatusOk != core_cb_data_ptr->status_code) {
-        TEST_LOG_CONNECTION(kLogError, "Connection[%s] RX Callback received error code[%d]. Msg[%s].",
-                            test_settings_ptr->connection_name_str, core_cb_data_ptr->status_code,
-                            core_cb_data_ptr->err_msg_str);
-        connection_info_ptr->pass_status = false;
+        const char* err_msg_str = core_cb_data_ptr->err_msg_str ? core_cb_data_ptr->err_msg_str :
+                                  CdiCoreStatusToString(core_cb_data_ptr->status_code);
+        TEST_LOG_CONNECTION(kLogError, "Connection[%s] Rx Callback received error code[%d]. Msg[%s].",
+                            test_settings_ptr->connection_name_str, core_cb_data_ptr->status_code, err_msg_str);
+
         // We received a bad payload but never the less it's still a payload so lets increment the count and shutdown
         // if the last payload is received.
+        connection_info_ptr->num_payload_errors++;
         TestIncPayloadCount(connection_info_ptr, stream_index);
         if (CdiOsSignalGet(connection_info_ptr->done_signal)) {
             CdiOsSignalSet(connection_info_ptr->connection_shutdown_signal);
         }
         return;
     }
+
+    // Connection start time needs to be known to predict the next timestamp in the series. Connection start time
+    // should never be zero after it is set since seconds is measuring seconds since 1970. Using the first timestamp
+    // received as base instead of the local system time to make the received timestamp fully predictable.
+    if (0 == stream_info_ptr->connection_start_time.seconds) {
+        stream_info_ptr->connection_start_time = core_cb_data_ptr->core_extra_data.origination_ptp_timestamp;
+    }
+
+    // We want to count a payload error only once.
+    bool payload_error = false;
 
     // Check if we think we are done or not, and if we are not done, then check the rest of the payload info.
     // We should not be here if we are already done, since receive connections are marked done at the end of processing
@@ -283,25 +308,19 @@ static void TestRxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr,
         TEST_LOG_CONNECTION(kLogError, "Connection[%s] Rx Connection is marked done, but we have received "
                                        "an unexpected payload.", test_settings_ptr->connection_name_str);
         connection_info_ptr->pass_status = false;
-    } else if (kTestPatternIgnore != pattern_type && kTestPatternNone != pattern_type) {
+    } else if (kTestPatternIgnore != pattern_type && !GetGlobalTestSettings()->no_payload_user_data) {
+
         // The transmit logic encodes the Tx payload counter and the respective connection into the payload_user_data
         // field of CdiCoreCbData.  We use our knowledge of how the Tx logic encodes those fields to decode them here
         // into local variables.
         int rx_connection = (int)(core_cb_data_ptr->core_extra_data.payload_user_data & 0xFF);
         int rx_payload_counter_8bit = (int)(core_cb_data_ptr->core_extra_data.payload_user_data >> 8) & 0xFF;
-        int rx_stream_id = (int)(int16_t)((core_cb_data_ptr->core_extra_data.payload_user_data >> 16) & 0xFFFF);
+        int rx_stream_id = (int16_t)((core_cb_data_ptr->core_extra_data.payload_user_data >> 16) & 0xFFFF);
         int rx_ptp_rate_num = (int)(core_cb_data_ptr->core_extra_data.payload_user_data >> 32);
         (void)rx_connection;
 
         // Verify the data from the core_extra_data field, which contains user-supplied PTP timestamp information.
         CdiPtpTimestamp current_ptp_timestamp = core_cb_data_ptr->core_extra_data.origination_ptp_timestamp;
-
-        // Connection start time needs to be known to predict the next timestamp in the series. Connection start time
-        // should never be zero after it is set since seconds is measuring seconds since 1970. Using the first timestamp
-        // received as base instead of the local system time to make the received timestamp fully predictable.
-        if (0 == stream_info_ptr->connection_start_time.seconds) {
-            stream_info_ptr->connection_start_time = current_ptp_timestamp;
-        }
 
         // Verify PTP timestamp.
         CdiPtpTimestamp expected_timestamp = GetPtpTimestamp(connection_info_ptr, stream_settings_ptr, stream_info_ptr,
@@ -314,7 +333,7 @@ static void TestRxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr,
                                 connection_info_ptr->payload_count, current_ptp_timestamp.seconds,
                                 current_ptp_timestamp.nanoseconds, expected_timestamp.seconds,
                                 expected_timestamp.nanoseconds);
-            connection_info_ptr->payload_error = true;
+            payload_error = true;
         }
 
         // Check that the received payload counter matches the lower 8-bits of the local payload counter.
@@ -323,16 +342,18 @@ static void TestRxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr,
                 "Connection[%s] Stream ID[%d] payload count[%d] does not match expected stream ID[%d] count[%d].",
                 test_settings_ptr->connection_name_str, rx_stream_id, rx_payload_counter_8bit,
                 stream_settings_ptr->stream_id, stream_info_ptr->payload_count & 0xFF);
-            connection_info_ptr->payload_error = true;
+            payload_error = true;
         }
 
         // Check that the received stream ID matches the expected stream ID.
         if (rx_stream_id != stream_settings_ptr->stream_id) {
-            TEST_LOG_CONNECTION(kLogError, "Connection[%s] stream ID[%d] does not match expected stream ID[%d].",
+            TEST_LOG_CONNECTION(kLogError, "Connection[%s] stream ID[%d] does not match received stream ID[%d].",
                                 test_settings_ptr->connection_name_str, stream_settings_ptr->stream_id, rx_stream_id);
-            connection_info_ptr->payload_error = true;
+            payload_error = true;
         }
     }
+
+    connection_info_ptr->num_payload_errors += payload_error ? 1 : 0;
 }
 
 /**
@@ -357,7 +378,7 @@ static void RxCoreCallbackCleanup(const CdiCoreCbData* core_cb_data_ptr, const C
 
     // Now send the SGL to the thread-specific FIFO where it will sit waiting for additional data checking by
     // TestRxVerify().
-    RxPayloadState payload_state = {
+    TestRxPayloadState payload_state = {
         .stream_index = stream_index,
         .sgl = *sgl_ptr
     };
@@ -425,7 +446,7 @@ static void VerifyAvmAudioConfiguration(TestConnectionInfo* connection_info_ptr,
 {
     TestSettings* test_settings_ptr = connection_info_ptr->test_settings_ptr;
 
-    if (audio_config_ptr == NULL) {
+    if (NULL == audio_config_ptr) {
         // If there is no audio config data, then error.
         TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream ID[%d]: Rx expected audio config data, but none detected.",
                             test_settings_ptr->connection_name_str, stream_settings_ptr->stream_id);
@@ -453,7 +474,7 @@ static void VerifyAvmAudioConfiguration(TestConnectionInfo* connection_info_ptr,
             connection_info_ptr->pass_status = false;
         }
         if (audio_config_ptr->sample_rate_khz != stream_settings_ptr->audio_params.sample_rate_khz) {
-            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected sample rate [%d] but got [%d].",
+            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected audio sample rate [%d] but got [%d].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
                                 stream_settings_ptr->audio_params.sample_rate_khz,
@@ -462,11 +483,11 @@ static void VerifyAvmAudioConfiguration(TestConnectionInfo* connection_info_ptr,
         }
         if (0 != memcmp(audio_config_ptr->language, stream_settings_ptr->audio_params.language,
                         sizeof(audio_config_ptr->language))) {
-            char language1_str[4] = { '\0', '\0', '\0', '\0' };
+            char language1_str[4] = { 0 };
             strncpy(language1_str, audio_config_ptr->language, 3);
-            char language2_str[4] = { '\0', '\0', '\0', '\0' };
+            char language2_str[4] = { 0 };
             strncpy(language2_str, stream_settings_ptr->audio_params.language, 3);
-            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected sample rate [%d] but got [%d].",
+            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected audio language [%s] but got [%s].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
                                 language1_str,
@@ -491,7 +512,7 @@ static void VerifyAvmAncillaryDataConfiguration(TestConnectionInfo* connection_i
 {
     TestSettings* test_settings_ptr = connection_info_ptr->test_settings_ptr;
 
-    if (anc_config_ptr == NULL) {
+    if (NULL == anc_config_ptr) {
         // If there is no ancillary config data, then error.
         TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream ID[%d]: Rx expected ancillary config data, but none detected.",
                             test_settings_ptr->connection_name_str, stream_settings_ptr->stream_id);
@@ -664,7 +685,7 @@ static void VerifyAvmVideoConfiguration(TestConnectionInfo* connection_info_ptr,
             connection_info_ptr->pass_status = false;
         }
         if (video_config_ptr->par_height != stream_settings_ptr->video_params.par_height) {
-            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected video PAR width [%d] but got [%d].",
+            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected video PAR height [%d] but got [%d].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
                                 stream_settings_ptr->video_params.par_height,
@@ -707,8 +728,8 @@ static void VerifyAvmVideoConfiguration(TestConnectionInfo* connection_info_ptr,
 }
 
 /**
- * This function validates an AVM payload. The pass_status of the TestConnectionInfo will be set to false if there is
- * an error in the payload.
+ * This function validates an AVM baseline configuration. The pass_status of the TestConnectionInfo will be set to false
+ * if there is an error in the configuration.
  *
  * @param cb_data_ptr Pointer to the CdiAvmRxCbData.
  * @param baseline_config_ptr Pointer to the baseline configuration structure.
@@ -729,12 +750,17 @@ static void VerifyAvmConfiguration(const CdiAvmRxCbData* cb_data_ptr, CdiAvmBase
     // defines how many payloads to skip after receiving config data before receiving it again.
     // Below, we manage the counter for skipping the requested number of payloads, and set the boolean receive_config
     // if this payload should have config data received with it.
-    bool receive_config = false;
+    bool expect_config = false;
     if (stream_info_ptr->config_payload_skip_count >= stream_settings_ptr->config_skip) {
         stream_info_ptr->config_payload_skip_count = 0;
-        receive_config = true;
+        expect_config = true;
     } else {
         stream_info_ptr->config_payload_skip_count++;
+    }
+
+    // Only perform this check when the payloads were sent by another cdi_test instance.
+    if (GetGlobalTestSettings()->no_payload_user_data) {
+        return;
     }
 
     // For whichever type of AVM data we got, we check the necessary data fields for correctness.
@@ -742,51 +768,65 @@ static void VerifyAvmConfiguration(const CdiAvmRxCbData* cb_data_ptr, CdiAvmBase
     switch (stream_settings_ptr->avm_data_type) {
         case kCdiAvmVideo:
             // Make sure config data is received if it's expected with this payload.
-            if (receive_config) {
+            if (expect_config && have_valid_config) {
                 CdiAvmVideoConfig* video_config_ptr = have_valid_config ? &baseline_config_ptr->video_config : NULL;
-                VerifyAvmVideoConfiguration(cb_data_ptr->core_cb_data.user_cb_param, video_config_ptr,
-                                            stream_settings_ptr, stream_index);
+                VerifyAvmVideoConfiguration(connection_info_ptr, video_config_ptr, stream_settings_ptr, stream_index);
             } else if (have_valid_config) {
                 // On config data skip payload - make sure there is no video config data.
                 TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected NO video config data, "
                                                "but found some.",
                                     test_settings_ptr->connection_name_str, stream_index);
                 connection_info_ptr->pass_status = false;
+            } else if (expect_config) {
+                TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected video config data, "
+                                               "but found none.",
+                                    test_settings_ptr->connection_name_str, stream_index);
+                connection_info_ptr->pass_status = false;
+
             }
             break;
         case kCdiAvmAudio:
             // Make sure config data is received if it's expected with this payload.
-            if (receive_config) {
+            if (expect_config && have_valid_config) {
                 CdiAvmAudioConfig* audio_config_ptr = have_valid_config ? &baseline_config_ptr->audio_config : NULL;
-                VerifyAvmAudioConfiguration(cb_data_ptr->core_cb_data.user_cb_param, audio_config_ptr,
-                                            stream_settings_ptr, stream_index);
+                VerifyAvmAudioConfiguration(connection_info_ptr, audio_config_ptr, stream_settings_ptr, stream_index);
             } else if (have_valid_config) {
                 // On config data skip payload - make sure there is no audio config data.
                 TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected NO audio config data, "
                                                "but found some.",
                                     test_settings_ptr->connection_name_str, stream_index);
                 connection_info_ptr->pass_status = false;
+            } else if (expect_config) {
+                TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected audio config data, "
+                                               "but found none.",
+                                    test_settings_ptr->connection_name_str, stream_index);
+                connection_info_ptr->pass_status = false;
             }
             break;
         case kCdiAvmAncillary:
             // Make sure config data is received if it's expected with this payload.
-            if (receive_config) {
+            if (expect_config && have_valid_config) {
                 CdiAvmAncillaryDataConfig* anc_config_ptr = have_valid_config ? &baseline_config_ptr->ancillary_data_config : NULL;
-                VerifyAvmAncillaryDataConfiguration(cb_data_ptr->core_cb_data.user_cb_param, anc_config_ptr,
-                                                    stream_settings_ptr, stream_index);
+                VerifyAvmAncillaryDataConfiguration(connection_info_ptr, anc_config_ptr, stream_settings_ptr, stream_index);
             } else if (have_valid_config) {
-                    TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected NO ancillary data config "
-                                                   "data, but found some.",
-                                        test_settings_ptr->connection_name_str, stream_index);
+                TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected NO ancillary data config data, "
+                                               "but found some.",
+                                    test_settings_ptr->connection_name_str, stream_index);
+                connection_info_ptr->pass_status = false;
+            } else if (expect_config) {
+                TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx expected ancillary data config data, "
+                                               "but found none.",
+                                    test_settings_ptr->connection_name_str, stream_index);
                 connection_info_ptr->pass_status = false;
             }
             break;
-        default:
+        case kCdiAvmNotBaseline:
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream[%d]: Rx invalid payload type. Timestamp[%u:%u].",
                                 test_settings_ptr->connection_name_str,
                                 stream_index,
                                 cb_data_ptr->core_cb_data.core_extra_data.origination_ptp_timestamp.seconds,
                                 cb_data_ptr->core_cb_data.core_extra_data.origination_ptp_timestamp.nanoseconds);
+            connection_info_ptr->pass_status = false;
     }
 }
 
@@ -831,12 +871,12 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
     }
 
     // Verify that a stream was found with the user-defined stream_id.
-    if (stream_settings_ptr == NULL) {
-        TEST_LOG_CONNECTION(kLogError, "Connection[%s]: No stream matching the endpoint[%llu] in this connection.",
+    if (NULL == stream_settings_ptr) {
+        TEST_LOG_CONNECTION(kLogError, "Connection[%s]: No stream matching the endpoint[%p] in this connection.",
                             test_settings_ptr->connection_name_str, cb_data_ptr->core_cb_data.connection_handle);
         connection_info_ptr->pass_status = false;
         if (kCdiStatusOk != cb_data_ptr->core_cb_data.status_code) {
-            TEST_LOG_CONNECTION(kLogError, "Connection[%s] RX Callback received error code[%d], Message[%s]",
+            TEST_LOG_CONNECTION(kLogError, "Connection[%s] Rx Callback received error code[%d], Message[%s]",
                                 test_settings_ptr->connection_name_str, cb_data_ptr->core_cb_data.status_code,
                                 CdiCoreStatusToString(cb_data_ptr->core_cb_data.status_code));
         }
@@ -860,9 +900,7 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
             }
         }
 
-        // Do not check payload data if pattern == NONE or pattern == IGNORE.
-        TestPatternType pattern = stream_settings_ptr->pattern_type;
-        if (kTestPatternNone != pattern && kTestPatternIgnore != pattern) {
+        if (connection_info_ptr->pass_status) {
             CdiAvmBaselineConfig* baseline_config_ptr = (NULL == cb_data_ptr->config_ptr) ? NULL : &baseline_config;
             VerifyAvmConfiguration(cb_data_ptr, baseline_config_ptr, stream_index);
         }
@@ -883,7 +921,7 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
 //*********************************************************************************************************************
 
 // This function creates an Rx connection and monitors received payloads, checking for pass/fail.
-THREAD TestRxCreateThread(void* arg_ptr)
+CDI_THREAD TestRxCreateThread(void* arg_ptr)
 {
     TestConnectionInfo* connection_info_ptr = (TestConnectionInfo*)arg_ptr;
     TestSettings* test_settings_ptr = connection_info_ptr->test_settings_ptr;
@@ -932,29 +970,32 @@ THREAD TestRxCreateThread(void* arg_ptr)
     connection_info_ptr->config_data.rx.stats_cb_ptr = TestStatisticsCallback;
     connection_info_ptr->config_data.rx.stats_user_cb_param = connection_info_ptr;
 
-    // Create a FIFO instance for the callback routine to pass SGL pointers to the this checking thread.
+    // Create a FIFO instance for the callback routine to pass SGL pointers to the checking thread.
     if (!got_error) {
-        got_error = !CdiFifoCreate("Test Payload RxPayloadState FIFO", CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION*10,
-                                   sizeof(RxPayloadState), NULL, NULL, &connection_info_ptr->fifo_handle);
+        got_error = !CdiFifoCreate("TestRxPayloadState FIFO", CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION*10,
+                                   sizeof(TestRxPayloadState), NULL, NULL, &connection_info_ptr->fifo_handle);
     }
 
     for (int stream_index=0; !got_error && stream_index<test_settings_ptr->number_of_streams; stream_index++) {
         StreamSettings* stream_settings_ptr = &test_settings_ptr->stream_settings[stream_index];
         TestConnectionStreamInfo* stream_info_ptr = &connection_info_ptr->stream_info[stream_index];
+        TestPatternType pattern_type = stream_settings_ptr->pattern_type;
+        bool need_expected_data_buffer = true;
+        if (NULL == stream_settings_ptr->file_read_str &&
+                (kTestPatternNone == pattern_type || kTestPatternIgnore == pattern_type)) {
+            need_expected_data_buffer = false;
+        }
         // If rx is doing payload data checking allocate a buffer and prepare buffer or file for data checking.
-        if (!got_error) {
-            if ((stream_settings_ptr->file_read_str != NULL) ||
-                                        (stream_settings_ptr->pattern_type != kTestPatternNone)) {
-                connection_info_ptr->stream_info[stream_index].rx_expected_data_buffer_ptr =
-                    CdiOsMemAlloc(stream_info_ptr->payload_buffer_size);
-                if (NULL == connection_info_ptr->stream_info[stream_index].rx_expected_data_buffer_ptr) {
-                    CDI_LOG_THREAD(kLogError, "Failed to allocate memory for user data buffer.");
-                    got_error = true;
-                } else {
-                    got_error = !PreparePayloadData(stream_settings_ptr, stream_info_ptr->payload_buffer_size,
-                                            &stream_info_ptr->user_data_read_file_handle,
-                                            stream_info_ptr->rx_expected_data_buffer_ptr);
-                }
+        if (!got_error && need_expected_data_buffer) {
+            connection_info_ptr->stream_info[stream_index].rx_expected_data_buffer_ptr =
+                CdiOsMemAlloc(stream_info_ptr->payload_buffer_size);
+            if (NULL == connection_info_ptr->stream_info[stream_index].rx_expected_data_buffer_ptr) {
+                CDI_LOG_THREAD(kLogError, "Failed to allocate memory for user data buffer.");
+                got_error = true;
+            } else {
+                got_error = !PreparePayloadData(stream_settings_ptr, stream_info_ptr->payload_buffer_size,
+                                        &stream_info_ptr->user_data_read_file_handle,
+                                        stream_info_ptr->rx_expected_data_buffer_ptr);
             }
         }
 
@@ -1063,9 +1104,10 @@ THREAD TestRxCreateThread(void* arg_ptr)
     CdiLogMultilineState handle;
     CDI_LOG_THREAD_MULTILINE_BEGIN(kLogInfo, &handle);
     CDI_LOG_MULTILINE(&handle, "Connection[%s] Rx Stats:", test_settings_ptr->connection_name_str);
-    CDI_LOG_MULTILINE(&handle, "Number of payloads transferred[%llu]", counter_stats_ptr->num_payloads_transferred);
-    CDI_LOG_MULTILINE(&handle, "Number of payloads dropped    [%llu]", counter_stats_ptr->num_payloads_dropped);
-    CDI_LOG_MULTILINE(&handle, "Number of payloads late       [%llu]", counter_stats_ptr->num_payloads_late);
+    CDI_LOG_MULTILINE(&handle, "Number of payloads transferred[%"PRIu64"]", counter_stats_ptr->num_payloads_transferred);
+    CDI_LOG_MULTILINE(&handle, "Number of payloads dropped    [%"PRIu64"]", counter_stats_ptr->num_payloads_dropped);
+    CDI_LOG_MULTILINE(&handle, "Number of payloads late       [%"PRIu64"]", counter_stats_ptr->num_payloads_late);
+    CDI_LOG_MULTILINE(&handle, "Number of payload errors      [%"PRIu64"]", connection_info_ptr->num_payload_errors);
     CDI_LOG_MULTILINE_END(&handle);
 
     // Destroy resources if they got created above.

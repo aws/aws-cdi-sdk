@@ -45,6 +45,9 @@
     <ClCompile Include="..\src\test_common\src\test_common.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\test\riff.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\test\cdi_test.h">
@@ -93,6 +96,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\cdi_baseline_profile_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\test\riff.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

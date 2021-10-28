@@ -38,8 +38,7 @@
 //*********************************************************************************************************************
 
 /**
- * This function sends the packet using the libfabric fi_tsendv or fi_sendv functions depending on whether
- * it is sending tagged or untagged packets.
+ * This function sends the packet using the libfabric fi_sendmsg function.
  *
  * @param endpoint_state_ptr Pointer to EFA endpoint state structure.
  * @param msg_iov_ptr   Pointer to vector structure containing the message to be sent.
@@ -63,10 +62,15 @@ static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec 
         endpoint_state_ptr->tx_state.tx_packets_sent_since_flush = 0; // Reset counter.
     }
 
+    assert(NULL != endpoint_state_ptr->tx_state.memory_region_ptr);
+    void* descs[MAX_TX_SGL_PACKET_ENTRIES];
     void *desc = fi_mr_desc(endpoint_state_ptr->tx_state.memory_region_ptr);
+    for (int i = 0; i < iov_count; ++i) {
+        descs[i] = desc;
+    }
     struct fi_msg msg = {
         .msg_iov = msg_iov_ptr,
-        .desc = &desc,
+        .desc = descs,
         .iov_count = iov_count,
         .addr = 0,
         .context = (void*)context_ptr,  // cast needed to override constness
@@ -231,7 +235,7 @@ CdiReturnStatus EfaTxEndpointClose(EfaEndpointState* endpoint_state_ptr)
 EndpointTransmitQueueLevel EfaGetTransmitQueueLevel(const AdapterEndpointHandle handle)
 {
     EfaEndpointState* endpoint_state_ptr = (EfaEndpointState*)handle->type_specific_ptr;
-    if (endpoint_state_ptr->tx_state.tx_packets_in_process == 0) {
+    if (0 == endpoint_state_ptr->tx_state.tx_packets_in_process) {
         return kEndpointTransmitQueueEmpty;
     } else if (endpoint_state_ptr->tx_state.tx_packets_in_process < SIMULTANEOUS_TX_PACKET_LIMIT) {
         return kEndpointTransmitQueueIntermediate;
@@ -290,12 +294,13 @@ CdiReturnStatus EfaTxEndpointStart(EfaEndpointState* endpoint_state_ptr)
     int count = 1;
     uint64_t flags = 0;
     void* context_ptr = NULL;
-    int ret = fi_av_insert(endpoint_state_ptr->address_vector_ptr,
+    int fi_ret = fi_av_insert(endpoint_state_ptr->address_vector_ptr,
                            (void*)endpoint_state_ptr->remote_ipv6_gid_array, count,
                            &endpoint_state_ptr->remote_fi_addr, flags, context_ptr);
-    if (count != ret) {
+    if (count != fi_ret) {
         // This is a fatal error.
-        CDI_LOG_THREAD(kLogError, "Failed to start Tx connection. fi_av_insert() failed[%d]", ret);
+        CDI_LOG_THREAD(kLogError, "Failed to start Tx connection. fi_av_insert() failed[%d (%s)]",
+            fi_ret, fi_strerror(-fi_ret));
         rs = kCdiStatusFatal;
     }
 

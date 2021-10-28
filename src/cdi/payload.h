@@ -111,9 +111,6 @@ void PayloadPacketizerDestroy(CdiPacketizerStateHandle packetizer_state_handle);
  */
 void PayloadPacketizerStateInit(CdiPacketizerStateHandle packetizer_state_handle);
 
-/// Forward reference of structure to allow pointer creation.
-typedef struct TxPayloadState TxPayloadState;
-
 /**
  * Get the next packet for a payload. Must use CdiPayloadPacketizerStateInit() for a new payload before using this
  * function. If false is returned, one of the pools from which required resources are taken is dry so this function
@@ -133,7 +130,7 @@ typedef struct TxPayloadState TxPayloadState;
  * @return true if packet returned, otherwise a pool was empty so false is returned.
  */
 bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizerStateHandle packetizer_state_handle,
-                                CdiRawPacketHeader* header_ptr, CdiPoolHandle packet_sgl_entry_pool_handle,
+                                char* header_ptr, CdiPoolHandle packet_sgl_entry_pool_handle,
                                 TxPayloadState* payload_state_ptr, CdiSgList* packet_sgl_ptr,
                                 bool* ret_is_last_packet_ptr);
 

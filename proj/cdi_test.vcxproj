@@ -208,6 +208,7 @@
   <ItemGroup>
     <ClCompile Include="..\src\test\cdi_test.c" />
     <ClCompile Include="..\src\test\optarg.c" />
+    <ClCompile Include="..\src\test\riff.c" />
     <ClCompile Include="..\src\test\run_test_generic.c" />
     <ClCompile Include="..\src\test\test_args.c" />
     <ClCompile Include="..\src\test\test_console.c" />
@@ -224,6 +225,7 @@
     <ClInclude Include="..\include\cdi_raw_api.h" />
     <ClInclude Include="..\src\test\cdi_test.h" />
     <ClInclude Include="..\src\test\optarg.h" />
+    <ClInclude Include="..\src\test\riff.h" />
     <ClInclude Include="..\src\test\run_test.h" />
     <ClInclude Include="..\src\test\test_args.h" />
     <ClInclude Include="..\src\test\test_console.h" />

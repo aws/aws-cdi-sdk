@@ -68,6 +68,27 @@
             "miDebuggerPath": "/usr/bin/gdb"
         },
         {
+            "name": "loopback",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/cdi_test.orig",
+            "args": ["@tests/cmds/socket_loopback_multistream.cmd"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [{"name":"LD_LIBRARY_PATH", "value":"${workspaceFolder}/build/lib"}],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            //"preLaunchTask": "gcc build active file",
+            "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
             "name": "Minimal Tx",
             "type": "cppdbg",
             "request": "launch",

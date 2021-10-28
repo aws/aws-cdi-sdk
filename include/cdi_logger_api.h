@@ -123,13 +123,46 @@ typedef struct {
  */
 #define CDI_LOG_MULTILINE_END(multiline_handle) CdiLoggerMultilineEnd(multiline_handle)
 
+/**
+ * @brief Macro that generates log output conditionally to the global log handle. This macro works by evaluating a
+ *        condition that the user provides, and assuming the condition is 'true', will filter messages to every 'number'
+ *        of occurrences. If no conditional logic is needed to filter logging, provide a value of 'true' as the
+ *        'condition' parameter.
+ */
+#define CDI_LOG_WHEN(log_level, condition, number, ...) \
+    do { \
+        static uint64_t log_event_count = 0; \
+        if (condition) { \
+            CdiOsAtomicInc64(&log_event_count); \
+            if (log_event_count % (number) == 1) { \
+                    CdiLogger(CdiLogGlobalGet(), kLogComponentGeneric, log_level, __FILE__, __LINE__, ##__VA_ARGS__); \
+            } \
+        } \
+    } while (0)
+
+/**
+ * @brief Macro that generates log output conditionally to a thread handle. This macro works by evaluating a condition
+ *        that the user provides, and assuming the condition is 'true', will filter messages to every 'number' of
+ *        occurrences. If no conditional logic is needed to filter logging, provide a value of 'true' as the 'condition'
+ *        parameter.
+ */
+#define CDI_LOG_THREAD_WHEN(log_level, condition, number, ...) \
+    do { \
+        static uint64_t log_event_count = 0; \
+        if (condition) { \
+            CdiOsAtomicInc64(&log_event_count); \
+            if (log_event_count % (number)== 1) { \
+                CdiLogger(CdiLoggerThreadLogGet(), kLogComponentGeneric, log_level, \
+                          __FILE__, __LINE__, ##__VA_ARGS__); \
+            } \
+        } \
+    } while (0)
+
+
+
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * Initialize the logger. Must be called once before using any other functions in the logger.
@@ -212,10 +245,9 @@ CDI_INTERFACE bool CdiLoggerThreadLogSet(CdiLogHandle handle);
 CDI_INTERFACE void CdiLoggerThreadLogUnset(void);
 
 /**
- * Associate the specified log with the calling thread. Subsequent calls to non-global CdiLog functions by this thread
- * will write to the specified log.
+ * Get log handle associated with the calling thread.
  *
- * @return  true successfully initialized; false if not.
+ * @return Log handle associated with calling thread or NULL when the logger has not been initialized.
  */
 CDI_INTERFACE CdiLogHandle CdiLoggerThreadLogGet(void);
 
@@ -250,7 +282,7 @@ CDI_INTERFACE void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const cha
  *
  * @param state_ptr Pointer to multiline state data created using CdiLoggerMultilineBegin().
  *
- * @return Pointer to log buffer.
+ * @return Pointer to log buffer or NULL when logger is disabled.
  */
 CDI_INTERFACE char* CdiLoggerMultilineGetBuffer(CdiLogMultilineState* state_ptr);
 
@@ -330,9 +362,5 @@ CDI_INTERFACE void CdiLoggerDestroyLogger(CdiLoggerHandle logger_handle);
  *              shutdown conditions, otherwise should always be false.
  */
 CDI_INTERFACE void CdiLoggerShutdown(bool force);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_LOGGER_API_API_H__

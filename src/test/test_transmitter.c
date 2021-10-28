@@ -22,10 +22,15 @@
 // The configuration.h file must be included first since it can have defines which affect subsequent files.
 #include "configuration.h"
 
+#include "cdi_avm_api.h"
+#include "cdi_core_api.h"
 #include "cdi_logger_api.h"
 #include "cdi_os_api.h"
+#include "cdi_raw_api.h"
 #include "cdi_utility_api.h"
-#include "run_test.h"
+
+#include "cdi_test.h"
+#include "riff.h"
 #include "test_control.h"
 #include "test_dynamic.h"
 #include "utilities_api.h"
@@ -52,7 +57,7 @@ typedef struct {
 //*********************************************************************************************************************
 
 /**
- * This function used when we are waiting for a signal, but also want to abort on a single other abort signal.
+ * This function is used when we are waiting for a signal, but also want to abort on a single other abort signal.
  *
  * @param this_signal  The signal we are waiting for.
  * @param abort_signal  The signal that will abort this wait.
@@ -106,30 +111,23 @@ static void FreePayloadResources(TestConnectionInfo* connection_info_ptr, TestTx
  * next_payload_size total and entry size. This is explicitly for use with linear buffers and is intended to facilitate
  * sending variable sized payloads via RIFF files.
  *
- * @param connection_info_ptr Pointer to connection info state data.
  * @param stream_info_ptr Pointer to stream info state data.
  * @param src_sgl_ptr Pointer to an SGL from an initialized pool.
  * @param ret_sgl_ptr Pointer to a modifiable SGL that is getting initialized.
  *
  * @return true if successful or false on failure
  */
-static bool RiffSgl(TestConnectionInfo* connection_info_ptr, TestConnectionStreamInfo* stream_info_ptr,
-                    const CdiSgList* src_sgl_ptr, CdiSgList* ret_sgl_ptr)
+static bool RiffSgl(TestConnectionStreamInfo* stream_info_ptr, const CdiSgList* src_sgl_ptr, CdiSgList* ret_sgl_ptr)
 {
     bool return_val = true;
 
-    if (src_sgl_ptr == NULL) {
+    if (NULL == src_sgl_ptr) {
         CDI_LOG_THREAD(kLogError, "Invalid source SGL pointer provided");
         return_val = false;
     }
 
-    if (ret_sgl_ptr == NULL) {
+    if (NULL == ret_sgl_ptr) {
         CDI_LOG_THREAD(kLogError, "Invalid destination SGL pointer provided.");
-        return_val = false;
-    }
-
-    if (connection_info_ptr->test_settings_ptr->buffer_type != kCdiLinearBuffer) {
-        CDI_LOG_THREAD(kLogError, "RIFF payloads must use a linear memory buffer");
         return_val = false;
     }
 
@@ -222,7 +220,7 @@ static CdiReturnStatus TestTxSendPayload(TestConnectionInfo* connection_info_ptr
     // Riff file payload sizes are specified in the payload so the pool SGL is copied to a local SGL and the local SGL
     // is configured for the size of the new RIFF payload.
     if (!got_error && stream_settings_ptr->riff_file) {
-        got_error = !RiffSgl(connection_info_ptr, stream_info_ptr, pool_sgl_ptr, &local_linear_sgl);
+        got_error = !RiffSgl(stream_info_ptr, pool_sgl_ptr, &local_linear_sgl);
         sgl_ptr = &local_linear_sgl;
     } else {
         sgl_ptr = pool_sgl_ptr;
@@ -298,8 +296,8 @@ static CdiReturnStatus TestTxSendPayload(TestConnectionInfo* connection_info_ptr
             CdiAvmConfig* avm_config_ptr = send_config ? &stream_settings_ptr->avm_config : NULL;
 
             if (test_settings_ptr->multiple_endpoints) {
-                CdiAvmEndpointTxPayload(connection_info_ptr->tx_stream_endpoint_handle_array[stream_index],
-                                        &payload_cfg_data, avm_config_ptr, sgl_ptr, test_settings_ptr->tx_timeout);
+                rs = CdiAvmEndpointTxPayload(connection_info_ptr->tx_stream_endpoint_handle_array[stream_index],
+                                             &payload_cfg_data, avm_config_ptr, sgl_ptr, test_settings_ptr->tx_timeout);
             } else {
                 rs = CdiAvmTxPayload(connection_info_ptr->connection_handle, &payload_cfg_data, avm_config_ptr,
                                      sgl_ptr, test_settings_ptr->tx_timeout);
@@ -395,7 +393,7 @@ static bool TestTxTrySendStreamPayload(TestConnectionInfo* connection_info_ptr, 
 
         if (tx_queue_full_count) {
             CDI_LOG_THREAD(kLogWarning,
-                           "Connection[%s] Stream ID[%d] Tx queue was full. Slept for [%d]microseconds between each of "
+                           "Connection[%s] Stream ID[%d] Tx queue was full. Slept for [%d]us between each of "
                            "[%d]retries.", test_settings_ptr->connection_name_str, stream_settings_ptr->stream_id,
                            rate_period_microseconds / TX_QUEUE_FULL_RATE_PERIOD_SLEEP_DIVISOR,
                            tx_queue_full_count);
@@ -405,10 +403,10 @@ static bool TestTxTrySendStreamPayload(TestConnectionInfo* connection_info_ptr, 
     if (late_payload) {
         current_time = CdiOsGetMicroseconds();
         uint64_t overtime = current_time - rate_next_start_time;
-        CDI_LOG_THREAD(kLogError, "Connection[%s] Payload took [%lld]microseconds too long. Rate time "
-                    "[%d] microseconds.", test_settings_ptr->connection_name_str, overtime,
+        CDI_LOG_THREAD(kLogError, "Connection[%s] Payload took [%"PRIu64"]us too long. Rate time "
+                    "[%"PRIu32"]us.", test_settings_ptr->connection_name_str, overtime,
                     test_settings_ptr->rate_period_microseconds);
-        connection_info_ptr->payload_error = true;
+        connection_info_ptr->num_payload_errors++;
     }
 
     return !got_error;
@@ -469,7 +467,7 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
     bool got_error = false;
 
     // Do some rate-tracking initialization so we know the correct time to send payloads later.
-    int rate_period_microseconds = test_settings_ptr->rate_period_microseconds;
+    uint32_t rate_period_microseconds = test_settings_ptr->rate_period_microseconds;
     CDI_LOG_THREAD(kLogInfo, "Connection[%s] using rate period[%d].",
                    test_settings_ptr->connection_name_str, rate_period_microseconds);
 
@@ -486,9 +484,9 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
     int payload_id = 0;
     int ptp_rate_count = 0;
     while (IsPayloadNumLessThanTotal(payload_count, connection_info_ptr->total_payloads) && !got_error) {
-        // Check for the payload_error flag which may have gotten set by the Tx Callback if the payload timed out. If
+        // Check for payload errors which may have gotten counted by the Tx Callback if payloads timed out. If
         // --keep_alive was not used, then this is an error.
-        if (connection_info_ptr->payload_error && !test_settings_ptr->keep_alive) {
+        if (0 != connection_info_ptr->num_payload_errors && !test_settings_ptr->keep_alive) {
             got_error = true;
         }
 
@@ -531,12 +529,12 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
                     if (overtime >= max_overtime) {
                         // Exceeded max amount of time. Wait for Tx queue to drain so we can recover and get back on
                         // cadence.
-                        CDI_LOG_THREAD(kLogWarning, "Ran over max timing budget[%llu]us by [%llu]us.",
+                        CDI_LOG_THREAD(kLogWarning, "Ran over max timing budget [%"PRIu64"]us by [%"PRIu64"]us.",
                                        max_overtime, overtime - max_overtime);
                         WaitForTxPayloadsToComplete(connection_info_ptr, payload_count,
                                                     (uint32_t)(max_overtime / 1000L)); // Convert us to ms.
                         current_ptp_time = CdiCoreGetTaiTimeMicroseconds(); // Function used to get PTP time.
-                        overtime = current_ptp_time - next_ptp_start_time;
+                        overtime = current_ptp_time > next_ptp_start_time ? current_ptp_time - next_ptp_start_time : 0;
                     }
                 }
                 // Simulate dropping payloads by increasing the PTP rate counter.
@@ -546,10 +544,19 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
             }
 
             // To stay on our rate-time cadence, calculate amount of time to delay and then sleep.
+            uint64_t time_to_sleep = next_ptp_start_time - current_ptp_time;
+            if (time_to_sleep > rate_period_microseconds) {
+                time_to_sleep = rate_period_microseconds;
+                CDI_LOG_THREAD(kLogWarning, "Connection[%s] sleep time of [%"PRIu64"]us is greater than the ",
+                    "rate period of [%"PRIu32"]us. Setting sleep to the assigned rate period\n. The next PTP start ",
+                    "time is [%"PRIu64"] while current PTP time is [%"PRIu64"].",
+                    connection_info_ptr->test_settings_ptr->connection_name_str,
+                    time_to_sleep, rate_period_microseconds, next_ptp_start_time, current_ptp_time);
+            }
 #ifdef DEBUG_RX_BUFFER
-            CDI_LOG_THREAD(kLogInfo, "Sleeping[%llu]", next_ptp_start_time - current_ptp_time);
+            CDI_LOG_THREAD(kLogInfo, "Sleeping [%"PRIu64"]", time_to_sleep);
 #endif
-            CdiOsSleepMicroseconds(next_ptp_start_time - current_ptp_time);
+            CdiOsSleepMicroseconds(time_to_sleep);
         }
 
 #ifdef ENABLE_TEST_INTERNAL_CORE_STATS_RECONFIGURE
@@ -760,11 +767,13 @@ static void TestTxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr,
 
     // Increment the payload processed count and check for done whether the payload was in error or not.
     TestIncPayloadCount(connection_info_ptr, stream_index);
-    if (core_cb_data_ptr->status_code != kCdiStatusOk) {
-        TEST_LOG_CONNECTION(kLogError, "TX Callback received error code[%d]. Msg[%s]", core_cb_data_ptr->status_code,
-                            core_cb_data_ptr->err_msg_str);
+    if (kCdiStatusOk != core_cb_data_ptr->status_code) {
+        const char* err_msg_str = core_cb_data_ptr->err_msg_str ? core_cb_data_ptr->err_msg_str :
+                                  CdiCoreStatusToString(core_cb_data_ptr->status_code);
+        TEST_LOG_CONNECTION(kLogError, "Tx Callback received error code[%d]. Msg[%s]", core_cb_data_ptr->status_code,
+                            err_msg_str);
         connection_info_ptr->pass_status = false;
-        connection_info_ptr->payload_error = true;
+        connection_info_ptr->num_payload_errors++;
     } else {
         // Validate that we received the payload within the expected time, as indicated by this Tx callback routine
         // getting called. The origination_timestamp value was set to the current time when the payload was transmitted,
@@ -774,7 +783,7 @@ static void TestTxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr,
             TEST_LOG_CONNECTION(kLogInfo, "Connection[%s] payload[%d] transmitted late by [%lld]microseconds",
                                 connection_info_ptr->test_settings_ptr->connection_name_str,
                                 connection_info_ptr->payload_count-1, current_time - expected_time);
-            connection_info_ptr->payload_error = true;
+            connection_info_ptr->num_payload_errors++;
         }
     }
 }
@@ -826,7 +835,7 @@ static void TestAvmTxCallback(const CdiAvmTxCbData* cb_data_ptr)
 //*********************************************************************************************************************
 
 // This function creates a Tx connection.
-THREAD TestTxCreateThread(void* arg_ptr)
+CDI_THREAD TestTxCreateThread(void* arg_ptr)
 {
     TestConnectionInfo* connection_info_ptr = (TestConnectionInfo*)arg_ptr;
     TestSettings* test_settings_ptr = connection_info_ptr->test_settings_ptr;
@@ -972,17 +981,18 @@ THREAD TestTxCreateThread(void* arg_ptr)
     CdiLogMultilineState handle;
     CDI_LOG_THREAD_MULTILINE_BEGIN(kLogInfo, &handle);
     CDI_LOG_MULTILINE(&handle, "Connection[%s] TX Stats:", test_settings_ptr->connection_name_str);
-    CDI_LOG_MULTILINE(&handle, "Number of payloads transferred[%llu]", counter_stats_ptr->num_payloads_transferred);
-    CDI_LOG_MULTILINE(&handle, "Number of payloads dropped    [%llu]", counter_stats_ptr->num_payloads_dropped);
+    CDI_LOG_MULTILINE(&handle, "Number of payloads transferred[%"PRIu64"]", counter_stats_ptr->num_payloads_transferred);
+    CDI_LOG_MULTILINE(&handle, "Number of payloads dropped    [%"PRIu64"]", counter_stats_ptr->num_payloads_dropped);
 
     // This value is the number of payloads that were queued to be transmitted, but took longer than expected to
     // actually complete the transfer.
-    CDI_LOG_MULTILINE(&handle, "Number of payloads late       [%llu]", counter_stats_ptr->num_payloads_late);
+    CDI_LOG_MULTILINE(&handle, "Number of payloads late       [%"PRIu64"]", counter_stats_ptr->num_payloads_late);
 
     // This value is the number of payloads that were delayed from being queued to be sent because a previous payload
     // being transmitted did not complete the transfer in time. We currently don't have a way to cancel a pending
     // transfer, so we had to wait for it to complete before starting transfer of the next payload.
-    CDI_LOG_MULTILINE(&handle, "Number of payloads delayed    [%llu]", connection_info_ptr->tx_late_payload_count);
+    CDI_LOG_MULTILINE(&handle, "Number of payloads delayed    [%"PRIu64"]", connection_info_ptr->tx_late_payload_count);
+    CDI_LOG_MULTILINE(&handle, "Number of payload errors      [%"PRIu64"]", connection_info_ptr->num_payload_errors);
     CDI_LOG_MULTILINE_END(&handle);
 
     // Destroy the connection's logger last, so it can be used in all the logic above.

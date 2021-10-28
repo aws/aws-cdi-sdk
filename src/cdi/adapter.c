@@ -300,7 +300,7 @@ static bool DataPoll(AdapterConnectionState* adapter_con_state_ptr)
                 }
 
                 // Perform adapter specific poll mode processing.
-                if (CdiAdapterPollEndpoint(adapter_endpoint_ptr) == kCdiStatusOk) {
+                if (kCdiStatusOk == CdiAdapterPollEndpoint(adapter_endpoint_ptr)) {
                     idle = false;
                 }
 
@@ -337,7 +337,7 @@ static bool DataPoll(AdapterConnectionState* adapter_con_state_ptr)
  *
  * @return The return value is not used.
  */
-static THREAD PollThread(void* ptr)
+static CDI_THREAD PollThread(void* ptr)
 {
     PollThreadState* poll_thread_state_ptr = (PollThreadState*)ptr;
     AdapterConnectionState* adapter_con_ptr_array[CDI_MAX_SIMULTANEOUS_CONNECTIONS] = {0};

@@ -13,6 +13,7 @@
  * The declarations in this header file correspond to the definitions in internal_utility.c.
  */
 
+#include <assert.h>
 #include <stdbool.h>
 
 #include "cdi_utility_api.h"
@@ -45,5 +46,35 @@ typedef enum {
  * @return Pointer to returned string. If no match was found, NULL is returned.
  */
 const char* InternalUtilityKeyEnumToString(InternalEnumStringKeyTypes key_type, int enum_value);
+
+/**
+ * Helper function to up-quantize an integer value.
+ *
+ * @param value   The value to quantize.
+ * @param quantum The number to calculate a multiple of.
+ *
+ * @return The smallest multiple of quantum equal to or greater than value.
+ */
+static inline int NextMultipleOf(int value, int quantum)
+{
+    assert(value > 0);
+    assert(quantum > 0);
+    return quantum * ((value - 1) / quantum + 1);
+}
+
+/**
+ * Helper function to down-quantize an integer value.
+ *
+ * @param value   The value to quantize.
+ * @param quantum The number to calculate a multiple of.
+ *
+ * @return The largest multiple of quantum equal to or smaller than value.
+ */
+static inline int PrevMultipleOf(int value, int quantum)
+{
+    assert(value > 0);
+    assert(quantum > 0);
+    return quantum * (value / quantum);
+}
 
 #endif // INTERNAL_UTILITY_API_H__

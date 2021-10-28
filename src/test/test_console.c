@@ -15,9 +15,8 @@
 // headers.
 
 #include "test_console.h"
-#include "curses.h"
 
-#ifdef WIN32
+#ifdef _WIN32
     #include <fcntl.h> // For O_TEXT
 #endif
 #include <stdio.h>
@@ -115,7 +114,7 @@ static void DumpSavedWindowToStdout(chtype* buffer_ptr, int height, int width) {
                 }
                 putchar(c);
             }
-#ifndef WIN32
+#ifndef _WIN32
             // Force a carriage return on stdout. Some linux consoles only move down to the next line and not back to
             // the start of it. This is not needed in windows.
             puts("\r");
@@ -131,7 +130,7 @@ static void DumpSavedWindowToStdout(chtype* buffer_ptr, int height, int width) {
  *
  * @return Always returns 0 (not used).
  */
-static THREAD TestConsoleThread(void* arg_ptr)
+static CDI_THREAD TestConsoleThread(void* arg_ptr)
 {
     (void)arg_ptr; // Not used
     char msg_buf_ptr[MAX_MESSAGE_SIZE];
@@ -192,7 +191,7 @@ bool TestConsoleCreate(bool multi_window_mode, int num_stats_lines)
             original_stdout_fd = dup(CDI_STDERR_FILENO); // Save a copy of the original stderr.
 
         // Create a read/write pipe to use for stderr.
-#ifdef WIN32
+#ifdef _WIN32
             ret = _pipe(pipe_fd_array, 1024, O_TEXT) == 0;
 #else
             ret = pipe(pipe_fd_array) == 0;
@@ -301,7 +300,7 @@ void TestConsoleDestroy(bool abnormal_termination)
     }
 
     if (CDI_INVALID_HANDLE_VALUE != original_stdout_fd) {
-#ifndef WIN32
+#ifndef _WIN32
         // Restore the original stderr handler. Only need to do for linux. Causes a segfault in windows. Windows code
         // for reference: dup2(_fileno(stderr), original_stdout_fd);
         dup2(CDI_STDERR_FILENO, original_stdout_fd);

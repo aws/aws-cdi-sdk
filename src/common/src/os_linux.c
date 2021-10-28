@@ -126,7 +126,10 @@ struct SocketInfo
 };
 
 /// @brief Macro used within this file to handle generation of error messages either to the logger or stderr.
-#define ERROR_MESSAGE(...) ErrorMessage(__FUNCTION__, __LINE__, __VA_ARGS__)
+#define ERROR_MESSAGE(...) LogMessage(kLogError, __FUNCTION__, __LINE__, __VA_ARGS__)
+
+/// @brief Macro used within this file to handle generation of error messages either to the logger or stderr.
+#define WARNING_MESSAGE(...) LogMessage(kLogWarning, __FUNCTION__, __LINE__, __VA_ARGS__)
 
 /// Maximum length of a single formatted message string.
 #define MAX_FORMATTED_MESSAGE_LENGTH    (1024)
@@ -154,12 +157,13 @@ static bool use_logger = false;
 /**
  * Generate an error message and send to logger or stderr.
  *
+ * @param level The log level.
  * @param func_name_str Pointer to function name string.
  * @param line Source line number.
  * @param format_str Pointer to format string.
  * @param ... Variable length list of message arguments.
  */
-static void ErrorMessage(const char* func_name_str, int line, const char* format_str, ...)
+static void LogMessage(CdiLogLevel level, const char* func_name_str, int line, const char* format_str, ...)
 {
     char msg_buffer_str[MAX_FORMATTED_MESSAGE_LENGTH];
     msg_buffer_str[0] = '\0';
@@ -168,7 +172,7 @@ static void ErrorMessage(const char* func_name_str, int line, const char* format
 
     vsnprintf(msg_buffer_str, sizeof(msg_buffer_str), format_str, val);
     if (use_logger) {
-        CdiLogger(CdiLoggerThreadLogGet(), kLogComponentGeneric, kLogError, func_name_str, line, msg_buffer_str);
+        CdiLogger(CdiLoggerThreadLogGet(), kLogComponentGeneric, level, func_name_str, line, msg_buffer_str);
     } else {
         fprintf(stderr, "[%s:%d] ERROR: %s.\r\n", func_name_str, line, msg_buffer_str);
     }
@@ -949,7 +953,7 @@ void* CdiOsMemAllocHugePage(int32_t mem_size)
     } else {
         mem_ptr = mmap(NULL, mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
         if (mem_ptr == MAP_FAILED) {
-            ERROR_MESSAGE("mmap failed. Try adding \"vm.nr_hugepages = 1024\" to /etc/sysctl.conf. Then \"sudo sysctl -p\"");
+            WARNING_MESSAGE("mmap failed. Try adding \"vm.nr_hugepages = 1024\" to /etc/sysctl.conf. Then \"sudo sysctl -p\"");
             mem_ptr = NULL;
         }
     }

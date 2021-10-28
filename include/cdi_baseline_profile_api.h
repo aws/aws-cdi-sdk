@@ -132,20 +132,16 @@ typedef struct {
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * @brief Register a baseline profile.
  *
- * @param profile_type Enum which indicates the type of profile (ie. video, audio or ancillary data).
+ * @param media_type Enum which indicates the type of payload data (ie. video, audio or ancillary data).
  * @param profile_version_str Pointer to profile version string. Must be in "xx.xx" format.
  * @param vtable_api_ptr Pointer to V-table to use for required baseline profile APIs.
  *
  * @return kCdiStatusOk if ok. kCdiStatusArraySizeExceeded if array size has been exceeded, otherwise kCdiStatusFatal.
  */
-CDI_INTERFACE CdiReturnStatus CdiAvmRegisterBaselineProfile(CdiBaselineAvmPayloadType profile_type,
+CDI_INTERFACE CdiReturnStatus CdiAvmRegisterBaselineProfile(CdiBaselineAvmPayloadType media_type,
                                                             const char* profile_version_str,
                                                             CdiAvmVTableApi* vtable_api_ptr);
 
@@ -273,8 +269,18 @@ CDI_INTERFACE const CdiEnumStringKey* CdiAvmKeyGetArray(CdiAvmBaselineEnumString
 CDI_INTERFACE bool CdiAvmParseBaselineVersionString(const char* version_str,
                                                     CdiAvmBaselineProfileVersion* ret_version_ptr);
 
-#ifdef __cplusplus
-}
-#endif
+/**
+ * Parses a baseline configuration version number from a string of the form of "xx.yy". When the string represents
+ * a registered baseline configuration version, writes the version numbers into the provided output structure.
+ *
+ * @param media_type Enum which indicates the type of payload data (ie. video, audio or ancillary data).
+ * @param version_str The source string to convert.
+ * @param ret_version_ptr The address of the structure to write the version numbers into.
+ *
+ * @return Returns kCdiStatusOk if and only if the source string represents a known baseline configuration.
+ */
+CDI_INTERFACE CdiReturnStatus CdiAvmValidateBaselineVersionString(CdiBaselineAvmPayloadType media_type,
+    const char* version_str, CdiAvmBaselineProfileVersion* ret_version_ptr);
+
 
 #endif // CDI_BASELINE_PROFILE_API_H__

@@ -176,8 +176,7 @@
  * timestamp creation.
  *
  * PTP timestamps are sent as part of all SDK payload headers for RAW and AVM payloads. The PTP timestamps are sent
- * with the functions CdiAvmTxVideoPayload(), CdiAvmTxAudioPayload(), CdiAvmTxAncillaryPayload(), CdiAvmTxRawPayload(),
- * and CdiRawTxPayload().
+ * with the functions CdiAvmTxPayload() and CdiRawTxPayload().
  *
  * The origination_ptp_timestamp exists as part of CdiCoreExtraData which is used by CdiCoreTxPayloadConfig
  * and CdiAvmTxPayloadConfig on the sender side and as part of callback data structure CdiCoreCbData and

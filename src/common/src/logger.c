@@ -952,33 +952,39 @@ void CdiLoggerMultiline(CdiLogMultilineState* state_ptr, const char* format_str,
 
 char* CdiLoggerMultilineGetBuffer(CdiLogMultilineState* state_ptr)
 {
-    state_ptr->buffer_used = true; // Set flag so CdiLoggerMultilineEnd() won't generate duplicate output.
-    return state_ptr->buffer_state_ptr->buffer_ptr;
+    if (state_ptr->logging_enabled) {
+        state_ptr->buffer_used = true; // Set flag so CdiLoggerMultilineEnd() won't generate duplicate output.
+        return state_ptr->buffer_state_ptr->buffer_ptr;
+    } else {
+        return NULL;
+    }
 }
 
 void CdiLoggerMultilineEnd(CdiLogMultilineState* state_ptr)
 {
     // Check if logging is enabled.
-    if (!state_ptr->buffer_used && state_ptr->logging_enabled) {
-        if (kLogMethodCallback == state_ptr->log_handle->log_method) {
-            // Using callback log.
-            InvokeLogCallback(state_ptr->log_handle, state_ptr->component, state_ptr->log_level,
-                              state_ptr->function_name_str, state_ptr->line_number,
-                              state_ptr->line_count, state_ptr->buffer_state_ptr->buffer_ptr);
-        } else {
-            // Using file or stdout log. We don't need to exclude the trailing '\0', since it is not included as part
-            // of current_write_index (see logic in CdiLoggerMultiline).
-            OutputToFileHandle(state_ptr->log_handle->file_data_ptr->file_handle, state_ptr->log_level,
-                               state_ptr->buffer_state_ptr->buffer_ptr,
-                               state_ptr->buffer_state_ptr->current_write_index);
+    if (state_ptr->logging_enabled) {
+        if (!state_ptr->buffer_used) {
+            if (kLogMethodCallback == state_ptr->log_handle->log_method) {
+                // Using callback log.
+                InvokeLogCallback(state_ptr->log_handle, state_ptr->component, state_ptr->log_level,
+                                state_ptr->function_name_str, state_ptr->line_number,
+                                state_ptr->line_count, state_ptr->buffer_state_ptr->buffer_ptr);
+            } else {
+                // Using file or stdout log. We don't need to exclude the trailing '\0', since it is not included as part
+                // of current_write_index (see logic in CdiLoggerMultiline).
+                OutputToFileHandle(state_ptr->log_handle->file_data_ptr->file_handle, state_ptr->log_level,
+                                state_ptr->buffer_state_ptr->buffer_ptr,
+                                state_ptr->buffer_state_ptr->current_write_index);
+            }
         }
-    }
 
-    CdiOsMemFree(state_ptr->buffer_state_ptr->buffer_ptr);
-    state_ptr->buffer_state_ptr->buffer_ptr = NULL;
-    state_ptr->buffer_state_ptr->buffer_size = 0;
-    // Put entry back into the free list.
-    LogBufferPut(state_ptr->buffer_state_ptr);
+        CdiOsMemFree(state_ptr->buffer_state_ptr->buffer_ptr);
+        state_ptr->buffer_state_ptr->buffer_ptr = NULL;
+        state_ptr->buffer_state_ptr->buffer_size = 0;
+        // Put entry back into the free list.
+        LogBufferPut(state_ptr->buffer_state_ptr);
+    }
 }
 
 void CdiLoggerLogFromCallback(CdiLogHandle handle, const CdiLogMessageCbData* cb_data_ptr)

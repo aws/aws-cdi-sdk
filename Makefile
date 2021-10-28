@@ -243,10 +243,10 @@ ifneq ($(strip $(V)), 0)
 endif
 
 # Determine CMake executable
-ifneq ($(shell command -v cmake3),)
-    CMAKE := $(shell command -v cmake3)
+ifneq ($(shell command -v cmake3;),)
+    CMAKE := $(shell command -v cmake3;)
 else
-    CMAKE := $(shell command -v cmake)
+    CMAKE := $(shell command -v cmake;)
 endif
 
 ifeq ($(CMAKE),)
@@ -379,9 +379,9 @@ endif
 # rule to build the AWS SDK
 $(aws_h) $(libaws) : $(cdi_sdk_src) | $(build_dir.libaws)
 	$(Q)cd $(build_dir.libaws) \
-	    && $(CMAKE) -j $$(nproc) -DCMAKE_BUILD_TYPE=$(config_aws_sdk) -DBUILD_ONLY="monitoring;cdi" \
+	    && $(CMAKE) -DCMAKE_BUILD_TYPE=$(config_aws_sdk) -DBUILD_ONLY="monitoring;cdi" \
 	           -DCMAKE_INSTALL_PREFIX=$(build_dir) $(AWS_SDK_ABS) \
-               -DCMAKE_VERBOSE_MAKEFILE=TRUE \
+	           -DCMAKE_VERBOSE_MAKEFILE=TRUE \
 	           -DAUTORUN_UNIT_TESTS=FALSE \
 	           -DENABLE_TESTING=FALSE \
 	    && $(MAKE) -j $$(nproc) V=$(V) \

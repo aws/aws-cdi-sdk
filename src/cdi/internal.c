@@ -57,7 +57,7 @@ static CdiStaticMutexType global_context_mutex_lock = CDI_STATIC_MUTEX_INITIALIZ
  *
  * @return The return value is not used.
  */
-static THREAD AppCallbackPayloadThread(void* ptr)
+static CDI_THREAD AppCallbackPayloadThread(void* ptr)
 {
     CdiConnectionState* con_state_ptr = (CdiConnectionState*)ptr;
 
@@ -646,8 +646,10 @@ void PayloadErrorSet(CdiConnectionState* con_state_ptr, AppPayloadCallbackData* 
                            CdiPoolGetName(con_state_ptr->error_message_pool));
         } else {
             // Generate error message string.
-            vsnprintf(app_cb_data_ptr->error_message_str, CdiPoolGetItemSize(con_state_ptr->error_message_pool),
-                      format_str, vars);
+            int r = vsnprintf(app_cb_data_ptr->error_message_str, CdiPoolGetItemSize(con_state_ptr->error_message_pool),
+                              format_str, vars);
+            assert(0 <= r); // negative return value means error
+            (void)r; // prevent compile error
         }
     }
 

@@ -84,8 +84,8 @@ struct iovec;
 
     // Define portable thread Function.
     #define CdiThreadFuncName LPTHREAD_START_ROUTINE
-    #define THREAD DWORD WINAPI
-    #define THREAD_PARAM LPVOID
+    #define CDI_THREAD DWORD WINAPI
+    #define CDI_THREAD_PARAM LPVOID
 
     typedef DWORD CdiThreadData;
 
@@ -175,9 +175,9 @@ struct iovec;
     #define CDI_STDOUT_FILENO STDOUT_FILENO ///< Definition of OS agnostic standard output file number.
     #define CDI_STDERR_FILENO STDERR_FILENO ///< Definition of OS agnostic standard error file number.
 
-    #define THREAD_PARAM void*  ///< Define portable thread function parameter type.
-    #define THREAD int          ///< Define portable thread function return type.
-    typedef THREAD (*CdiThreadFuncName) (THREAD_PARAM); ///< Define portable thread function.
+    #define CDI_THREAD_PARAM void*  ///< Define portable thread function parameter type.
+    #define CDI_THREAD int          ///< Define portable thread function return type.
+    typedef CDI_THREAD (*CdiThreadFuncName) (CDI_THREAD_PARAM); ///< Define portable thread function.
 
     /// Define portable thread data type.
     typedef pthread_key_t CdiThreadData;
@@ -323,10 +323,6 @@ typedef struct CdiSocket_t* CdiSocket;
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * Enable use of the logger when generating error messages. This function is normally used internally as part of
@@ -1024,9 +1020,5 @@ CDI_INTERFACE bool CdiOsEnvironmentVariableSet(const char* name_str, const char*
  * Shuts down OS specific resources used by the SDK.
  */
 CDI_INTERFACE void CdiOsShutdown(void);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_OS_API_H__

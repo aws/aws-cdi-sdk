@@ -134,7 +134,7 @@ static void ProcessWorkRequestCompletionQueue(CdiConnectionState* con_state_ptr)
  *
  * @return The return value is not used.
  */
-static THREAD TxPayloadThread(void* ptr)
+static CDI_THREAD TxPayloadThread(void* ptr)
 {
     CdiConnectionState* con_state_ptr = (CdiConnectionState*)ptr;
 
@@ -300,7 +300,7 @@ static THREAD TxPayloadThread(void* ptr)
                 // NOTE: These pools are not thread-safe, so must ensure that only one thread is accessing them at a
                 // time.
                 if (!PayloadPacketizerPacketGet(adapter_endpoint_handle->protocol_handle,
-                                                packetizer_state_handle, &work_request_ptr->header,
+                                                packetizer_state_handle, (char*)&work_request_ptr->header,
                                                 con_state_ptr->tx_state.packet_sgl_entry_pool_handle,
                                                 payload_state_ptr, &work_request_ptr->packet.sg_list, &last_packet))
                 {
@@ -696,27 +696,27 @@ CdiReturnStatus TxPayloadInternal(CdiEndpointState* endpoint_ptr, const CdiCoreT
         CdiSinglyLinkedListInit(&payload_state_ptr->completed_packets_list);
 
         // Calculate the size of a group of units of unit_size.
-        int pattern_size = 1; // How many units of unit_size need to be grouped to be byte aligned.
+        int group_size = 1; // How many units of unit_size need to be grouped to be byte aligned.
         if (core_payload_config_ptr->unit_size > 0) {
             switch (core_payload_config_ptr->unit_size % 8) {
                 case 0:
-                    pattern_size = 1;
+                    group_size = 1;
                     break;
                 case 2:
-                    pattern_size = 4;
+                    group_size = 4;
                     break;
                 case 4:
-                    pattern_size = 2;
+                    group_size = 2;
                     break;
                 case 6:
-                    pattern_size = 4;
+                    group_size = 4;
                     break;
                 default: // For a fixed unit_size worst case of 8 units together will always be byte aligned.
-                    pattern_size = 8;
+                    group_size = 8;
                     break;
             }
         }
-        payload_state_ptr->pattern_size_bytes = (pattern_size * core_payload_config_ptr->unit_size) / 8;
+        payload_state_ptr->group_size_bytes = (group_size * core_payload_config_ptr->unit_size) / 8;
 
         payload_state_ptr->app_payload_cb_data.extra_data_size = extra_data_size;
         if (extra_data_size) {

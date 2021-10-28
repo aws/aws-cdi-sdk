@@ -32,7 +32,8 @@ typedef struct {
     uint16_t payload_num;              ///< Packet payload number.
     uint16_t packet_payload_size;      ///< Size of payload, not including the packet header.
     Packet packet;                     ///< The top level packet structure for the data in this work request.
-    CdiRawPacketHeader header;         ///< The data for the packet header, entry zero in packet_sgl.
+    /// @brief The data for the packet header, entry zero in packet_sgl. Includes space for message prefix.
+    char header[MAX_MSG_PREFIX_SIZE + sizeof(CdiRawPacketHeader)];
 } TxPacketWorkRequest;
 
 //*********************************************************************************************************************

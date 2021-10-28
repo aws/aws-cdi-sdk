@@ -13,7 +13,6 @@
  * This file declares the public API data types, structures and functions that comprise the CDI log API.
  */
 
-// Doxygen for CDI-LOG
 /** @page Log_home_page CDI Log (CDI-LOG) API Home Page
  * @tableofcontents
  *
@@ -29,7 +28,6 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
-// Forward references
 /// @brief Forward declaration to create pointer to callback parameter when used.
 typedef void* CdiUserCbParameter;
 /// @brief Forward declaration to create pointer to log message callback data when used.
@@ -126,10 +124,6 @@ typedef void (*CdiLogMessageCallback)(const CdiLogMessageCbData* cb_data_ptr);
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * Enable or disable specific log component messages for a specific connection or the global logger. All components are
  * disabled by default.
@@ -201,10 +195,6 @@ CDI_INTERFACE CdiReturnStatus CdiLogStderrEnable(bool enable, CdiLogLevel level)
  * @return Handle of global log. If the CdiCoreInitialize() API has not been used, NULL is returned.
  */
 CDI_INTERFACE CdiLogHandle CdiLogGlobalGet(void);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // CDI_LOG_API_H__
 

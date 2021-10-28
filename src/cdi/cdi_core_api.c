@@ -108,11 +108,11 @@ CdiReturnStatus CdiCoreRxFreeBuffer(const CdiSgList* sgl_ptr)
 int CdiCoreGather(const CdiSgList* sgl_ptr, int offset, void* dest_data, int byte_count)
 {
     if (NULL == sgl_ptr) {
-        return kCdiStatusInvalidParameter;
+        return -1;
     }
 
     if (NULL == dest_data) {
-        return kCdiStatusInvalidParameter;
+        return -1;
     }
 
     return CdiGatherInternal(sgl_ptr, offset, dest_data, byte_count);
@@ -205,7 +205,7 @@ const char* CdiCoreStatusToString(CdiReturnStatus status)
         { kCdiStatusSendFailed,            "failed to send a packet"        },
         { kCdiStatusAllocationFailed,      "failed to allocate resource"    },
         { kCdiStatusOpenFailed,            "failed to open a port"          },
-        { kCdiStatusDuplicate,             "duplicate connection error"     },
+        { kCdiStatusDuplicateConnection,   "duplicate connection error"     },
         { kCdiStatusInvalidSgl,            "scatter-gather list is invalid" },
         { kCdiStatusEndpointManagerState,  "endpoint manager state changed" },
         { kCdiStatusBufferOverflow,        "buffer overflowed"              },
@@ -220,6 +220,7 @@ const char* CdiCoreStatusToString(CdiReturnStatus status)
         { kCdiStatusProbePacketCrcError,   "Probe packet CRC error"         },
         { kCdiStatusProbePacketInvalidSize, "Probe packet size is invalid"  },
         { kCdiStatusRxPayloadBackPressure, "Rx back pressure"               },
+        { kCdiStatusDuplicateBaselineVersion, "baseline version already registered"},
         { CDI_INVALID_ENUM_VALUE,          "<invalid>"                      },
     };
 

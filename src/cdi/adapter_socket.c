@@ -14,10 +14,11 @@
 
 #include <sys/uio.h>
 
+#include "cdi_os_api.h"
 #include "internal.h"
 #include "internal_log.h"
 #include "private.h"
-#include "cdi_os_api.h"
+#include "protocol.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -109,7 +110,7 @@ static struct AdapterVirtualFunctionPtrTable socket_endpoint_functions = {
  * @param arg Pointer to thread.
  * @return Return value not used.
  */
-static THREAD SocketReceiveThread(void* arg)
+static CDI_THREAD SocketReceiveThread(void* arg)
 {
     AdapterEndpointState* endpoint_state_ptr = (AdapterEndpointState*)arg;
     SocketEndpointState* private_state_ptr = (SocketEndpointState*)endpoint_state_ptr->type_specific_ptr;
@@ -516,6 +517,7 @@ CdiReturnStatus SocketNetworkAdapterInitialize(CdiAdapterState* adapter_state_pt
         // Provide the number of bytes usable by the connection layer to the connection.
         adapter_state_ptr->maximum_payload_bytes = kSocketMtu;
         adapter_state_ptr->maximum_tx_sgl_entries = MAX_TX_SGL_PACKET_ENTRIES;
+        adapter_state_ptr->msg_prefix_size = 0;
     } else {
         // Something bad happened--free any resources that were allocated in this function.
         if (adapter_state_ptr->adapter_data.ret_tx_buffer_ptr) {

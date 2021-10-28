@@ -148,7 +148,7 @@ static void CalculateDeltas(CloudWatchState* cw_state_ptr, const CdiTransferStat
  *
  * @return The return value is not used.
  */
-static THREAD CloudWatchThread(void* ptr)
+static CDI_THREAD CloudWatchThread(void* ptr)
 {
     CloudWatchState* cw_state_ptr = (CloudWatchState*)(ptr);
 
