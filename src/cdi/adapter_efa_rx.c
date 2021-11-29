@@ -94,7 +94,6 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
 {
     AdapterEndpointState* aep_ptr = efa_endpoint_ptr->adapter_endpoint_ptr;
     const size_t msg_prefix_size = aep_ptr->adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
-    const int maximum_payload_bytes = aep_ptr->adapter_con_state_ptr->adapter_state_ptr->maximum_payload_bytes;
 
     struct fi_cq_data_entry comp_array[MAX_RX_BULK_COMPLETION_QUEUE_MESSAGES];
     int fi_ret = fi_cq_read(efa_endpoint_ptr->completion_queue_ptr, &comp_array,
@@ -102,40 +101,9 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
     // If the returned value is greater than zero, then the value is the number of completion queue messages that
     // were returned in comp_array. If zero is returned, completion queue was empty. Otherwise a negative value
     // represents an error or -FI_EAGAIN.
-
-    // In message prefix mode some messages may not contain application data but are for the provider only. Keep track
-    // of how many such messages we receive.
-    int num_provider_messages = 0;
     if (fi_ret > 0) {
         for (int i = 0; i < fi_ret; i++) {
             const size_t message_length = comp_array[i].len;
-
-            // Note: We have not seen this code path taken, so it is untested and possibly incorrect. The EFA provider
-            // probably does not sent provider-only messages, which means this code is superfluous.
-            if (message_length <= msg_prefix_size) {
-                num_provider_messages += 1;
-                if (0 == message_length) {
-                    CDI_LOG_THREAD(kLogWarning, "Unexpected zero-size message from fi_cq_read (buffer [%p]); skipping.",
-                        comp_array[i].buf);
-                } else {
-                    CDI_LOG_THREAD(kLogInfo, "Skipping small message of length: %zu", message_length);
-
-                    // This message is meant just for the provider (prefix mode) because there is no data beyond the
-                    // prefix section. There is nothing to process, so we immediately return the buffer to libfabric.
-                    struct iovec msg_iov = {
-                        .iov_len = maximum_payload_bytes + msg_prefix_size,
-                        .iov_base = comp_array[i].buf
-                    };
-
-                    if (!PostRxBuffer(efa_endpoint_ptr, &msg_iov, false)) {
-                        // Something went terribly wrong in libfabric. Notify the probe component so it can start the
-                        // connection reset process.
-                        ProbeEndpointError(efa_endpoint_ptr->probe_endpoint_handle);
-                    }
-                }
-                continue;
-            }
-
             CdiSglEntry* sgl_entry_ptr = NULL;
             // NOTE: This pool is not thread-safe, so must ensure that only one thread is accessing it at a time.
             if (!CdiPoolGet(efa_endpoint_ptr->rx_state.packet_sgl_entries_pool_handle, (void**)&sgl_entry_ptr)) {
@@ -182,7 +150,7 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
     } else if (fi_ret < 0 && fi_ret != -FI_EAGAIN) {
         CDI_LOG_THREAD(kLogError, "Got[%d (%s)] from fi_cq_read().", fi_ret, fi_strerror(-fi_ret));
     }
-    return fi_ret > num_provider_messages;
+    return fi_ret > 0;
 }
 
 /**

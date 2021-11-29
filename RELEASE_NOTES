@@ -5,6 +5,15 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
+CDI (Cloud Digital Interface) SDK Version 2.3.2 - 11/29/21
+---------------------------------------------------------------------------
+
+Bug Fixes
+------------
+* Fixed problem that was introduced in SDK 2.3.1, which prevented previous versions of SDK transmitters from connecting
+  to version 2.3.1.
+
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 2.3.1 - 10/29/21
 ---------------------------------------------------------------------------
 

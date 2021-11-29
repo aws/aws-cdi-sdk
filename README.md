@@ -146,9 +146,9 @@ To launch an EFA-enabled instance, follow the prepare and launch steps in the [l
         ![Outbound Rules](doc/outbound_rules.png)
 2. During step **Launch a temporary instance** under **Configure Instance Details**:
     1. Choose a VPC. AWS provides default VPCs for all accounts for all regions, but you may create a new VPC for this exercise. For more information on how to create a vpc, see [Virtual Private Clouds](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-vpc.html). If you don’t already have a subnet for the chosen VPC, you can select **Create new subnet** on this page.
-    2. If access to this instance from outside the Amazon network is needed, enable **Auto-assign public IP.**
-    3. Make sure to enable EFA by checking the **Elastic Fabric Adapter** checkbox here.
-    4. Amazon recommends putting EFA-enabled instances using AWS CDI SDK in a placement group, so select or create one under **Placement Group – Add instance to placement group.**  The **Placement Group Strategy** should be set to **cluster**.
+    1. If access to this instance from outside the Amazon network is needed, enable **Auto-assign public IP.**
+    1. Make sure to enable EFA by checking the **Elastic Fabric Adapter** checkbox here. **Note**: To enable the checkbox, you must select the subnet even if using the default subnet value.
+    1. Amazon recommends putting EFA-enabled instances using AWS CDI SDK in a placement group, so select or create one under **Placement Group – Add instance to placement group.**  The **Placement Group Strategy** should be set to **cluster**.
 
 ## Additional OS-dependent steps
 
