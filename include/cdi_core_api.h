@@ -71,7 +71,7 @@
 #define CDI_SDK_MAJOR_VERSION       3
 
 /// @brief CDI minor version.
-#define CDI_SDK_MINOR_VERSION       1
+#define CDI_SDK_MINOR_VERSION       2
 
 /// @brief CDI protcol version.
 #define CDI_PROTOCOL_VERSION             2

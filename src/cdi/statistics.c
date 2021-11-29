@@ -467,6 +467,12 @@ void StatsGatherPayloadStatsFromConnection(CdiEndpointState* endpoint_ptr, bool 
                                            uint64_t bytes_transferred)
 {
     StatisticsState* stats_state_ptr = endpoint_ptr->connection_state_ptr->stats_state_ptr;
+    // If the connection is being shutdown, the statistics object will not exist. No need to gather statistics in this
+    // case.
+    if (NULL == stats_state_ptr) {
+        return;
+    }
+
     CdiPayloadCounterStats* counter_stats_ptr = &endpoint_ptr->transfer_stats.payload_counter_stats;
     CdiPayloadTimeIntervalStats* interval_stats_ptr = &endpoint_ptr->transfer_stats.payload_time_interval_stats;
     uint64_t current_time = CdiOsGetMicroseconds();

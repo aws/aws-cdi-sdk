@@ -134,8 +134,10 @@ typedef struct {
         static uint64_t log_event_count = 0; \
         if (condition) { \
             CdiOsAtomicInc64(&log_event_count); \
-            if (log_event_count % (number) == 1) { \
-                    CdiLogger(CdiLogGlobalGet(), kLogComponentGeneric, log_level, __FILE__, __LINE__, ##__VA_ARGS__); \
+            if ((number) > 0 && (log_event_count % (number) == 1 || 1 == (number))) { \
+                CDI_LOG_HANDLE(CdiLogGlobalGet(), kLogInfo, "The following message has " \
+                               "occurred [%llu] times.", log_event_count); \
+                CdiLogger(CdiLogGlobalGet(), kLogComponentGeneric, log_level, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
             } \
         } \
     } while (0)
@@ -151,14 +153,14 @@ typedef struct {
         static uint64_t log_event_count = 0; \
         if (condition) { \
             CdiOsAtomicInc64(&log_event_count); \
-            if (log_event_count % (number)== 1) { \
+            if ((number) > 0 && (log_event_count % (number) == 1 || 1 == (number))) { \
+                CDI_LOG_HANDLE(CdiLoggerThreadLogGet(), kLogInfo, "The following message has " \
+                               "occurred [%llu] times.", log_event_count); \
                 CdiLogger(CdiLoggerThreadLogGet(), kLogComponentGeneric, log_level, \
-                          __FILE__, __LINE__, ##__VA_ARGS__); \
+                          __FUNCTION__, __LINE__, ##__VA_ARGS__); \
             } \
         } \
     } while (0)
-
-
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
