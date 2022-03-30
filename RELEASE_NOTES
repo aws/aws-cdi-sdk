@@ -5,6 +5,40 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
+CDI (Cloud Digital Interface) SDK Version 2.4.0 - 04/01/22
+---------------------------------------------------------------------------
+
+What's New
+------------
+* Created discussion pages on GitHub CDI-SDK site at https://github.com/aws/aws-cdi-sdk/discussions. Please start using
+  so the whole community can benefit.
+* Added new API for processing ancillary data payloads.
+* Added a new check for ancillary data payloads to cdi_test. When using the "--riff" option, cdi_test will check that
+  received payloads are formatted according to the CDI Baseline Profile format specification at
+  https://cdi.elemental.com/specs/baseline-ancillary-data.
+* Added command line tool 'dump_riff' for inspecting RIFF file content.
+* Added kCdiStatusInvalidPayload to enum called CdiReturnStatus in cdi_core_api.h.
+* Removed empty/unused functions CdiPoolGetBulk and CdiPoolPutBulk.
+* Improved error reporting in os_linux.c.
+* Added documentation about thread-pinning the poll threads.
+
+Bug Fixes
+------------
+* Fixed a bug in the payload packetizer. The bug caused undefined data in linear receive buffers (buffer type LINEAR).
+* Added locking around certain calls to libfabric APIs. Without the locks cdi_test with adapter type SOCKETS_LIBFABIC
+  may sometimes fail because of race conditions in libfabric.
+* Fixed a bug in the Endpoint Manager. The bug caused CdiAvmStreamEndpointDestroy in cdi_avm_api.c to hang without
+  active data transfer.
+* Fixed a bug that prevented creation of multiple CDI endpoints with the SOCKETS_LIBFABRIC adapter.
+* Fixes/changes to the cdi_test application:
+  * Fixed buffer overflow when writing received payloads to a file.
+  * Skip unexpected payloads received.
+  * Fixed console logger issues with shutdown and multi-threaded use.
+* Fixed timing issue as part of adapter connection setup. See changes in adapter.c.
+* Fixed segfault in adapter when freeing Rx buffers. See changes in RxEnqueueFreeBuffer in internal_rx.c.
+* Fixed some problems in adapter Tx's GetCompletions in adapter_efa_tx.c.
+* Fixed GitHub Issue #67. See https://github.com/aws/aws-cdi-sdk/issues/67
+
 CDI (Cloud Digital Interface) SDK Version 2.3.2 - 11/29/21
 ---------------------------------------------------------------------------
 

@@ -176,10 +176,21 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
  */
 CdiReturnStatus EndpointManagerProtocolVersionSet(CdiEndpointHandle handle,
                                                   const CdiProtocolVersionNumber* remote_version_ptr);
+
+/**
+ * Returns true if the specified endpoint exists within the specified Endpoint Manager.
+ *
+ * @param handle Handle of CDI Endpoint Manager.
+ * @param endpoint_handle Handle of CDI endpoint.
+ *
+ * @return Handle of first endpoint in the list. Returns NULL if the list is empty.
+ */
+bool EndpointManagerIsEndpoint(EndpointManagerHandle handle, CdiEndpointHandle endpoint_handle);
+
 /**
  * Returns the first endpoint in the list of endpoints associated with the specified Endpoint Manager.
  *
- * @param handle Handle of CDI endpoint.
+ * @param handle Handle of CDI Endpoint Manager.
  *
  * @return Handle of first endpoint in the list. Returns NULL if the list is empty.
  */

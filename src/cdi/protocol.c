@@ -85,6 +85,23 @@ static void ProtocolVersionSetInternal(const CdiProtocolVersionNumber* remote_ve
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
+void ProtocolVersionSetLegacy(CdiProtocolHandle* ret_handle_ptr)
+{
+    CdiProtocolState* state_ptr = CdiOsMemAllocZero(sizeof(CdiProtocolState));
+
+    // NOTE: Since SDK 1.x ignores the probe_version_num, we use it so later versions of the SDK know that we support
+    // additional probe command formats.
+    CdiProtocolVersionNumber version = {
+        .version_num = 1,
+        .major_version_num = 0,
+        .probe_version_num = CDI_PROBE_VERSION // Probe version ignored by SDK 1.x
+    };
+
+    ProtocolVersionSet1(&version, &state_ptr->external_data, &state_ptr->api_ptr);
+
+    *ret_handle_ptr = (CdiProtocol*)state_ptr;
+}
+
 void ProtocolVersionSet(const CdiProtocolVersionNumber* remote_version_ptr, CdiProtocolHandle* ret_handle_ptr)
 {
     CdiProtocolState* state_ptr = CdiOsMemAllocZero(sizeof(CdiProtocolState));
@@ -142,6 +159,10 @@ CdiReturnStatus ProtocolProbeHeaderDecode(const void* encoded_data_ptr, int enco
         CDI_LOG_THREAD(kLogInfo, "Ignoring probe control packet that is too small[%d]. Expecting[%d] bytes.",
                        encoded_data_size, (int)sizeof(CdiProtocolVersionNumber));
         rs = kCdiStatusProbePacketInvalidSize;
+    } else if (2 == senders_version_ptr->version_num && 0 == senders_version_ptr->major_version_num &&
+               0 == senders_version_ptr->probe_version_num) {
+        CDI_LOG_THREAD(kLogError, "Remote CDI SDK 2.0.0 is not supported. Upgrade it to a newer version.");
+        rs = kCdiStatusNonFatal;
     } else {
         // Get the protocol of the sender's version and use it to decode the probe header.
         CdiProtocolState protocol_state = { 0 };

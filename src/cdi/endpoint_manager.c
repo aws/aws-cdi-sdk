@@ -160,18 +160,18 @@ static bool SetCommand(InternalEndpointState* internal_endpoint_ptr, EndpointMan
 {
     bool ret = false;
     EndpointManagerState* mgr_ptr = internal_endpoint_ptr->endpoint_manager_ptr;
-
     CdiEndpointHandle handle = &internal_endpoint_ptr->cdi_endpoint;
-    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager, "Endpoint Manager remote IP[%s:%d] got command[%s]",
-                             EndpointManagerEndpointRemoteIpGet(handle),
-                             EndpointManagerEndpointRemotePortGet(handle),
-                             InternalUtilityKeyEnumToString(kKeyEndpointManagerCommand, command));
+    const char* remote_ip_str = EndpointManagerEndpointRemoteIpGet(handle);
+    const int remote_port = EndpointManagerEndpointRemotePortGet(handle);
+    const char* command_str = InternalUtilityKeyEnumToString(kKeyEndpointManagerCommand, command);
 
     // Prevent the signals/variables used in this block from being accessed by other threads.
     CdiOsCritSectionReserve(mgr_ptr->state_lock);
 
     // Ignore all new commands if we got a shutdown command.
     if (!internal_endpoint_ptr->got_shutdown) {
+        CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager,
+            "Endpoint Manager remote IP[%s:%d] queuing command[%s].", remote_ip_str, remote_port, command_str);
         internal_endpoint_ptr->got_new_command = true;
         if (kEndpointStateShutdown == command) {
             internal_endpoint_ptr->got_shutdown = true;
@@ -188,6 +188,10 @@ static bool SetCommand(InternalEndpointState* internal_endpoint_ptr, EndpointMan
             CdiOsSignalSet(mgr_ptr->new_command_signal);
             ret = true;
         }
+    } else {
+        CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager,
+            "Endpoint Manager remote IP[%s:%d] ignoring command[%s] while shutting down.",
+            remote_ip_str, remote_port, command_str);
     }
 
     CdiOsCritSectionRelease(mgr_ptr->state_lock);
@@ -200,8 +204,10 @@ static bool SetCommand(InternalEndpointState* internal_endpoint_ptr, EndpointMan
  *
  * @param endpoint_ptr Pointer to endpoint to free resources.
  * @param shutting_down true if shutting down the connection, otherwise just resetting it.
+ *
+ * @return Status code indicating success or failure.
  */
-static void FlushResources(InternalEndpointState* endpoint_ptr, bool shutting_down)
+static CdiReturnStatus FlushResources(InternalEndpointState* endpoint_ptr, bool shutting_down)
 {
     EndpointManagerState* mgr_ptr = endpoint_ptr->endpoint_manager_ptr;
 
@@ -218,7 +224,7 @@ static void FlushResources(InternalEndpointState* endpoint_ptr, bool shutting_do
     // Clean up adapter level resources used by PollThread(). NOTE: For the EFA adapter, it will notify EFA Probe that
     // resetting the endpoint has completed. Therefore, this step must be the last one used as part of the connection
     // reset sequence.
-    CdiAdapterResetEndpoint(endpoint_ptr->cdi_endpoint.adapter_endpoint_ptr, !shutting_down);
+    return CdiAdapterResetEndpoint(endpoint_ptr->cdi_endpoint.adapter_endpoint_ptr, !shutting_down);
 }
 
 /**
@@ -229,6 +235,13 @@ static void FlushResources(InternalEndpointState* endpoint_ptr, bool shutting_do
 static void DestroyEndpoint(CdiEndpointHandle handle)
 {
     EndpointManagerState* mgr_ptr = (EndpointManagerState*)handle->connection_state_ptr->endpoint_manager_handle;
+
+    // Get thread-safe access to endpoint resources. Users can free buffers via RxEnqueueFreeBuffer() while internally
+    // an endpoint is being destroyed here.
+    CdiOsCritSectionReserve(mgr_ptr->connection_state_ptr->adapter_connection_ptr->endpoint_lock);
+
+    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager, "Destroying endpoint IP[%s:%d]",
+                             EndpointManagerEndpointRemoteIpGet(handle), EndpointManagerEndpointRemotePortGet(handle));
 
     InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(handle);
     FlushResources(internal_endpoint_ptr, true); // true= shutting down the endpoint
@@ -274,6 +287,8 @@ static void DestroyEndpoint(CdiEndpointHandle handle)
     }
 
     CdiOsMemFree(internal_endpoint_ptr);
+
+    CdiOsCritSectionRelease(mgr_ptr->connection_state_ptr->adapter_connection_ptr->endpoint_lock);
 }
 
 /**
@@ -286,6 +301,9 @@ static void DestroyEndpoint(CdiEndpointHandle handle)
 static CDI_THREAD EndpointManagerThread(void* ptr)
 {
     EndpointManagerState* mgr_ptr = (EndpointManagerState*)ptr;
+
+    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager, "Endpoint Manager thread starting. Connection name[%s].",
+                             mgr_ptr->connection_state_ptr->saved_connection_name_str);
 
     // Set this thread to use the connection's log. Can now use CDI_LOG_THREAD() for logging within this thread.
     CdiLoggerThreadLogSet(mgr_ptr->connection_state_ptr->log_handle);
@@ -313,26 +331,30 @@ static CDI_THREAD EndpointManagerThread(void* ptr)
                 while (internal_endpoint_ptr && CdiQueuePop(internal_endpoint_ptr->command_queue_handle, &command)) {
                     assert(0 != mgr_ptr->queued_commands_count);
                     CdiOsAtomicDec32(&mgr_ptr->queued_commands_count);
-                    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
+                    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager,
                                             "Endpoint Manager remote IP[%s:%d] processing command[%s]",
                                             EndpointManagerEndpointRemoteIpGet(endpoint_handle),
                                             EndpointManagerEndpointRemotePortGet(endpoint_handle),
                                             InternalUtilityKeyEnumToString(kKeyEndpointManagerCommand, command));
+                    CdiReturnStatus rs = kCdiStatusOk;
                     switch (command) {
                         case kEndpointStateIdle:
                             // Nothing special to do.
                             break;
                         case kEndpointStateReset:
-                            FlushResources(internal_endpoint_ptr, false); // false= not shutting down the endpoint.
+                            rs = FlushResources(internal_endpoint_ptr, false); // false= not shutting down the endpoint.
                             break;
                         case kEndpointStateStart:
-                            CdiAdapterStartEndpoint(endpoint_handle->adapter_endpoint_ptr);
+                            rs = CdiAdapterStartEndpoint(endpoint_handle->adapter_endpoint_ptr);
                             break;
                         case kEndpointStateShutdown:
-                            FlushResources(internal_endpoint_ptr, true); // true= is shutting down the endpoint.
+                            rs = FlushResources(internal_endpoint_ptr, true); // true= is shutting down the endpoint.
                             keep_alive = false;
                             break;
                     }
+                    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager, "Processing command [%s] complete[%s]",
+                        InternalUtilityKeyEnumToString(kKeyEndpointManagerCommand, command),
+                        CdiCoreStatusToString(rs));
                 }
                 endpoint_handle = EndpointManagerGetNextEndpoint(endpoint_handle);
             }
@@ -343,7 +365,7 @@ static CDI_THREAD EndpointManagerThread(void* ptr)
         CdiOsSignalSet(mgr_ptr->command_done_signal);
     }
 
-    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Endpoint Manager thread exiting. Connection name[%s].",
+    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentEndpointManager, "Endpoint Manager thread exiting. Connection name[%s].",
                             mgr_ptr->connection_state_ptr->saved_connection_name_str);
 
     // Acquire lock before accessing the resources below.
@@ -710,7 +732,7 @@ void EndpointManagerShutdownConnection(EndpointManagerHandle handle)
     // process being shutdown. If there are no registered threads then skip this check.
     //
     // NOTE: The start_signal only gets set at the end of RxCreateInternal() and TxCreateInternal() if the connection
-    // has been succesfully created. In the case where creation has failed, this function has already been called from
+    // has been successfully created. In the case where creation has failed, this function has already been called from
     // within those same functions, so no additional race-condition logic is required here.
     if (mgr_ptr->registered_thread_count) {
         if (mgr_ptr->connection_state_ptr->start_signal && mgr_ptr->command_done_signal &&
@@ -1076,7 +1098,7 @@ void EndpointManagerEndpointDestroy(CdiEndpointHandle handle)
     EndpointManagerState* mgr_ptr = CdiEndpointToInternalEndpoint(handle)->endpoint_manager_ptr;
     CdiConnectionState* con_ptr = mgr_ptr->connection_state_ptr;
 
-    // Protect access to the list, since mulitple threads may call this function.
+    // Protect access to the list, since multiple threads may call this function.
     CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
     // Walk through the endpoint list, ensuring that it has not already been queued to be destroyed.
     bool destroy = false;
@@ -1116,6 +1138,9 @@ void EndpointManagerEndpointDestroy(CdiEndpointHandle handle)
         // endpoints to ensure it has been removed. If not, wait again.
         bool found = true;
         while (found) {
+            // Make sure the poll thread isn't sleeping. We need it to call EndpointManagerPoll, which in turn destroys
+            // the endpoint for us.
+            CdiOsSignalSet(EndpointManagerGetNotificationSignal(mgr_ptr));
             uint32_t signal_index;
             CdiOsSignalsWait(signal_array, 3, false, CDI_INFINITE, &signal_index);
             if (0 == signal_index) {
@@ -1137,6 +1162,31 @@ void EndpointManagerEndpointDestroy(CdiEndpointHandle handle)
             }
         }
     }
+}
+
+bool EndpointManagerIsEndpoint(EndpointManagerHandle handle, CdiEndpointHandle endpoint_handle)
+{
+    bool ret = false;
+
+    EndpointManagerState* mgr_ptr = (EndpointManagerState*)handle;
+    if (mgr_ptr) {
+        CdiOsCritSectionReserve(mgr_ptr->endpoint_list_lock);
+
+        int count = CdiListCount(&mgr_ptr->endpoint_list);
+        InternalEndpointState* endpoint_ptr = (InternalEndpointState*)CdiListPeek(&mgr_ptr->endpoint_list);
+
+        InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(endpoint_handle);
+        for (int i = 0; i < count; i++) {
+            if (endpoint_ptr == internal_endpoint_ptr) {
+                ret = true; // Found it.
+                break;
+            }
+            endpoint_ptr = (InternalEndpointState*)endpoint_ptr->list_entry.next_ptr;
+        }
+        CdiOsCritSectionRelease(mgr_ptr->endpoint_list_lock);
+    }
+
+    return ret;
 }
 
 CdiEndpointHandle EndpointManagerGetFirstEndpoint(EndpointManagerHandle handle)
@@ -1207,7 +1257,7 @@ bool EndpointManagerPoll(CdiEndpointHandle* handle_ptr)
     }
 
     if (do_poll && mgr_ptr->thread_done) {
-        // Endpoint Manager thread is done. If pull thread was waiting, decrement thread wait count and clear flag.
+        // Endpoint Manager thread is done. If poll thread was waiting, decrement thread wait count and clear flag.
         if (mgr_ptr->poll_thread_waiting) {
             DecrementThreadWaitCount(mgr_ptr);
             mgr_ptr->poll_thread_waiting = false;

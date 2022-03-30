@@ -305,28 +305,6 @@ CDI_INTERFACE void CdiPoolPut(CdiPoolHandle handle, const void* item_ptr);
 CDI_INTERFACE void CdiPoolPutAll(CdiPoolHandle handle);
 
 /**
- * Get an array of pointers to available buffers in the pool.
- *
- * @param handle Memory pool handle.
- * @param item_count Number of buffers to get.
- * @param ret_item_array Pointer to returned array of buffer pointers.
- *
- * @return true if successful, otherwise false (not enough free buffers).
- */
-CDI_INTERFACE bool CdiPoolGetBulk(CdiPoolHandle handle, uint32_t item_count, void** ret_item_array);
-
-/**
- * Put an array of buffers back into the pool.
- *
- * @param handle Memory pool handle.
- * @param item_count Number of buffers to put.
- * @param item_array Pointer to array of buffer pointers to put back.
- *
- * @return true if successful, otherwise false.
- */
-CDI_INTERFACE bool CdiPoolPutBulk(CdiPoolHandle handle, uint32_t item_count, const void* item_array);
-
-/**
  * Get name of pool that was defined when pool was created.
  *
  * @param handle Pool handle.

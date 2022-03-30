@@ -68,10 +68,10 @@
 #define CDI_SDK_VERSION             2
 
 /// @brief CDI major version.
-#define CDI_SDK_MAJOR_VERSION       3
+#define CDI_SDK_MAJOR_VERSION       4
 
 /// @brief CDI minor version.
-#define CDI_SDK_MINOR_VERSION       2
+#define CDI_SDK_MINOR_VERSION       0
 
 /// @brief CDI protcol version.
 #define CDI_PROTOCOL_VERSION             2
@@ -283,7 +283,6 @@ typedef enum {
     /// A CloudWatch request failed due to invalid credentials. Verify that the access and secret keys have been setup
     /// correctly.
     kCdiStatusCloudWatchInvalidCredentials = 30,
-    // NOTE: Additions to and removals from this enumeration need to be reflected in CdiCoreStatusToString().
 
     /// Internal only status: the function succeeded but did nothing productive.
     kCdiStatusInternalIdle          = 31,
@@ -307,6 +306,8 @@ typedef enum {
     /// An attempt was made to register an already registered baseline profile.
     kCdiStatusDuplicateBaselineVersion = 37,
 
+    /// A received payload cannot be read because of format errors.
+    kCdiStatusInvalidPayload        = 38,
 } CdiReturnStatus;
 
 /// @brief A structure for holding a PTP timestamp defined in seconds and nanoseconds. This PTP time as defined by

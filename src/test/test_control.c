@@ -21,6 +21,7 @@
 #include <stdlib.h>
 
 #include "cdi_logger_api.h"
+#include "cdi_avm_payloads_api.h"
 #include "cdi_test.h"
 #include "curses.h"
 #include "riff.h"
@@ -231,14 +232,18 @@ void TestStatisticsCallback(const CdiCoreStatsCbData* cb_data_ptr)
         int connection_num = connection_info_ptr->my_index;
 
         // Update overall stats.
-        if (interval_stats_ptr->transfer_time_min < connection_info_ptr->transfer_time_min_overall ||
-                0 == connection_info_ptr->transfer_time_min_overall) {
-            connection_info_ptr->transfer_time_min_overall = interval_stats_ptr->transfer_time_min;
+        if (0 < interval_stats_ptr->transfer_count) {
+            if (0 == connection_info_ptr->transfer_time_min_overall) {
+                // If this is the first transfer stats received, then initialize transfer_time_min_overall.
+                connection_info_ptr->transfer_time_min_overall = interval_stats_ptr->transfer_time_min;
+            }
+            if (interval_stats_ptr->transfer_time_min < connection_info_ptr->transfer_time_min_overall) {
+                connection_info_ptr->transfer_time_min_overall = interval_stats_ptr->transfer_time_min;
+            }
+            if (interval_stats_ptr->transfer_time_max > connection_info_ptr->transfer_time_max_overall) {
+                connection_info_ptr->transfer_time_max_overall = interval_stats_ptr->transfer_time_max;
+            }
         }
-        if (interval_stats_ptr->transfer_time_max > connection_info_ptr->transfer_time_max_overall) {
-            connection_info_ptr->transfer_time_max_overall = interval_stats_ptr->transfer_time_max;
-        }
-
         connection_info_ptr->total_poll_thread_load += endpoint_stats_ptr->poll_thread_load;
         int total_load = 0;
         for (int i = 0; i < GetGlobalTestSettings()->total_num_connections; i++) {
@@ -248,7 +253,7 @@ void TestStatisticsCallback(const CdiCoreStatsCbData* cb_data_ptr)
         // NOTE: Could choose not to update stats if currently not connected (use
         // connection_info_ptr->connection_status).
         TestConsoleStats(0, connection_num+STATS_WINDOW_STATIC_HEIGHT-1, A_NORMAL,
-                        "|%8u |%7u |%5u |%6lu |%6lu |%6lu |%6lu |%6lu |%6lu |%6lu |%6u | %3u(%2u) | %4u  |  %4u   |",
+                        "|%8u |%7u |%5u |%6lu |%6lu |%6lu |%6lu |%6lu |%6lu |%6lu |%6u | %3u(%2u) |    %4u    |  %4u   |",
                         counter_stats_ptr->num_payloads_transferred,
                         counter_stats_ptr->num_payloads_dropped,
                         counter_stats_ptr->num_payloads_late,
@@ -308,7 +313,6 @@ void TestIncPayloadCount(TestConnectionInfo* connection_info_ptr, int stream_ind
     CdiOsSignalSet(connection_info_ptr->payload_done_signal);
 }
 
-
 bool PreparePayloadData(StreamSettings* stream_settings_ptr, int payload_buffer_size, CdiFileID* read_file_handle_ptr,
                         void* buffer_ptr)
 {
@@ -320,6 +324,10 @@ bool PreparePayloadData(StreamSettings* stream_settings_ptr, int payload_buffer_
         if (!return_val) {
             CDI_LOG_THREAD(kLogError, "Error opening file [%s] for reading.", stream_settings_ptr->file_read_str);
         } else if (stream_settings_ptr->riff_file) {
+            if (!RiffFileContainsAncillaryData(stream_settings_ptr->file_read_str)) {
+                CDI_LOG_THREAD(kLogWarning, "File [%s] does not contain ancillary data. "
+                    "This will cause Rx-side payload errors", stream_settings_ptr->file_read_str);
+            }
             return_val = StartRiffPayloadFile(stream_settings_ptr, *read_file_handle_ptr);
         }
     // Otherwise, load the buffer with a pattern.
@@ -338,8 +346,9 @@ bool PreparePayloadData(StreamSettings* stream_settings_ptr, int payload_buffer_
     return return_val;
 }
 
-bool GetNextPayloadDataSgl(TestConnectionInfo* connection_info_ptr, int stream_id, int payload_id,
-                           CdiFileID read_file_handle, CdiSgList* sgl_ptr)
+
+bool GetNextPayloadDataSgl(const TestConnectionInfo* connection_info_ptr, const StreamSettings* stream_settings_ptr,
+    int payload_id, CdiFileID read_file_handle, CdiSgList* sgl_ptr)
 {
     bool return_val = true;
 
@@ -349,8 +358,7 @@ bool GetNextPayloadDataSgl(TestConnectionInfo* connection_info_ptr, int stream_i
         // payload_count == num_payloads, so no need to update.
         // On the transmit side, this will never happen because the payload_count is incremented after this function is
         // called.
-        if (IsPayloadNumLessThanTotal(connection_info_ptr->payload_count,
-                                      connection_info_ptr->total_payloads)) {
+        if (IsPayloadNumLessThanTotal(connection_info_ptr->payload_count, connection_info_ptr->total_payloads)) {
             // If we are using a file, then load the buffer from the file.
             if (NULL != read_file_handle) {
                 // If we are using a file, then load the buffer from the file and read in payload_sized chunks.
@@ -379,7 +387,8 @@ bool GetNextPayloadDataSgl(TestConnectionInfo* connection_info_ptr, int stream_i
             } else {
                 // Set the first 64-bit word of the buffer using stream index and stream payload count to to make this
                 // payload unique.
-                (*(uint64_t*)sgl_ptr->sgl_head_ptr->address_ptr) = ((uint64_t)(stream_id) << 56) | payload_id;
+                uint64_t payload_tag = ((uint64_t)(stream_settings_ptr->stream_id) << 56) | payload_id;
+                (*(uint64_t*)sgl_ptr->sgl_head_ptr->address_ptr) = payload_tag;
             }
         } else {
             TEST_LOG_CONNECTION(kLogInfo, "Loaded last payload already.");
@@ -392,21 +401,24 @@ bool GetNextPayloadDataSgl(TestConnectionInfo* connection_info_ptr, int stream_i
     return return_val;
 }
 
-bool GetNextPayloadDataLinear(TestConnectionInfo* connection_info_ptr, int stream_id, int payload_id,
-                              CdiFileID read_file_handle, uint8_t* buffer_ptr, int buffer_size)
+bool GetNextPayloadDataLinear(const TestConnectionInfo* connection_info_ptr, const StreamSettings* stream_settings_ptr,
+    TestConnectionStreamInfo* stream_info_ptr)
 {
+    int payload_size = stream_info_ptr->next_payload_size;
+
     // Create a trivial SGL representing the linear buffer for the call to GetNextPayloadData().
     CdiSglEntry entry = {
-        .address_ptr = buffer_ptr,
-        .size_in_bytes = buffer_size,
+        .address_ptr = stream_info_ptr->rx_expected_data_buffer_ptr,
+        .size_in_bytes = payload_size,
         .next_ptr = NULL
     };
     CdiSgList sgl = {
         .sgl_head_ptr = &entry,
         .sgl_tail_ptr = &entry,
-        .total_data_size = buffer_size
+        .total_data_size = payload_size
     };
-    return GetNextPayloadDataSgl(connection_info_ptr, stream_id, payload_id, read_file_handle, &sgl);
+    return GetNextPayloadDataSgl(connection_info_ptr, stream_settings_ptr,
+        stream_info_ptr->payload_count, stream_info_ptr->user_data_read_file_handle, &sgl);
 }
 
 bool TestCreateConnectionLogFiles(TestConnectionInfo* connection_info_ptr, CdiLogMethodData* log_method_data_ptr,

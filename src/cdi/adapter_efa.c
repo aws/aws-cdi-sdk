@@ -79,6 +79,9 @@ static CdiReturnStatus EfaAdapterShutdown(CdiAdapterHandle adapter);
 typedef struct {
     bool is_socket_based;  ///< true for socket-based and false for EFA-based.
     CdiAdapterHandle control_interface_adapter_handle;  ///< Handle of adapter used by control interface.
+
+    /// @brief Lock used to protect access to libfabric for endpoint open/close.
+    CdiCsID libfabric_lock;
 } EfaAdapterState;
 
 //*********************************************************************************************************************
@@ -132,7 +135,13 @@ static struct fi_info* CreateHints(bool is_socket_based)
         hints_ptr->domain_attr->resource_mgmt = FI_RM_ENABLED;
         hints_ptr->caps = FI_MSG;
         hints_ptr->mode = FI_CONTEXT;
-        hints_ptr->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR;
+        hints_ptr->domain_attr->mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED | FI_MR_VIRT_ADDR;
+        if (!is_socket_based) {
+            // Socket provider does not generate keys, and will use zero for all key values. This will cause a duplicate
+            // key error when trying to use fi_mr_reg() more than once. For other providers (ie. EFA) enable key
+            // generation.
+            hints_ptr->domain_attr->mr_mode |= FI_MR_PROV_KEY;
+        }
 
         // Not using FI_THREAD_SAFE, to prevent use of locks. NOTE: This means that single-thread access to libfabric
         // must be used.
@@ -170,6 +179,10 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
     CdiReturnStatus rs = kCdiStatusOk;
     EfaAdapterState* efa_adapter_state_ptr =
         (EfaAdapterState*)endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->type_specific_ptr;
+
+    // Make thread-safe to protect access to libfabric for endpoint open/close.
+    CdiOsCritSectionReserve(efa_adapter_state_ptr->libfabric_lock);
+
     bool is_socket_based = efa_adapter_state_ptr->is_socket_based;
     bool is_transmitter = (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction);
 
@@ -181,11 +194,16 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
     char port_str[16];
     if (is_socket_based) {
         service_str = port_str;
-
-        const int data_port = 1 + endpoint_ptr->dest_control_port;
+        static int data_port_offset = 1;
+        const int data_port = data_port_offset++ + endpoint_ptr->dest_control_port;
         const int port_ret = snprintf(port_str, sizeof port_str, "%"PRIu16, data_port);
         if (port_ret < 0 || (port_ret >= (int)(sizeof port_str))) {
             return kCdiStatusFatal;
+        }
+        // To support multiple endpoints with the sockets provider we cycle through offsets
+        // 1...CDI_MAX_ENDPOINTS_PER_CONNECTION from the control port.
+        if (data_port_offset > CDI_MAX_ENDPOINTS_PER_CONNECTION) {
+            data_port_offset = 1;
         }
     }
 
@@ -266,7 +284,7 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
 
     if (kCdiStatusOk == rs) {
         int ret = fi_endpoint(endpoint_ptr->domain_ptr, endpoint_ptr->fabric_info_ptr,
-                          &endpoint_ptr->endpoint_ptr, NULL);
+                              &endpoint_ptr->endpoint_ptr, NULL);
         CHECK_LIBFABRIC_RC(fi_endpoint, ret);
     }
 
@@ -332,9 +350,11 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
     }
 
     if (hints_ptr) {
-        hints_ptr->fabric_attr->prov_name = NULL;
+        hints_ptr->fabric_attr->prov_name = NULL; // Value is statically allocated, so don't want libfabric to free it.
         fi_freeinfo(hints_ptr);
     }
+
+    CdiOsCritSectionRelease(efa_adapter_state_ptr->libfabric_lock);
 
     return rs;
 }
@@ -349,6 +369,12 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
 static CdiReturnStatus LibFabricEndpointClose(EfaEndpointState* endpoint_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;
+
+    AdapterConnectionState* adapter_con_state_ptr = endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr;
+    EfaAdapterState* efa_adapter_state_ptr = (EfaAdapterState*)adapter_con_state_ptr->adapter_state_ptr->type_specific_ptr;
+
+    // Make thread-safe to protect access to libfabric for endpoint open/close.
+    CdiOsCritSectionReserve(efa_adapter_state_ptr->libfabric_lock);
 
     bool is_transmitter = (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction);
 
@@ -405,6 +431,8 @@ static CdiReturnStatus LibFabricEndpointClose(EfaEndpointState* endpoint_ptr)
         endpoint_ptr->fabric_info_ptr = NULL;
     }
 
+    CdiOsCritSectionRelease(efa_adapter_state_ptr->libfabric_lock);
+
     return rs;
 }
 
@@ -459,20 +487,6 @@ static CdiReturnStatus EfaConnectionCreate(AdapterConnectionHandle handle, int p
         rs = kCdiStatusNotEnoughMemory;
     } else {
         efa_con_ptr->adapter_con_ptr = handle;
-
-        // ProbePacketWorkRequests are used for sending control packets over the socket interface. One additional
-        // entry is required so a control packet can be sent while the probe packet queue is full.
-        if (!CdiPoolCreate("Send Control ProbePacketWorkRequest Pool", MAX_PROBE_CONTROL_COMMANDS_PER_CONNECTION + 1,
-                           NO_GROW_SIZE, NO_GROW_COUNT,
-                           sizeof(ProbePacketWorkRequest), true, // true= Make thread-safe
-                           &efa_con_ptr->control_work_request_pool_handle)) {
-            rs = kCdiStatusAllocationFailed;
-        }
-#ifdef DEBUG_ENABLE_POOL_DEBUGGING_EFA_PROBE
-        if (kCdiStatusOk == rs) {
-            CdiPoolDebugEnable(probe_ptr->control_work_request_pool_handle, PoolDebugCallback);
-        }
-#endif
     }
 
     if (kCdiStatusOk == rs) {
@@ -488,12 +502,12 @@ static CdiReturnStatus EfaConnectionCreate(AdapterConnectionHandle handle, int p
             // For Tx, use 0 for port so ephemeral port is generated by the OS via bind().
             .port_number = (kEndpointDirectionSend == handle->direction) ? 0 : port_number,
         };
-        rs = ControlInterfaceCreate(&config_data, &efa_con_ptr->control_interface_handle);
+        rs = ControlInterfaceCreate(&config_data, &handle->control_interface_handle);
 
-        // Control interface are independent of the adapter endpoint, so start it now.
+        // Control interface is independent of the adapter endpoint, so start it now.
         if (kCdiStatusOk == rs) {
             // Start Rx control interface.
-            CdiAdapterStartEndpoint(ControlInterfaceGetEndpoint(efa_con_ptr->control_interface_handle));
+            CdiAdapterStartEndpoint(ControlInterfaceGetEndpoint(handle->control_interface_handle));
         }
     }
 
@@ -517,18 +531,10 @@ static CdiReturnStatus EfaConnectionDestroy(AdapterConnectionHandle handle)
     if (adapter_con_ptr) {
         EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
         if (efa_con_ptr) {
-            if (efa_con_ptr->control_interface_handle) {
-                ControlInterfaceDestroy(efa_con_ptr->control_interface_handle);
-                efa_con_ptr->control_interface_handle = NULL;
+            if (adapter_con_ptr->control_interface_handle) {
+                ControlInterfaceDestroy(adapter_con_ptr->control_interface_handle);
+                adapter_con_ptr->control_interface_handle = NULL;
             }
-
-            // The Control Interface uses this pool, so don't destroy it until after the Control Interface's polling
-            // thread has been stopped. NOTE: The SGL entries in this pool are stored within the pool buffer, so no
-            // additional resource freeing needs to be done here.
-            CdiPoolPutAll(efa_con_ptr->control_work_request_pool_handle);
-            CdiPoolDestroy(efa_con_ptr->control_work_request_pool_handle);
-            efa_con_ptr->control_work_request_pool_handle = NULL;
-
             CdiOsMemFree(efa_con_ptr);
             adapter_con_ptr->type_specific_ptr = NULL;
         }
@@ -603,7 +609,12 @@ static CdiReturnStatus EfaEndpointPoll(AdapterEndpointHandle endpoint_handle)
     EfaEndpointState* endpoint_ptr = (EfaEndpointState*)endpoint_handle->type_specific_ptr;
 
     if (kEndpointDirectionSend == endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->direction) {
-        rs = EfaTxEndpointPoll(endpoint_ptr);
+        // No need to do any Tx polling if there are no Tx packets in flight to check for completions. NOTE: The Tx
+        // Libfabric endpoint is not setup immediately when then endpoint is restarted, so having this check here
+        // ensures the endpoint is setup before trying to use it (ie. check completion queues).
+        if (endpoint_handle->tx_in_flight_ref_count) {
+            rs = EfaTxEndpointPoll(endpoint_ptr);
+        }
     } else {
         rs = EfaRxEndpointPoll(endpoint_ptr);
     }
@@ -626,11 +637,16 @@ static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle endpoint_handle, b
 
     if (kEndpointDirectionSend == endpoint_handle->adapter_con_state_ptr->direction) {
         EfaTxEndpointReset(endpoint_ptr);
+        // Don't restart Tx endpoint here. Wait until after probe has successfully connected before restarting. Probe
+        // will use EfaEndpointStart() to start the endpoint after the protocol version has successfully been
+        // negotiated. This prevents in-flight packet acks from erroneously being received from a previously established
+        // connection. In this case, in rxr_cq_insert_addr_from_rts() the packet type can be RXR_CONNACK_PKT instead of
+        // RXR_RTS_PKT.
+        EfaAdapterEndpointStop(endpoint_ptr, false); // false= Don't restart.
     } else {
         EfaRxEndpointReset(endpoint_ptr);
+        EfaAdapterEndpointStop(endpoint_ptr, reopen);
     }
-
-    EfaAdapterEndpointStop(endpoint_ptr, reopen);
 
     ProbeEndpointResetDone(endpoint_ptr->probe_endpoint_handle, reopen);
 
@@ -646,12 +662,25 @@ static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle endpoint_handle, b
  */
 static CdiReturnStatus EfaEndpointStart(AdapterEndpointHandle endpoint_handle)
 {
+    CdiReturnStatus rs = kCdiStatusOk;
+
     // NOTE: This is only called within the SDK, so no special logging macros needed for logging.
     EfaEndpointState* endpoint_ptr = (EfaEndpointState*)endpoint_handle->type_specific_ptr;
+    EfaAdapterState* efa_adapter_state_ptr =
+        (EfaAdapterState*)endpoint_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->type_specific_ptr;
 
-    ProbeEndpointStart(endpoint_ptr->probe_endpoint_handle);
+    CdiOsCritSectionReserve(efa_adapter_state_ptr->libfabric_lock);
+    // Open the libfabric endpoint if it is not currently open.
+    if (NULL == endpoint_ptr->fabric_ptr) {
+        rs = LibFabricEndpointOpen(endpoint_ptr);
+    }
+    CdiOsCritSectionRelease(efa_adapter_state_ptr->libfabric_lock);
 
-    return kCdiStatusOk;
+    if (kCdiStatusOk == rs) {
+        ProbeEndpointStart(endpoint_ptr->probe_endpoint_handle);
+    }
+
+    return rs;
 }
 
 /**
@@ -708,6 +737,7 @@ static CdiReturnStatus EfaAdapterShutdown(CdiAdapterHandle adapter_handle)
             if (efa_adapter_state_ptr->control_interface_adapter_handle) {
                 rs = NetworkAdapterDestroyInternal(efa_adapter_state_ptr->control_interface_adapter_handle);
             }
+            CdiOsCritSectionDelete(efa_adapter_state_ptr->libfabric_lock);
             CdiOsMemFree(efa_adapter_state_ptr);
             adapter_handle->type_specific_ptr = NULL;
         }
@@ -831,6 +861,13 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
         rs = kCdiStatusNotEnoughMemory;
     } else {
         efa_adapter_state_ptr->is_socket_based = is_socket_based;
+    }
+
+    if (kCdiStatusOk == rs) {
+        // Create a critical section used to protect access to libfabric endpoint open/close state data.
+        if (!CdiOsCritSectionCreate(&efa_adapter_state_ptr->libfabric_lock)) {
+            rs = kCdiStatusNotEnoughMemory;
+        }
     }
 
     // tx_buffer_size_bytes must be nonzero when the adapter is going to be used for Tx connection.

@@ -30,9 +30,6 @@
 /// @brief Default log component (ie. kLogComponentGeneric, kLogComponentPayloadConfig, etc).
 #define DEFAULT_LOG_COMPONENT       (kLogComponentProbe)
 
-/// @brief Number of elements in a static array.
-#define ARRAY_ELEMENT_COUNT(thisarray) ((int)(sizeof(thisarray)/sizeof(thisarray[0])))
-
 /// @brief Log through cdi_test's global log handle.
 #define TEST_LOG_GLOBAL(log_level, ...) \
     CdiLogger(GetGlobalTestSettings()->test_app_global_log_handle, kLogComponentGeneric, log_level, __FUNCTION__, \

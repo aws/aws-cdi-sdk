@@ -1,6 +1,8 @@
 # Linux Installation Guide
 Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux instances.
 
+**In addition to filing CDI-SDK [bugs/issues](https://github.com/aws/aws-cdi-sdk/issues), please use the [discussion pages](https://github.com/aws/aws-cdi-sdk/discussions) for Q&A, Ideas, Show and Tell or other General topics so the whole community can benefit.**
+
 ---
 
 - [Linux Installation Guide](#linux-installation-guide)
@@ -17,6 +19,12 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 - [Validate the EFA environment](#validate-the-efa-environment)
 - [Build the HTML documentation](#build-the-html-documentation)
 - [Creating additional instances](#creating-additional-instances)
+- [Pinning CDI-SDK Poll Threads to Specific CPU Cores](#pinning-cdi-sdk-poll-threads-to-specific-cpu-cores)
+  - [Additional Notes/Commands when using cset](#additional-notescommands-when-using-cset)
+    - [Display current cpusets](#display-current-cpusets)
+    - [Disable Thread Pinning (stop the shield)](#disable-thread-pinning-stop-the-shield)
+  - [Thread pinning applications running within Docker Containers](#thread-pinning-applications-running-within-docker-containers)
+    - [Launching Docker Containers](#launching-docker-containers)
 
 ---
 
@@ -149,19 +157,19 @@ Installation of dependent packages is required before building the AWS CDI SDK:
 - CentOS 7 and Amazon Linux 2:
 
     ```bash
-    sudo yum -y install gcc-c++ make cmake3 libnl3-devel autoconf automake libtool doxygen ncurses-devel
+    sudo yum -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel
     ```
 
 - Ubuntu:
 
     ```bash
-    sudo apt-get install –y build-essential libncurses-dev autoconf automake libtool libnl-3-dev cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev
+    sudo apt-get install –y build-essential libncurses-dev autoconf automake libtool cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev
     ```
 
 ## Download AWS SDK
 AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is only necessary to download it.
 
-**Note**: AWS CDI SDK has been tested with version 1.8.46 of AWS SDK C++.
+**Note**: AWS CDI SDK has been tested with version 1.8.x of AWS SDK C++.
 
 **Note**: The AWS SDK for C++ is essential for metrics gathering functions of AWS CDI SDK to operate properly.  Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
 
@@ -172,7 +180,7 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
 
        ```bash
        cd <install_dir>
-       git clone -b 1.8.46 https://github.com/aws/aws-sdk-cpp.git
+       git clone -b 1.8.x https://github.com/aws/aws-sdk-cpp.git
        ```
 
   The **<install_dir>** should now contain the folder hierarchy as shown below:
@@ -296,5 +304,116 @@ To create a new instance, create an Amazon Machine Image (AMI) of the existing i
      ```
 
 ---
+
+# Pinning CDI-SDK Poll Threads to Specific CPU Cores
+
+On Linux, the transmit and recieve poll threads should be pinned to specific CPU cores in order to prevent thread starvation resulting in poor packet transmission performance and other problems.
+
+The CPU used for the poll thread is defined when creating a new CDI connection through the CDI-SDK API using a
+configuration setting called **thread_core_num**. For transmit connections the value is in the **CdiTxConfigData**
+structure when using the **CdiAvmTxCreate()**, **CdiRawTxCreate()** or **CdiAvmTxStreamEndpointCreate()** APIs. For
+receive connections the value is in the **CdiRxConfigData** structure when using the **CdiAvmRxCreate()** or
+**CdiRawRxCreate()** APIs.
+
+In addition to defining which CPU core to use, the CDI enabled application must be launched using **cset**. If
+**cset** is not already installed, the steps shown below are for Amazon Linux 2, but should be similar for other
+distributions.
+
+**Note**: **cset** cannot be used with Docker. See the next section for information on thread pinning with Docker.
+
+1. Obtain the cpuset package and install it. NOTE: Can be built from source at:
+   https://github.com/lpechacek/cpuset/archive/refs/tags/v1.6.tar.gz
+
+1. Then run these steps:
+
+     ```
+    sudo yum install -y cpuset-1.6-1.noarch.rpm
+    sudo yum install -y python-pip
+    sudo pip install future configparser
+     ```
+
+Make sure the command shown below has been run first. This command will move kernel threads, so the CDI enabled
+application can use a specific set of CPU cores. In the example shown below, the CDI-enabled application will use CPU
+cores 1-24.
+
+```
+sudo cset shield -k on -c 1-24
+```
+
+On a system with 72 CPU cores (for example), output should look something like this:
+
+```
+cset: --> activating shielding:
+cset: moving 1386 tasks from root into system cpuset...
+[==================================================]%
+cset: kthread shield activated, moving 45 tasks into system cpuset...
+[==================================================]%
+cset: **> 35 tasks are not movable, impossible to move
+cset: "system" cpuset of CPUSPEC(0,25-71) with 1396 tasks running
+cset: "user" cpuset of CPUSPEC(1-24) with 0 tasks running
+```
+
+To run the CDI enabled application, launch it using cset. An example command line is shown below:
+
+
+```
+sudo cset shield -e <application>
+```
+
+**NOTE**: The use of **sudo** requires root privileges and may not be desired for the application.
+
+## Additional Notes/Commands when using cset
+
+### Display current cpusets
+
+To list cpusets, use this command:
+
+```
+cset set -l
+```
+
+**NOTE**: If docker shows up in the list you MUST remove it, otherwise trying to use any of the shield commands will fail.
+Use this command to remove it:
+
+```
+sudo cset set --destroy docker
+```
+
+### Disable Thread Pinning (stop the shield)
+
+This is required in order to use docker:
+
+```
+sudo cset shield --reset
+```
+
+## Thread pinning applications running within Docker Containers
+
+Below are some general tips and results of experimentation when using thread-pinning in CDI enabled applications
+within Docker containers.
+
+* Don't use hyper-threading. Intermittent problems will occur when hyper-threading is enabled. The first half of
+  the available cores are the real cores, and the second half are the hyper-threading cores. Only use the first half.
+* Tried using **isolcpus** to do thread pinning at the kernel level, but were unsuccessful.
+* Tried using **pthread_set_affinity** to pin all other threads away from the CDI cores, but caused application instability.
+* Tried pinning CDI threads to a unique core, but this resulted in kernel lockups and CDI crashes.
+* Tried multiple custom AffinityManager experiments, one was utilizing the file-based method of pinning non CDI threads.
+   All efforts were unsuccessful.
+* Any time we tried pinning CDI threads to less than three cores we ran into issues, so three is the minimum.
+
+**What worked:** Once the CDI-SDK poll-threads were pinned to specific cores, we pinned all other application threads
+away from those cores using the CDI-SDK API **CdiOsThreadCreatePinned()**.
+
+### Launching Docker Containers
+
+When launching a Docker container, we typically use command lines such as the one shown below:
+
+```
+docker run --rm --shm-size=8g --security-opt seccomp=unconfined --cap-add net_raw --cap-add NET_ADMIN --tty --name [my_container] --tmpfs=/var/your_generic_tmp --ulimit rtprio=100 --ulimit core=-1 --cpu-rt-runtime=30645 --cap-add SYS_NICE
+```
+
+**NOTE**: The docker command shown above was run with docker version 20.10.4.
+
+If you have additional findings, please start a [Show and Tell Discussion](https://github.com/aws/aws-cdi-sdk/discussions/categories/show-and-tell) so others may also benefit.
 
 [[Return to README](README.md)]

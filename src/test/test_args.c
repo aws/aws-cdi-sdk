@@ -73,15 +73,6 @@ static const CdiEnumStringKey patterns_key_array[] = {
     { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
 };
 
-/**
- * Enum/String array that contains valid connection protocols.
- */
-static const CdiEnumStringKey protocols_key_array[] = {
-    { kTestProtocolRaw,       "RAW" },
-    { kTestProtocolAvm,       "AVM" },
-    { CDI_INVALID_ENUM_VALUE, NULL } // End of the array
-};
-
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -105,9 +96,9 @@ static const char* TestPatternEnumToString(TestPatternType enum_value)
  *
  * @return Pointer to returned string. If no match was found, NULL is returned.
  */
-static const char* TestProtocolEnumToString(TestConnectionProtocolType enum_value)
+static const char* TestProtocolEnumToString(CdiConnectionProtocolType enum_value)
 {
-    return CdiUtilityEnumValueToString(protocols_key_array, enum_value);
+    return CdiUtilityEnumValueToString(CdiUtilityKeyGetArray(kKeyConnectionProtocolType), enum_value);
 }
 
 /**
@@ -129,9 +120,9 @@ static TestPatternType TestPatternStringToEnum(const char* name_str)
  *
  * @return Returned enumerated value. If no match was found, CDI_INVALID_ENUM_VALUE is returned.
  */
-static TestConnectionProtocolType TestProtocolStringToEnum(const char* name_str)
+static CdiConnectionProtocolType TestProtocolStringToEnum(const char* name_str)
 {
-    return CdiUtilityStringToEnumValue(protocols_key_array, name_str);
+    return CdiUtilityStringToEnumValue(CdiUtilityKeyGetArray(kKeyConnectionProtocolType), name_str);
 }
 
 /**
@@ -230,14 +221,14 @@ static void PrintUsageAudio(const OptDef* opt_array_ptr, const OptArg* opt_ptr)
 }
 
 /**
- * @brief Prints the audio usage message.
+ * @brief Prints help on RIFF format and usage in cdi_test.
  *
  * @param opt_ptr Pointer to option argument.
  */
 static void PrintRiffHelp(const OptArg* opt_ptr)
 {
     if (opt_ptr->num_args) {
-        ReportRiffFileContents(opt_ptr->args_array[0]);
+        ReportRiffFileContents(opt_ptr->args_array[0], 100, kRiffDumpRaw);
         return;
     }
 
@@ -1010,7 +1001,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
     }
 
     // Check for unique stream identifiers.
-    if (!arg_error && kTestProtocolAvm == test_settings_ptr->connection_protocol) {
+    if (!arg_error && kProtocolTypeAvm == test_settings_ptr->connection_protocol) {
         arg_error = !IsUniqueStreamIdentifiers(test_settings_ptr);
     }
 
@@ -1018,7 +1009,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
     for (int stream_index = 0; stream_index < test_settings_ptr->number_of_streams; stream_index++) {
         StreamSettings* stream_settings_ptr = &test_settings_ptr->stream_settings[stream_index];
         // Check that if we are in AVM mode, the user has selected (at least) one data type.
-        if (kTestProtocolAvm == test_settings_ptr->connection_protocol) {
+        if (kProtocolTypeAvm == test_settings_ptr->connection_protocol) {
             if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->avm_data_type) {
                 TestConsoleLog(kLogError, "Connection[%s]: The connection protocol was set as [%s], so you must use "
                                           "--avm_video, --avm_audio, or --avm_anc to set the data type.",
@@ -1500,7 +1491,7 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
         TestConsoleLog(kLogInfo, "    # of Streams : %d", test_settings_ptr[i].number_of_streams);
         for (int j=0; j<test_settings_ptr[i].number_of_streams; j++) {
             const StreamSettings* stream_settings_ptr = &test_settings_ptr[i].stream_settings[j];
-            if (test_settings_ptr[i].connection_protocol == kTestProtocolAvm) {
+            if (kProtocolTypeAvm == test_settings_ptr[i].connection_protocol) {
                 // NOTE: Payload type is generic for all profile versions, so using NULL here for version.
                 TestConsoleLog(kLogInfo, "    Stream[%d]    : AVM %s", j,
                               CdiAvmKeyEnumToString(kKeyAvmPayloadType, stream_settings_ptr->avm_data_type, NULL));
@@ -1616,7 +1607,7 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
         switch ((TestOptionNames)opt.option_index) {
             case kTestOptionStreamID:
                 // Stream ID is only valid for protocol AVM.
-                if (kTestProtocolAvm != test_settings_ptr[connection_index].connection_protocol) {
+                if (kProtocolTypeAvm != test_settings_ptr[connection_index].connection_protocol) {
                     TestConsoleLog(kLogError, "Invalid --id (-id) argument. Stream ID is only valid for AVM payloads.");
                     arg_error = true;
                 }
@@ -1665,13 +1656,19 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 test_settings_ptr[connection_index].keep_alive = true;
                 break;
             case kTestOptionBufferType:
-                test_settings_ptr[connection_index].buffer_type = CdiUtilityKeyStringToEnum(kKeyBufferType,
-                                                                                            opt.args_array[0]);
-                // Check if the user-supplied buffer type type is a valid buffer type.
-                if (CDI_INVALID_ENUM_VALUE == (int)test_settings_ptr[connection_index].buffer_type) {
-                    TestConsoleLog(kLogError, "Invalid --buffer_type (-bt) argument [%s]. See list of options in help "
-                                              "message.", opt.args_array[0]);
-                    arg_error = true;
+                if (is_parsing_stream_option) {
+                        TestConsoleLog(kLogError, "--buffer_type is not a stream option. Specify for a connection.");
+                        arg_error = true;
+
+                } else {
+                    test_settings_ptr[connection_index].buffer_type = CdiUtilityKeyStringToEnum(kKeyBufferType,
+                                                                                                opt.args_array[0]);
+                    // Check if the user-supplied buffer type is valid.
+                    if (CDI_INVALID_ENUM_VALUE == (int)test_settings_ptr[connection_index].buffer_type) {
+                        TestConsoleLog(kLogError, "Invalid --buffer_type (-bt) argument [%s]. See list of options in help "
+                                                  "message.", opt.args_array[0]);
+                        arg_error = true;
+                    }
                 }
                 break;
             case kTestOptionRemoteIP:

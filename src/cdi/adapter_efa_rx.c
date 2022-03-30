@@ -170,6 +170,14 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
     // Ensure buffer was properly freed before allocating a new one. See FreePacketPool().
     assert(NULL == endpoint_state_ptr->rx_state.allocated_buffer_ptr);
 
+    if (packet_count >= (int)endpoint_state_ptr->fabric_info_ptr->rx_attr->size) {
+        CDI_LOG_THREAD(kLogWarning, "Requested Rx packet buffer count[%d] exceeds endpoint capability[%d]. Reducing.",
+                       packet_count, endpoint_state_ptr->fabric_info_ptr->rx_attr->size);
+        // Use one less than the maximum size so we never run out of buffers. For some providers, using the maximum
+        // number of buffers causes the provider to pre-allocate additional unwanted memory.
+        packet_count = (int)endpoint_state_ptr->fabric_info_ptr->rx_attr->size - 1;
+    }
+
     const int aligned_packet_size = (packet_size + packet_buffer_alignment - 1) & ~(packet_buffer_alignment - 1);
 
     // Huge pages are not guaranteed to be aligned at all. Add enough padding to be able to shift the starting address
@@ -304,13 +312,10 @@ CdiReturnStatus EfaRxEndpointReset(EfaEndpointState* endpoint_state_ptr)
     CdiPoolPutAll(endpoint_state_ptr->rx_state.packet_sgl_entries_pool_handle);
     ProbeEndpointReset(endpoint_state_ptr->probe_endpoint_handle);
 
-    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)endpoint_state_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->type_specific_ptr;
-
-    // If Tx control handle exists, flush its adapter Tx queue.
-    if (efa_con_ptr->control_interface_handle) {
-        AdapterEndpointHandle control_handle = ControlInterfaceGetEndpoint(efa_con_ptr->control_interface_handle);
-        CdiQueueFlush(control_handle->tx_packet_queue_handle);
-    }
+    // NOTE: No need to flush Tx control packet FIFO. Any pending packets in the FIFO will be processed and related work
+    // requests are freed via ProbeTxControlMessageFromEndpoint(). If the control interface is being destroyed, then the
+    // Tx control packet FIFO will be flushed via ControlInterfaceDestroy(), which walks the FIFO and frees related work
+    // requests.
 
     return kCdiStatusOk;
 }
@@ -346,20 +351,17 @@ CdiReturnStatus EfaRxEndpointRxBuffersFree(const AdapterEndpointHandle handle, c
     // Free SGL data buffers and SGL entries.
     CdiSglEntry *sgl_entry_ptr = sgl_ptr->sgl_head_ptr;
     while (sgl_entry_ptr) {
-        // Don't need to free resources if not connected, since all libfabric resources get reset whenever the
-        // connection is lost.
-        if (kCdiConnectionStatusConnected == handle->connection_status_code) {
-            msg_iov.iov_base = (char*)sgl_entry_ptr->address_ptr - msg_prefix_size;
+        msg_iov.iov_base = (char*)sgl_entry_ptr->address_ptr - msg_prefix_size;
 
-            // NOTE: This function is called from PollThread(), so no need to use libfabric's FI_THREAD_SAFE option.
-            // Access to libfabric functions such as fi_recvmsg() and fi_cq_read() use PollThread().
-            if (!PostRxBuffer(endpoint_state_ptr, &msg_iov, NULL != sgl_entry_ptr->next_ptr)) {
-                // Something went terribly wrong in libfabric. Notify the probe component so it can start the connection
-                // reset process.
-                ProbeEndpointError(endpoint_state_ptr->probe_endpoint_handle);
-                rs = kCdiStatusNotConnected;
-            }
+        // NOTE: This function is called from PollThread(), so no need to use libfabric's FI_THREAD_SAFE option.
+        // Access to libfabric functions such as fi_recvmsg() and fi_cq_read() use PollThread().
+        if (!PostRxBuffer(endpoint_state_ptr, &msg_iov, NULL != sgl_entry_ptr->next_ptr)) {
+            // Something went terribly wrong in libfabric. Notify the probe component so it can start the connection
+            // reset process.
+            ProbeEndpointError(endpoint_state_ptr->probe_endpoint_handle);
+            rs = kCdiStatusNotConnected;
         }
+
         // Free SGL entry buffer.
         CdiSglEntry *next_ptr = sgl_entry_ptr->next_ptr; // Save next entry, since Put() will free its memory.
         // NOTE: This pool is not thread-safe, so must ensure that only one thread is accessing it at a time.

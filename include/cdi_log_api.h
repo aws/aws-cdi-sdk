@@ -114,7 +114,7 @@ struct CdiLogMessageCbData {
  * Cdi...Create() functions.
  *
  * This callback function is invoked whenever a log message is generated. Control of which log components are enabled
- * is set using CdiCoreLogComponentEnable(). Log levels are set using CdiCoreLogLevelSet().
+ * is set using CdiLogComponentEnable(). Log levels are set using CdiLogLevelSet().
  *
  * @param cb_data_ptr A pointer to an CdiLogMessageCbData structure.
  */

@@ -23,6 +23,14 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
+/// Symbols referring two different kinds of RIFF data to show.
+enum RiffDumpMode {
+    kRiffDumpNone,           ///< Don't dump anything.
+    kRiffDumpRaw,            ///< Dump RIFF chunks.
+    kRiffDumpDid,            ///< When a CID file, show DID and SDID of ancillary payloads.
+    kRiffDumpClosedCaptions, ///< When a CID file, show closed caption data, if any.
+};
+
 /// Structure for the 8 byte chunk header that proceeds every payload.
 typedef struct {
     /// Four character code for indicating the form type. The test checks for form type 'CDI '.
@@ -46,20 +54,19 @@ typedef struct {
 //*********************************************************************************************************************
 
 /**
- * @brief Get the size of the next payload from a RIFF file. The RIFF file specifies payload size in the file.
- * Once the payload size has been read the size can be used in GetNextPayload() to read the next payload.
+ * @brief Get the size of the next chunk from a RIFF file. The RIFF file specifies chunk size in the file.
+ * Once the chunk size has been read the size can be used in GetNextPayload() to read the next chunk.
  *
- * @param   connection_info_ptr     Pointer to test connection information.
  * @param   stream_settings_ptr     Pointer to stream settings.
- * @param   read_file_handle        The file handle to read RIFF payload header from.
- * @param   ret_payload_size_ptr    Returns the size of the next payload to be read from the RIFF file.
+ * @param   read_file_handle        The file handle to read RIFF chunk header from.
+ * @param   ret_chunk_size_ptr      Returns the size of the next chunk to be read from the RIFF file.
  *
  * @return                          If successful return true, otherwise returns false.
  *
  * @see StartRiffPayloadFile()
  */
-bool GetNextRiffPayloadSize(TestConnectionInfo* connection_info_ptr, StreamSettings* stream_settings_ptr,
-                            CdiFileID read_file_handle, int* ret_payload_size_ptr);
+bool GetNextRiffChunkSize(const StreamSettings* stream_settings_ptr,
+                          CdiFileID read_file_handle, int* ret_chunk_size_ptr);
 
 /**
  * @brief Reads the initial header information from the RIFF file and verifies that the file header indicates a valid
@@ -84,15 +91,30 @@ bool GetNextRiffPayloadSize(TestConnectionInfo* connection_info_ptr, StreamSetti
  *
  * @return                          If successful return true, otherwise returns false.
  */
-bool StartRiffPayloadFile(StreamSettings* stream_settings_ptr, CdiFileID read_file_handle);
+bool StartRiffPayloadFile(const StreamSettings* stream_settings_ptr, CdiFileID read_file_handle);
 
 /**
  * @brief Prints information about the contents of a RIFF file.
  *
  * @param file_path_str Pointer to the file path string.
+ * @param max_line_length Maximum number of characters of description to print per chunk.
+ * @param mode Dump mode selecting the kind of data to show.
+ *
+ * @return True when file was processed successfully, false when an error occurred.
  */
-void ReportRiffFileContents(const char* file_path_str);
+bool ReportRiffFileContents(const char* file_path_str, int max_line_length, int mode);
 
+/**
+ * Check if RIFF file data is decodable ancillary data. A run of cdi_test with --riff includes payload decoding as
+ * one of the checks. A RIFF file that does contain actual ancillary data is therefore unsuitable as test input, as it
+ * will cause payload errors by failing the decoding check. This function tells whether a RIFF file is suitable for
+ * testing.
+ *
+ * @param file_path_str Pointer to the file path string.
+ *
+ * @return True if and only if the file contains decodable ancillary data.
+ */
+bool RiffFileContainsAncillaryData(const char* file_path_str);
 
 #endif // RIFF_H__
 

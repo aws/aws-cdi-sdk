@@ -99,7 +99,7 @@ bool PayloadInit(CdiConnectionState* con_state_ptr, const CdiSgList* source_sgl_
     }
 
     // Check that the sum of all entry size_in_bytes values matches the SGL's total_data_size.
-    if (ret && source_sgl_ptr->total_data_size != total_entry_size ) {
+    if (ret && source_sgl_ptr->total_data_size != total_entry_size) {
         ret = false;
         CDI_LOG_THREAD(kLogError, "Mismatch between sgl total_data_size [%d] and sum of entries size_in_bytes [%d].",
                        source_sgl_ptr->total_data_size, total_entry_size);
@@ -205,15 +205,17 @@ bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizer
     if (kStateAddingEntries == packetizer_state_ptr->state) {
         // Break out of this loop if we filled the packet, or we ran out of source SGL entries, or we have reached the
         // maximum number of SGL entries supported by the underlying adapter.
-        while (ret && packetizer_state_ptr->accumulated_payload_bytes < packetizer_state_ptr->max_payload_bytes &&
-               packet_state_ptr->source_entry_ptr) {
+        while (ret &&
+               packetizer_state_ptr->accumulated_payload_bytes < packetizer_state_ptr->max_payload_bytes &&
+               packetizer_state_ptr->sgl_entry_count < packet_state_ptr->maximum_tx_sgl_entries &&
+               NULL != packet_state_ptr->source_entry_ptr) {
             // Create new SGL entry for the payload data and add it to the packet SGL.
-            CdiSglEntry *packet_entry_data_ptr = NULL;
+            CdiSglEntry *packet_entry_ptr = NULL;
 #ifdef USE_MEMORY_POOL_APPENDED_LISTS
             ret = CdiPoolGetAndAppend(packet_sgl_entry_pool_handle, packet_sgl_ptr->sgl_tail_ptr,
                                         (void**)&packet_entry_data_ptr);
 #else
-            ret = CdiPoolGet(packet_sgl_entry_pool_handle, (void**)&packet_entry_data_ptr);
+            ret = CdiPoolGet(packet_sgl_entry_pool_handle, (void**)&packet_entry_ptr);
 #endif
             if (ret) {
                 const int sgl_data_size = CDI_MIN(packet_state_ptr->source_entry_ptr->size_in_bytes -
@@ -222,13 +224,14 @@ bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizer
                                                   packetizer_state_ptr->accumulated_payload_bytes);
 
                 // Initialize SGL entry.
-                packet_entry_data_ptr->next_ptr = NULL;
-                packet_entry_data_ptr->internal_data_ptr = NULL;
+                packet_entry_ptr->next_ptr = NULL;
+                packet_entry_ptr->internal_data_ptr = NULL;
 
                 // Set SGL entry data and add it to the SGL list.
-                packet_entry_data_ptr->address_ptr = packetizer_state_ptr->data_addr_ptr;
-                packet_entry_data_ptr->size_in_bytes = sgl_data_size;
-                SglAppend(packet_sgl_ptr, packet_entry_data_ptr); // NOTE: SGL list size is updated in this call.
+                packet_entry_ptr->address_ptr = packetizer_state_ptr->data_addr_ptr;
+                packet_entry_ptr->size_in_bytes = sgl_data_size;
+                SglAppend(packet_sgl_ptr, packet_entry_ptr); // NOTE: SGL list size is updated in this call.
+                packetizer_state_ptr->sgl_entry_count++;
 
                 packetizer_state_ptr->accumulated_payload_bytes += sgl_data_size;
                 packetizer_state_ptr->data_addr_ptr += sgl_data_size;
@@ -245,17 +248,6 @@ bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizer
                 }
 
                 packet_state_ptr->packet_payload_data_size = packetizer_state_ptr->accumulated_payload_bytes;
-
-                // Determine if we have reached the maximum number of SGL entries the adapter supports for a single
-                // packet.
-                if (++packetizer_state_ptr->sgl_entry_count >= packet_state_ptr->maximum_tx_sgl_entries) {
-                    // Force subsequent packets to include a data offset in their headers; this packet doesn't need the
-                    // offset to be correctly placed on the receive side. The data offset is needed for the receive side
-                    // to know where to place the data when its using a linear buffer since packets can arrive out of
-                    // order.
-                    packet_state_ptr->payload_type = kPayloadTypeDataOffset;
-                    break;
-                }
             }
         }
 
@@ -263,7 +255,15 @@ bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizer
         if (ret) {
             // Packet was successfully obtained, so update returned last state flag, increment packet counters and
             // initialize the packet state.
-            *ret_is_last_packet_ptr = NULL == packet_state_ptr->source_entry_ptr;
+            if (NULL == packet_state_ptr->source_entry_ptr) {
+                *ret_is_last_packet_ptr = true;
+            } else {
+                // Force subsequent packets to include a data offset in their headers; this packet doesn't need the
+                // offset to be correctly placed on the receive side. The data offset is needed for the receive side
+                // to know where to place the data when its using a linear buffer since packets can arrive out of
+                // order.
+                packet_state_ptr->payload_type = kPayloadTypeDataOffset;
+            }
             packet_state_ptr->packet_sequence_num++;
             payload_state_ptr->cdi_endpoint_handle->tx_state.packet_id++;
             packetizer_state_ptr->state = kStateInactive;

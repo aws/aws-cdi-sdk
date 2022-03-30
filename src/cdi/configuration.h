@@ -172,9 +172,6 @@
 //********************************************* SETTINGS FOR EFA ADAPTER **********************************************
 //*********************************************************************************************************************
 
-/// @brief Timeout used when stopping an EFA endpoint. Value is in millisconds.
-#define EFA_ENDPOINT_STOP_TIMEOUT_MSEC          (2000)
-
 /// @brief Number of Tx packets to cache before notifying libfabric to ring the NIC's doorbell.
 #define EFA_TX_PACKET_CACHE_SIZE                (16)
 
@@ -210,7 +207,7 @@
 
 /// @brief Once a connection has been established, this defines how often the transmitter sends a ping to command to the
 /// receiver using the control interface. The value is in milliseconds.
-#define SEND_PING_COMMAND_FREQUENCY_MSEC        (3000)
+#define SEND_PING_COMMAND_FREQUENCY_MSEC        (1000)
 
 /// @brief This value is used by the transmitter to define how many times a command is sent without receiving an ACK
 /// reply before going into connection reset mode.
@@ -223,8 +220,9 @@
 #define TX_COMMAND_ACK_TIMEOUT_MSEC             (500)
 
 /// @brief Defines how long the receiver waits for a ping command from the remote target before changing to connection
-/// reset mode. The value is in milliseconds.
-#define RX_PING_MONITOR_TIMEOUT_MSEC            (SEND_PING_COMMAND_FREQUENCY_MSEC+(TX_COMMAND_ACK_TIMEOUT_MSEC*(TX_COMMAND_MAX_RETRIES+1)))
+/// reset mode. The value is in milliseconds. This should be long enough to avoid false disconnects due to a few TX ping
+/// packets getting dropped.
+#define RX_PING_MONITOR_TIMEOUT_MSEC            (3000+(TX_COMMAND_ACK_TIMEOUT_MSEC*(TX_COMMAND_MAX_RETRIES+1)))
 
 /// @brief Defines the EFA interface probe packet data size.
 #define EFA_PROBE_PACKET_DATA_SIZE              (1024)
@@ -254,6 +252,16 @@
 /// The application program cannot hold on to more than this number of buffers before returning them through the
 /// CdiCoreRxFreeBuffer() function.
 #define RX_LINEAR_BUFFER_COUNT                  (5)
+
+//*********************************************************************************************************************
+//****************************************** SETTINGS FOR SYSTEM MONITORING *******************************************
+//*********************************************************************************************************************
+
+/// The number of milliseconds that system monitoring thread sleeps for before checking anything.
+#define SYSTEM_MONITORING_SLEEP_TIME_MS         (400)
+
+/// The maximum number of milliseconds that system monitoring thread should have slept for before waking up.
+#define SYSTEM_MONITORING_SLEEP_TIME_TOLERANCE_MS (SYSTEM_MONITORING_SLEEP_TIME_MS + 200)
 
 //*********************************************************************************************************************
 //********************************************* SETTINGS FOR CLOUDWATCH ***********************************************

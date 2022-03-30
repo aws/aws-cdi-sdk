@@ -29,7 +29,7 @@ typedef enum {
 
 /**
  * @brief This selector determines the SDK component type for logging. Logging for it can be enabled/disabled using
- *        CdiCoreLogComponentEnable().
+ *        CdiLogComponentEnable().
  * NOTE: Any changes made here MUST also be made to "log_component_key_array" in utilities_api.c.
  */
 typedef enum {

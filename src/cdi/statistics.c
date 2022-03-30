@@ -22,31 +22,12 @@
 #include "internal_log.h"
 #include "t_digest.h"
 
+#include <assert.h>
 #include <inttypes.h>
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
-
-/**
- * @brief Structure that holds the parts of StatisticsState structure required per statistics gathering path.
- */
-typedef struct {
-    TDigestHandle td_handle;          ///< Handle for accessing this connection's percentile tracking t-Digest.
-    CdiSignalType thread_exit_signal; ///< Signal used for dynamic thread exit.
-    CdiThreadID stats_thread_id;      ///< Stats thread ID. The thread is dynamically created/destroyed as needed.
-} MetricsDestinationInfo;
-
-/**
- * Enumeration of the possible metrics destinations.
- */
-typedef enum {
-    kMetricsDestinationCloudWatch,        ///< The user's CloudWatch metrics.
-#ifdef METRICS_GATHERING_SERVICE_ENABLED
-    kMetricsDestinationGatheringService,  ///< The CDI metrics gathering service.
-#endif  // METRICS_GATHERING_SERVICE_ENABLED
-    kMetricsDestinationsCount             ///< The number of supported metrics destinations.
-} MetricsDestinations;
 
 /**
  * Function pointer used for sending metrics from the StatsThread().
@@ -60,8 +41,28 @@ typedef struct {
     StatisticsState* stats_state_ptr; ///< Pointer to the StatsState to be managed by the thread.
     SendStatsMessage send_stats_message_ptr; ///< Pointer to the function for sending statistics.
     int metrics_destination_idx;      ///< The index into StatisticsState.destination_info array to use for this thread.
-    uint32_t stats_period_ms;         ///< Stats period in milliseconds.
 } StatsThreadArgs;
+
+/**
+ * @brief Structure that holds the parts of StatisticsState structure required per statistics gathering path.
+ */
+typedef struct {
+    TDigestHandle td_handle;          ///< Handle for accessing this connection's percentile tracking t-Digest.
+    CdiSignalType thread_exit_signal; ///< Signal used for dynamic thread exit.
+    CdiThreadID stats_thread_id;      ///< Stats thread ID. The thread is dynamically created/destroyed as needed.
+    StatsThreadArgs* stats_thread_args_ptr; ///< Stats thread argument pointer (malloced instance data).
+} MetricsDestinationInfo;
+
+/**
+ * Enumeration of the possible metrics destinations.
+ */
+typedef enum {
+    kMetricsDestinationCloudWatch,        ///< The user's CloudWatch metrics.
+#ifdef METRICS_GATHERING_SERVICE_ENABLED
+    kMetricsDestinationGatheringService,  ///< The CDI metrics gathering service.
+#endif  // METRICS_GATHERING_SERVICE_ENABLED
+    kMetricsDestinationsCount             ///< The number of supported metrics destinations.
+} MetricsDestinations;
 
 /**
  * @brief Structure used to hold state data for statistics.
@@ -87,6 +88,9 @@ struct StatisticsState {
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
+
+/// Metrics are sent to the gathering service once per minute.
+static const int metrics_gathering_period_ms = 60000;
 
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
@@ -218,10 +222,10 @@ static CDI_THREAD StatsThread(void* ptr)
     uint64_t base_time = CdiOsGetMilliseconds();
     uint64_t interval_counter = 0;
 
-    uint32_t wait_time_ms = args_ptr->stats_period_ms;
+    uint32_t wait_time_ms = stats_state_ptr->stats_period_ms;
     uint32_t signal_index = 0;
     while (CdiOsSignalsWait(signal_array, 2, false, wait_time_ms, &signal_index)) {
-        wait_time_ms = args_ptr->stats_period_ms;
+        wait_time_ms = stats_state_ptr->stats_period_ms;
         if (0 == signal_index || 1 == signal_index) {
             // Got shutdown or thread exit signal, so exit.
             break;
@@ -229,8 +233,8 @@ static CDI_THREAD StatsThread(void* ptr)
             // Got timeout (CDI_OS_SIG_TIMEOUT). Send latest stats to all registered callbacks.
             args_ptr->send_stats_message_ptr(stats_state_ptr, args_ptr->metrics_destination_idx);
             interval_counter++;
-            uint64_t next_start_time = base_time + (interval_counter * (uint64_t)args_ptr->stats_period_ms) +
-                                       (uint64_t)args_ptr->stats_period_ms;
+            uint64_t next_start_time = base_time + (interval_counter * (uint64_t)stats_state_ptr->stats_period_ms) +
+                                       (uint64_t)stats_state_ptr->stats_period_ms;
 
             uint64_t current_time = CdiOsGetMilliseconds();
             if (current_time > next_start_time) {
@@ -246,11 +250,11 @@ static CDI_THREAD StatsThread(void* ptr)
                 wait_time_ms = next_start_time - current_time;
 
                 // Assure wait time is never greater than stats_period_ms.
-                if (wait_time_ms > args_ptr->stats_period_ms) {
+                if (wait_time_ms > stats_state_ptr->stats_period_ms) {
                     CDI_LOG_THREAD(kLogWarning, "Connection[%s] Wait time rolled. Wait time [%"PRIu32"]ms versus"
                                    " stats period [%"PRIu32"]ms.", con_state_ptr->saved_connection_name_str,
-                                   wait_time_ms, args_ptr->stats_period_ms);
-                    wait_time_ms = args_ptr->stats_period_ms;
+                                   wait_time_ms, stats_state_ptr->stats_period_ms);
+                    wait_time_ms = stats_state_ptr->stats_period_ms;
                     base_time = current_time;
                     interval_counter = 0;
                 }
@@ -260,9 +264,6 @@ static CDI_THREAD StatsThread(void* ptr)
 
     // Thread is exiting. Send last set of stats, if any.
     args_ptr->send_stats_message_ptr(stats_state_ptr, args_ptr->metrics_destination_idx);
-
-    // Free the memory used to hold the args to the thread.
-    CdiOsMemFree(ptr);
 
     return 0; // Return code not used.
 }
@@ -285,8 +286,46 @@ static void StatsThreadDestroy(MetricsDestinationInfo* destination_info_ptr)
         if (destination_info_ptr->thread_exit_signal) {
             CdiOsSignalClear(destination_info_ptr->thread_exit_signal); // Done with the signal so clear it.
         }
+
+        CdiOsMemFree(destination_info_ptr->stats_thread_args_ptr);
+        destination_info_ptr->stats_thread_args_ptr = NULL;
     }
 }
+
+/**
+ * @brief Allocate statistics thread instance data and create the thread.
+ *
+ * @param stats_state_ptr Pointer to statistics state data.
+ * @param message_api_ptr Pointer to API to call with statistics messages.
+ * @param dest_index Destination index.
+ *
+ * @return A value from the CdiReturnStatus enumeration.
+ */
+static CdiReturnStatus CreateStatsThread(StatisticsState* stats_state_ptr, SendStatsMessage message_api_ptr,
+                                         MetricsDestinations dest_index)
+{
+    CdiReturnStatus rs = kCdiStatusOk;
+    MetricsDestinationInfo* dest_info_ptr = &stats_state_ptr->destination_info[dest_index];
+
+    // The args need to be allocated on the heap since the thread needs access to it after this block ends.
+    dest_info_ptr->stats_thread_args_ptr = CdiOsMemAlloc(sizeof(*dest_info_ptr->stats_thread_args_ptr));
+    if (NULL == dest_info_ptr->stats_thread_args_ptr) {
+        rs = kCdiStatusNotEnoughMemory;
+    } else {
+        dest_info_ptr->stats_thread_args_ptr->stats_state_ptr = stats_state_ptr;
+        dest_info_ptr->stats_thread_args_ptr->send_stats_message_ptr = message_api_ptr;
+        dest_info_ptr->stats_thread_args_ptr->metrics_destination_idx = dest_index;
+        if (!CdiOsThreadCreate(StatsThread, &dest_info_ptr->stats_thread_id, "StatsThread",
+                dest_info_ptr->stats_thread_args_ptr, stats_state_ptr->con_state_ptr->start_signal)) {
+            CdiOsMemFree(dest_info_ptr->stats_thread_args_ptr);
+            dest_info_ptr->stats_thread_args_ptr = NULL;
+            rs = kCdiStatusCreateThreadFailed;
+        }
+    }
+
+    return rs;
+}
+
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
@@ -310,6 +349,7 @@ CdiReturnStatus StatsCreate(CdiConnectionState* con_state_ptr, CdiCoreStatsCallb
         stats_state_ptr->con_state_ptr = con_state_ptr;
         stats_state_ptr->user_cb_ptr = stats_cb_ptr;
         stats_state_ptr->user_cb_param = stats_user_cb_param;
+        stats_state_ptr->stats_period_ms = metrics_gathering_period_ms;
     }
 
     // Create t-Digest instances and exit signals.
@@ -334,8 +374,6 @@ CdiReturnStatus StatsCreate(CdiConnectionState* con_state_ptr, CdiCoreStatsCallb
         rs = CloudWatchCreate(con_state_ptr, cw_sdk_handle, &stats_state_ptr->cloudwatch_handle);
     }
 
-    static const int metrics_gathering_period_ms = 60000;  // Metrics are sent to the gathering service once per minute.
-
     // Create an instance of a CloudWatch queue handler for the metrics gathering service.
     if (kCdiStatusOk == rs) {
         rs = CloudWatchCreate(con_state_ptr, metrics_gatherer_sdk_handle, &stats_state_ptr->metrics_gatherer_handle);
@@ -345,31 +383,16 @@ CdiReturnStatus StatsCreate(CdiConnectionState* con_state_ptr, CdiCoreStatsCallb
     if (kCdiStatusOk == rs) {
         const CdiStatsConfigData stats_config = {
             .disable_cloudwatch_stats = false,
-            .stats_period_seconds = metrics_gathering_period_ms,
+            .stats_period_seconds = metrics_gathering_period_ms/1000,
         };
+        assert(stats_config.stats_period_seconds > 0);
         rs = CloudWatchConfigure(stats_state_ptr->metrics_gatherer_handle, &stats_config);
     }
 
 #ifdef METRICS_GATHERING_SERVICE_ENABLED
     // Create the statistics update thread that feeds the queue for the metrics gathering service.
     if (kCdiStatusOk == rs) {
-        // The args need to be allocated on the heap since the thread needs access to it after this block ends. If the
-        // thread is successfully created, ownership of this memory passes to it.
-        StatsThreadArgs* args_ptr = CdiOsMemAlloc(sizeof(*args_ptr));
-        if (NULL == args_ptr) {
-            rs = kCdiStatusNotEnoughMemory;
-        } else {
-            args_ptr->stats_state_ptr = stats_state_ptr;
-            args_ptr->send_stats_message_ptr = SendToCdiMetricsService;
-            args_ptr->metrics_destination_idx = kMetricsDestinationGatheringService;
-            args_ptr->stats_period_ms = metrics_gathering_period_ms;
-            if (!CdiOsThreadCreate(StatsThread, &stats_state_ptr->
-                                   destination_info[kMetricsDestinationGatheringService].stats_thread_id, "StatsThread",
-                                   args_ptr, stats_state_ptr->con_state_ptr->start_signal)) {
-                CdiOsMemFree(args_ptr);
-                rs = kCdiStatusCreateThreadFailed;
-            }
-        }
+        rs = CreateStatsThread(stats_state_ptr, SendToCdiMetricsService, kMetricsDestinationGatheringService);
     }
 #endif  // METRICS_GATHERING_SERVICE_ENABLED
 
@@ -436,26 +459,10 @@ CdiReturnStatus StatsConfigure(StatisticsHandle handle, const CdiStatsConfigData
     // disabled, then create the stats thread.
     if (stats_state_ptr->stats_period_ms && (stats_state_ptr->user_cb_ptr ||
         (stats_state_ptr->cloudwatch_handle && !stats_config_ptr->disable_cloudwatch_stats))) {
-        // The args need to be allocated on the heap since the thread needs access to it after this block ends. If the
-        // thread is successfully created, ownership of this memory passes to it.
-        StatsThreadArgs* args_ptr = CdiOsMemAlloc(sizeof(*args_ptr));
-        if (NULL == args_ptr) {
-            rs = kCdiStatusNotEnoughMemory;
-        } else {
-            args_ptr->stats_state_ptr = stats_state_ptr;
-            args_ptr->send_stats_message_ptr = SendUserStatsMessage;
-            args_ptr->metrics_destination_idx = kMetricsDestinationCloudWatch;
-            args_ptr->stats_period_ms = stats_state_ptr->stats_period_ms;
-            if (!CdiOsThreadCreate(StatsThread, &stats_state_ptr->
-                                   destination_info[kMetricsDestinationCloudWatch].stats_thread_id, "StatsThread",
-                                   args_ptr, stats_state_ptr->con_state_ptr->start_signal)) {
-                CdiOsMemFree(args_ptr);
-                rs = kCdiStatusCreateThreadFailed;
-            }
-        }
+        rs = CreateStatsThread(stats_state_ptr, SendUserStatsMessage, kMetricsDestinationCloudWatch);
     }
 
-    if (stats_state_ptr->cloudwatch_handle) {
+    if (kCdiStatusOk == rs && stats_state_ptr->cloudwatch_handle) {
         rs = CloudWatchConfigure(stats_state_ptr->cloudwatch_handle, stats_config_ptr);
     }
 

@@ -469,32 +469,6 @@ void CdiPoolPutAll(CdiPoolHandle handle)
     }
 }
 
-bool CdiPoolGetBulk(CdiPoolHandle handle, uint32_t item_count, void** ret_item_array)
-{
-    CdiPoolState* state_ptr = (CdiPoolState*)handle;
-    (void)state_ptr;
-    (void)item_count;
-    (void)ret_item_array;
-
-    MultithreadedReserve(state_ptr);
-    MultithreadedRelease(state_ptr);
-
-    return false;
-}
-
-bool CdiPoolPutBulk(CdiPoolHandle handle, uint32_t item_count, const void* item_array)
-{
-    CdiPoolState* state_ptr = (CdiPoolState*)handle;
-    (void)state_ptr;
-    (void)item_count;
-    (void)item_array;
-
-    MultithreadedReserve(state_ptr);
-    MultithreadedRelease(state_ptr);
-
-    return false;
-}
-
 const char* CdiPoolGetName(CdiPoolHandle handle)
 {
     CdiPoolState* state_ptr = (CdiPoolState*)handle;

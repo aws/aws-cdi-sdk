@@ -221,6 +221,7 @@ const char* CdiCoreStatusToString(CdiReturnStatus status)
         { kCdiStatusProbePacketInvalidSize, "Probe packet size is invalid"  },
         { kCdiStatusRxPayloadBackPressure, "Rx back pressure"               },
         { kCdiStatusDuplicateBaselineVersion, "baseline version already registered"},
+        { kCdiStatusInvalidPayload,        "payload not readable"           },
         { CDI_INVALID_ENUM_VALUE,          "<invalid>"                      },
     };
 

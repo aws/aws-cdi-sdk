@@ -171,6 +171,7 @@ typedef struct {
     const char* senders_ip_str;          ///< Pointer to sender's IP address.
     const uint8_t* senders_gid_array;    ///< Pointer to sender's device GID. contains GID + QPN (see efa_ep_addr).
     const char* senders_stream_name_str; ///< Pointer to sender's stream name string.
+    int senders_stream_identifier; ///< Only valid for probe version 2.
 
     /// @brief Sender's control interface destination port. Sent from Tx (client) to Rx (server) so the Rx can establish
     /// a transmit connection back to the Tx.
@@ -271,8 +272,14 @@ typedef struct TxPayloadState TxPayloadState;
  * @param remote_version_ptr Pointer to remote's protocol version.
  * @param ret_handle_ptr Address where to write returned protocol handle.
  */
-void ProtocolVersionSet(const CdiProtocolVersionNumber* remote_version_ptr,
-                        CdiProtocolHandle* ret_handle_ptr);
+void ProtocolVersionSet(const CdiProtocolVersionNumber* remote_version_ptr, CdiProtocolHandle* ret_handle_ptr);
+
+/**
+ * @brief Create a protocol version using the legacy version 1, which is compatible will all SDK versions.
+ *
+ * @param ret_handle_ptr Address where to write returned protocol handle.
+ */
+void ProtocolVersionSetLegacy(CdiProtocolHandle* ret_handle_ptr);
 
 /**
  * @brief Freeup resources used by a protocol.

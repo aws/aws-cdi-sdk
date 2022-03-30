@@ -2,9 +2,13 @@
 
 This is the usage guide for the example CDI Test applications ```cdi_test```, ```cdi_test_min_tx```, and ```cdi_test_min_rx```.
 
+**In addition to filing CDI-SDK [bugs/issues](https://github.com/aws/aws-cdi-sdk/issues), please use the [discussion pages](https://github.com/aws/aws-cdi-sdk/discussions) for Q&A, Ideas, Show and Tell or other General topics so the whole community can benefit.**
+
+
 - [Test Application User Guide](#test-application-user-guide)
 - [Running the minimal test applications](#running-the-minimal-test-applications)
   - [Minimal test application help](#minimal-test-application-help)
+- [Pinning cdi_test Poll Threads to Specific CPU Cores](#pinning-cdi_test-poll-threads-to-specific-cpu-cores)
   - [EFA test](#efa-test)
 - [Running the full-featured test application](#running-the-full-featured-test-application)
   - [Test application help](#test-application-help)
@@ -18,8 +22,8 @@ This is the usage guide for the example CDI Test applications ```cdi_test```, ``
     - [Variable sized ancillary payloads with RIFF files](#variable-sized-ancillary-payloads-with-riff-files)
     - [Multi-stream audio/video/metadata](#multi-stream-audiovideometadata)
     - [Mux/Demux streams](#muxdemux-streams)
-    - [Testing CDI with the sockets adapter](#testing-cdi-with-the-sockets-adapter-not-recommended)
-    - [Testing CDI with the libfabric sockets adapter](#testing-cdi-with-the-libfabric-sockets-adapter-preferred)
+  - [Testing CDI with the sockets adapter (not recommended)](#testing-cdi-with-the-sockets-adapter-not-recommended)
+  - [Testing CDI with the libfabric sockets adapter (preferred)](#testing-cdi-with-the-libfabric-sockets-adapter-preferred)
   - [Using file-based command-line argument insertion](#using-file-based-command-line-argument-insertion)
     - [Rules for file-based command-line insertion](#rules-for-file-based-command-line-insertion)
     - [Examples](#examples)
@@ -56,6 +60,45 @@ Running the ```--help``` command will display all of the command-line options fo
 ```
 
 Additionally, there are several build configuration options for the AWS CDI SDK library that aid in debugging and development. For details, refer to: ```aws-cdi-sdk/src/cdi/configuration.h```
+
+# Pinning cdi_test Poll Threads to Specific CPU Cores
+
+This section only applies to Linux. The application called ```cset``` is used. To install it, see [these instructions](./INSTALL_GUIDE_LINUX.md#Pinning-CDI-SDK-Poll-Threads-to-Specific-CPU-Cores).
+
+
+Make sure this has been run first. This command will move kernel threads, so cdi_test can use a specific set of CPU
+cores. In the example shown below, cdi_test will use CPU cores 1-24.
+
+```
+sudo cset shield -k on -c 1-24
+```
+
+On a system with 72 CPU cores (for example), should get output something like this:
+
+```
+cset: --> activating shielding:
+cset: moving 1386 tasks from root into system cpuset...
+[==================================================]%
+cset: kthread shield activated, moving 45 tasks into system cpuset...
+[==================================================]%
+cset: **> 35 tasks are not movable, impossible to move
+cset: "system" cpuset of CPUSPEC(0,25-71) with 1396 tasks running
+cset: "user" cpuset of CPUSPEC(1-24) with 0 tasks running
+```
+
+Then, add the "-core" command line option to each connection that you would like to pin to a specific CPU core. For example, to pin a connection to CPU core 5 use:
+
+```
+-X -core 5 (other options)
+```
+
+To run cdi_test, must use a command line like this:
+
+
+```
+sudo cset shield -e cdi_test <cdi_test_command_line_options>
+```
+
 
 ## EFA test
 
@@ -441,7 +484,7 @@ Receiver:
 ```
 
 ## Testing CDI with the libfabric sockets adapter (preferred)
-The `libfabric sockets` adapter provides reliable transport over UDP and is recommended for prototyping on non-EFA platforms because it eliminates unreliable transport as a source of errors that will not occur in production environments. Similar to the `EFA` adapter, transmitting and receiving larger payload sizes is possible with the `libfabric sockets` adapter. However, much like the `sockets` adapter, `libfabric sockets` will suffer from a latency penalty. It is suggested to only use this adapter for prototyping applications.
+The `libfabric sockets` adapter provides reliable transport over UDP and is recommended for prototyping on non-EFA platforms because it eliminates unreliable transport as a source of errors that will not occur in production environments. Similar to the `EFA` adapter, transmitting and receiving larger payload sizes is possible with the `libfabric sockets` adapter. However, much like the `sockets` adapter, `libfabric sockets` will suffer from a latency penalty. It is suggested to only use this adapter for prototyping applications. In contrast to the `EFA` adapter, which uses only a single port, this adapter uses a consecutive range of ten ports, starting with the destination port.
 
 The `libfabric sockets` adapter is provided through the SDK and exposed in the `cdi_test` application by specifying the following command-line option: `--adapter SOCKET_LIBFABRIC`.
 

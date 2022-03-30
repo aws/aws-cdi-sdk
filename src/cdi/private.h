@@ -50,6 +50,8 @@ typedef struct {
     CloudWatchSdkMetricsHandle cw_sdk_handle; ///< Handle of CloudWatch SDK metrics component.
     CloudWatchSdkMetricsHandle metrics_gathering_sdk_handle; ///< Handle of metrics gathering SDK metrics component.
     CdiSglEntry empty_sgl_entry;              ///< Empty scatter-gather-list entry.
+    CdiSignalType shutdown_signal;            ///< Signal used to shutdown global threads.
+    CdiThreadID system_monitor_thread_id;     ///< The ID of the global system monitor thread.
 
     // NOTE: Add initialization to global_context variable's definition in internal.c for any new members added to this
     // structure.
@@ -455,7 +457,11 @@ struct CdiMemoryState {
     /// Set to kMagicMem when allocated, checked at every API function to help ensure validity.
     uint32_t magic;
 
-    CdiEndpointHandle cdi_endpoint_handle; ///< Which endpoint this belongs to.
+    CdiConnectionHandle cdi_connection_handle; ///< Which connection this memory state belongs to.
+
+    /// @brief Which endpoint this belongs to. NOTE: May not be valid if endpoint has been destroyed. Must acquire
+    /// cdi_connection_handle->endpoint_lock and ensure that cdi_endpoint_handle is valid.
+    CdiEndpointHandle cdi_endpoint_handle;
 
     CdiBufferType buffer_type;         ///< Indicates which structure of the union is valid.
     MemoryLinearState linear_state;    ///< The internal state of the structure if handleType is HandleTypeLinear.

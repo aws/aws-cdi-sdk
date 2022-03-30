@@ -308,7 +308,6 @@ bool CdiOsThreadCreatePinned(CdiThreadFuncName thread_func, CdiThreadID* thread_
                              void* thread_func_arg_ptr, CdiSignalType start_signal, int cpu_affinity)
 {
     bool return_val = true;
-    int temp_rc;
     CdiThreadInfo* thread_info_ptr;
 
     assert(thread_id_out_ptr != NULL);
@@ -354,9 +353,9 @@ bool CdiOsThreadCreatePinned(CdiThreadFuncName thread_func, CdiThreadID* thread_
         }
 
         if (return_val) {
-            temp_rc = pthread_create(&thread_info_ptr->thread_id, &attr, ThreadFuncHelper, thread_info_ptr);
+            int temp_rc = pthread_create(&thread_info_ptr->thread_id, &attr, ThreadFuncHelper, thread_info_ptr);
             if (temp_rc) {
-                ERROR_MESSAGE("pthread_create failed[%d]", temp_rc);
+                ERROR_MESSAGE("pthread_create failed[%s]", strerror(temp_rc));
                 return_val = false;
             } else if (NULL != thread_name_str) {
                 // Set the thread name in the system (Linux specific). This is useful because these show up in the
@@ -421,7 +420,6 @@ const char* CdiOsThreadGetName(CdiThreadID thread_id)
 
 bool CdiOsThreadJoin(CdiThreadID thread_id, uint32_t timeout_in_ms, bool* timed_out_ptr)
 {
-    int temp_rc;
     bool return_val = true;
     CdiThreadInfo* thread_info_ptr = (CdiThreadInfo*)thread_id;
     bool is_timeout;
@@ -448,9 +446,9 @@ bool CdiOsThreadJoin(CdiThreadID thread_id, uint32_t timeout_in_ms, bool* timed_
         }
         return_val = false;
     } else {
-        temp_rc = pthread_join(thread_info_ptr->thread_id, NULL);
+        int temp_rc = pthread_join(thread_info_ptr->thread_id, NULL);
         if (temp_rc) {
-            ERROR_MESSAGE("pthread_join exited with[%d]", temp_rc);
+            ERROR_MESSAGE("pthread_join exited with[%s]", strerror(temp_rc));
             return_val = false;
         } else {
             // Free the memory for this thread's info data structure.
@@ -466,7 +464,6 @@ bool CdiOsSemaphoreCreate(CdiSemID* ret_sem_handle_ptr, int sem_count)
 {
     bool return_val = true;
     SemInfo* sem_info_ptr;
-    int temp_rc;
 
     assert(ret_sem_handle_ptr != NULL);
     assert(sem_count >= 0);
@@ -479,9 +476,8 @@ bool CdiOsSemaphoreCreate(CdiSemID* ret_sem_handle_ptr, int sem_count)
         return_val = false;
         ERROR_MESSAGE("failed to allocate memory");
     } else {
-        temp_rc = sem_init(&sem_info_ptr->sem, 0, sem_count);
-        if (temp_rc < 0) {
-            ERROR_MESSAGE("Cannot create Semaphores[%d]", temp_rc);
+        if (sem_init(&sem_info_ptr->sem, 0, sem_count) < 0) {
+            ERROR_MESSAGE("Cannot create Semaphores[%s]", strerror(errno));
             CdiOsMemFree(sem_info_ptr);
             return_val = false;
         } else {
@@ -499,12 +495,14 @@ bool CdiOsSemaphoreDelete(CdiSemID sem_handle)
     if (sem_handle) {
         SemInfo* sem_info_ptr = (SemInfo*)sem_handle;
 
-        if (0 == sem_destroy(&sem_info_ptr->sem)) {
+        return_val = 0 == sem_destroy(&sem_info_ptr->sem);
+        int errno_sem_destroy = errno;
+        if (return_val || EINVAL == errno_sem_destroy) {
             // Release semaphore info memory.
             CdiOsMemFree(sem_info_ptr);
-        } else {
-            ERROR_MESSAGE("sem_destroy() failed");
-            return_val = false;
+        }
+        if (!return_val) {
+            ERROR_MESSAGE("sem_destroy() failed[%s]", strerror(errno_sem_destroy));
         }
     }
 
@@ -513,14 +511,13 @@ bool CdiOsSemaphoreDelete(CdiSemID sem_handle)
 
 bool CdiOsSemaphoreRelease(CdiSemID sem_handle)
 {
-    int temp_rc = 0;
     SemInfo* sem_info_ptr = (SemInfo*)sem_handle;
 
     assert(sem_info_ptr != NULL);
 
-    temp_rc = sem_post(&sem_info_ptr->sem);
+    int temp_rc = sem_post(&sem_info_ptr->sem);
     if (0 != temp_rc) {
-        ERROR_MESSAGE("sem_post() failed");
+        ERROR_MESSAGE("sem_post() failed[%s]", strerror(errno));
     }
 
     return temp_rc == 0;
@@ -964,7 +961,7 @@ void* CdiOsMemAllocHugePage(int32_t mem_size)
 void CdiOsMemFreeHugePage(void* mem_ptr, int mem_size)
 {
     if (-1 == munmap(mem_ptr, mem_size)) {
-        ERROR_MESSAGE("munmap failed. errno[%d]", errno);
+        ERROR_MESSAGE("munmap failed[%s]", strerror(errno));
     }
 }
 
@@ -975,7 +972,7 @@ bool CdiOsOpenForWrite(const char* file_name_str, CdiFileID* file_handle_ptr)
     *file_handle_ptr = fopen(file_name_str, "w+b");
 
     if (*file_handle_ptr == NULL) {
-        ERROR_MESSAGE("Open for write failed. Filename[%s]", file_name_str);
+        ERROR_MESSAGE("Open for write failed[%s]. Filename[%s]", strerror(errno), file_name_str);
         return_val = false;
     }
     return return_val;
@@ -989,7 +986,7 @@ bool CdiOsOpenForRead(const char* file_name_str, CdiFileID* file_handle_ptr)
 
     if (*file_handle_ptr == NULL) {
         return_val = false;
-        ERROR_MESSAGE("Open for read failed. Filename[%s]", file_name_str);
+        ERROR_MESSAGE("Open for read failed[%s]. Filename[%s]", strerror(errno), file_name_str);
     }
 
     return return_val;
@@ -1000,15 +997,12 @@ bool CdiOsClose(CdiFileID file_handle)
     int return_val = 0;
 
     if (file_handle != NULL) {
-        return_val = fclose((FILE *)file_handle);
+        if (0 != (return_val = fclose((FILE *)file_handle))) {
+            ERROR_MESSAGE("Close failed[%s]", strerror(errno));
+        }
     }
 
-    if (return_val != 0) {
-        ERROR_MESSAGE("Close failed[%d]", return_val);
-        return_val = false;
-    }
-
-    return (return_val == 0) ? true : false;
+    return 0 == return_val;
 }
 
 bool CdiOsRead(CdiFileID file_handle, void* buffer_ptr, uint32_t byte_count, uint32_t* bytes_read_ptr)
@@ -1018,11 +1012,11 @@ bool CdiOsRead(CdiFileID file_handle, void* buffer_ptr, uint32_t byte_count, uin
 
     if (buffer_ptr && file_handle) {
         num_bytes_read = fread(buffer_ptr, 1, byte_count, (FILE*)file_handle);
-
+        int errno_fread = errno;
         if (0 == num_bytes_read) {
             // Don't return an error if at EOF and no bytes were read (same behavior as Windows).
             if (!feof((FILE *)file_handle)) {
-                ERROR_MESSAGE("fread() failed. Zero bytes read and not at EOF");
+                ERROR_MESSAGE("fread() failed[%s]. Zero bytes read and not at EOF", strerror(errno_fread));
                 return_val = false;
             }
         }
@@ -1211,7 +1205,7 @@ uint64_t CdiOsGetMicroseconds()
     struct timespec time;
 
     if (clock_gettime(kPreferredClock, &time) == -1) {
-        ERROR_MESSAGE("Cannot get current time. clock_gettime() failed");
+        ERROR_MESSAGE("Cannot get current time. clock_gettime() failed[%s]", strerror(errno));
     }
 
     return (uint64_t)time.tv_sec * 1000000L + (time.tv_nsec / 1000L);
@@ -1276,13 +1270,14 @@ int CdiOsGetLocalTimeString(char* time_str, int max_string_len)
 bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* new_socket_ptr)
 {
     bool ret = false;
-
+    int observed_errno = 0;
     SocketInfo* info_ptr = CdiOsMemAllocZero(sizeof(SocketInfo));
     if (NULL == info_ptr) {
         ERROR_MESSAGE("failed to allocate memory");
     } else {
         // Create an Internet socket which will be used for writing or reading.
         info_ptr->fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        observed_errno = errno;
         if (info_ptr->fd >= 0) {
             // Start with an address that can be used in either direction.
             info_ptr->addr.sin_family = AF_INET;
@@ -1292,10 +1287,11 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
                 // Bind to the specified port number on any interface.
                 info_ptr->addr.sin_addr.s_addr = INADDR_ANY;
                 const int rv = bind(info_ptr->fd, (struct sockaddr*)&info_ptr->addr, sizeof info_ptr->addr);
+                observed_errno = errno;
                 if (rv == 0) {
                     ret = true;
                 } else {
-                    ERROR_MESSAGE("bind() failed[%d]", errno);
+                    ERROR_MESSAGE("bind() failed[%s]", strerror(errno));
                 }
             } else {
                 // Convert the IP address from a string to a binary representation.
@@ -1303,7 +1299,8 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
                 if (info_ptr->addr.sin_addr.s_addr != (in_addr_t)-1) {
                     ret = true;
                 } else {
-                    ERROR_MESSAGE("inet_addr() failed[%d]", errno);
+                    // inet_addr does not set errno,
+                    ERROR_MESSAGE("inet_addr() failed");
                 }
             }
             if (ret) {
@@ -1313,9 +1310,14 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
                 CdiOsMemFree(info_ptr);
                 info_ptr = NULL;
             }
+        } else {
+            ERROR_MESSAGE("socket() failed[%s]", strerror(observed_errno));
         }
     }
-
+    // Set errno so caller can decide if a retry makes sense.
+    if (!ret) {
+        errno = observed_errno;
+    }
     return ret;
 }
 
@@ -1344,17 +1346,19 @@ bool CdiOsSocketGetSockAddrIn(CdiSocket socket_handle, struct sockaddr_in* socka
 
     SocketInfo* info_ptr = (SocketInfo*)socket_handle;
     socklen_t len = sizeof(*sockaddr_in_ptr);
-    if (getsockname(info_ptr->fd, (struct sockaddr*)sockaddr_in_ptr, &len) != 0) {
-        return false;
-    } else {
-        return true;
-    }
+    return 0 == getsockname(info_ptr->fd, (struct sockaddr*)sockaddr_in_ptr, &len);
 }
 
 bool CdiOsSocketClose(CdiSocket s)
 {
     SocketInfo* info_ptr = (SocketInfo*)s;
-    bool ret = close(info_ptr->fd) == 0;
+    bool ret = 0 == close(info_ptr->fd);
+    int errno_close = errno;
+    if (!ret) {
+        WARNING_MESSAGE("close failed[%s]", strerror(errno_close));
+    }
+    // Note that according to close manpage for Linux (https://man7.org/linux/man-pages/man2/close.2.html)
+    // we should never retry close, even when errno is EINTR.
     CdiOsMemFree(info_ptr);
     return ret;
 }
@@ -1377,20 +1381,29 @@ bool CdiOsSocketReadFrom(CdiSocket socket_handle, void* buffer_ptr, int* byte_co
     };
 
     // Time out every 10 ms so caller can check for shutdown.
+    // Treat interrupts like timeouts instead of an error.
     const int rv = poll(&fdset, 1, 10);
+    const int errno_poll = errno;
     if (rv > 0) {
         socklen_t addrlen = (source_address_ptr) ? sizeof(*source_address_ptr) : 0;
-        const size_t bytes_read = recvfrom(info_ptr->fd, buffer_ptr, *byte_count_ptr, 0, source_address_ptr, &addrlen);
-        if (bytes_read <= 0) {
-            ret = false;
+        const ssize_t bytes_read = recvfrom(info_ptr->fd, buffer_ptr, *byte_count_ptr, 0, source_address_ptr, &addrlen);
+        const int errno_recv = errno;
+        if (0 > bytes_read) {
+            if (EINTR == errno_recv) {
+                *byte_count_ptr = 0;
+            } else {
+                ERROR_MESSAGE("recvfrom() failed[%s]", strerror(errno_recv));
+                ret = false;
+            }
         } else {
             *byte_count_ptr = bytes_read;
         }
-    } else if (rv == 0) {
+    } else if (rv == 0 || EINTR == errno_poll) {
         // Timed out.
         *byte_count_ptr = 0;
     } else {
         // Error occurred.
+        ERROR_MESSAGE("poll() failed[%d]", strerror(errno_poll));
         ret = false;
     }
 

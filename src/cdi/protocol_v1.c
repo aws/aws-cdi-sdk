@@ -29,7 +29,17 @@
 //*********************************************************************************************************************
 
 /// Sentinel value for unused stream ID.
-#define STREAM_IDENTIFIER_NOT_USED      (-1)
+#define STREAM_IDENTIFIER_NOT_USED              (-1)
+
+/// @brief Maximum IP string length for protocol version 1.
+#define MAX_IP_STRING_LENGTH_V1                 (64)
+
+/// @brief Maximum EFA device GID length for protocol version 1. Contains GID + QPN (see efa_ep_addr).
+#define MAX_IPV6_GID_LENGTH_V1                  (32)
+
+
+/// @brief Maximum stream name string length for protocol version 1.
+#define MAX_STREAM_NAME_STRING_LENGTH_V1        (128+10)
 
 // --------------------------------------------------------------------
 // All structures in the block below are byte packed (no byte padding).
@@ -86,15 +96,25 @@ CDI_STATIC_ASSERT(CDI_RAW_PACKET_HEADER_SIZE_V1 == sizeof(PacketHeaderUnion), "T
 //char __foo[sizeof(PacketHeaderUnion) + 1] = {[sizeof(PacketHeaderUnion)] = ""};
 
 /**
- * @brief Common header for all probe control packets.
+ * @brief Common header for all probe control packets. NOTE: Last digit of Protocol Version is the probe version. This
+ * file supports probe versions 0 - 3.
+ *
+ * SDK     Protocol Command    Raw Packet
+ * Version Version  Header     Header     Comments
+ * ------- -------- ---------  ---------- ----------------------------
+ * 1.0.0    1.0.0   252 bytes  34 bytes
+ * 2.0.0    2.0.0   252 bytes  34 bytes   Not supported (must upgrade)
+ * 2.0.1    1.0.2   252 bytes  34 bytes
+ * 2.0.2    1.0.2   252 bytes  34 bytes
+ * 2.1.x    1.0.3   252 bytes  34 bytes   Not supported (must upgrade)
  */
 typedef struct {
     CdiProtocolVersionNumber senders_version; ///< Sender's CDI protocol version number.
 
     ProbeCommand command; ///< Sender's command
-    char senders_ip_str[MAX_IP_STRING_LENGTH];   ///< Sender's IP address.
-    uint8_t senders_gid_array[MAX_IPV6_GID_LENGTH]; ///< Sender's device GID. Contains GID + QPN (see efa_ep_addr).
-    char senders_stream_name_str[CDI_MAX_STREAM_NAME_STRING_LENGTH]; ///< Sender's stream name string.
+    char senders_ip_str[MAX_IP_STRING_LENGTH_V1];   ///< Sender's IP address.
+    uint8_t senders_gid_array[MAX_IPV6_GID_LENGTH_V1]; ///< Sender's device GID. Contains GID + QPN (see efa_ep_addr).
+    char senders_stream_name_str[MAX_STREAM_NAME_STRING_LENGTH_V1]; ///< Sender's stream name string.
     int senders_stream_identifier; ///< Sender's stream identifier.
 
     /// @brief Sender's control interface destination port. Sent from Tx (client) to Rx (server) so the Rx can establish
@@ -318,12 +338,12 @@ static CdiReturnStatus ProbeHeaderDecode(const void* encoded_data_ptr, int encod
 
         header_size = (int)sizeof(ControlPacketCommonHeader);
         if (common_hdr_ptr->command != kProbeCommandAck) {
-            // Encode command data.
+            // Decode command data.
             const ControlPacketCommand* cmd_ptr = &union_ptr->command_packet;
             dest_header_ptr->command_packet.requires_ack = cmd_ptr->requires_ack;
             header_size += (int)sizeof(ControlPacketCommand);
         } else {
-            // Encode ACK data.
+            // Decode ACK data.
             const ControlPacketAck* ack_ptr = &union_ptr->ack_packet;
             dest_header_ptr->ack_packet.ack_command = ack_ptr->ack_command;
             dest_header_ptr->ack_packet.ack_control_packet_num = ack_ptr->ack_control_packet_num;
@@ -372,6 +392,8 @@ static CdiReturnStatus ProbeHeaderDecode(const void* encoded_data_ptr, int encod
         dest_header_ptr->senders_ip_str = common_hdr_ptr->senders_ip_str;
         dest_header_ptr->senders_gid_array = common_hdr_ptr->senders_gid_array;
         dest_header_ptr->senders_stream_name_str = common_hdr_ptr->senders_stream_name_str;
+        dest_header_ptr->senders_stream_identifier = common_hdr_ptr->senders_stream_identifier; // Matches logic in SDK 1.x.x
+
         // Copy additional data.
         dest_header_ptr->senders_control_dest_port = common_hdr_ptr->senders_control_dest_port;
         dest_header_ptr->control_packet_num = common_hdr_ptr->control_packet_num;

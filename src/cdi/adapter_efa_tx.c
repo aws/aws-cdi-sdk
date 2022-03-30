@@ -110,7 +110,7 @@ static bool GetCompletions(struct fid_cq* completion_queue_ptr, struct fi_cq_dat
                            int* packet_ack_count_ptr)
 {
     bool ret = true;
-
+    const int comp_array_size = *packet_ack_count_ptr;
     int fi_ret = fi_cq_read(completion_queue_ptr, comp_array, *packet_ack_count_ptr);
     // If the returned value is greater than zero, then the value is the number of completion queue messages that were
     // returned in comp_array. Otherwise a negative value represents an error or -FI_EAGAIN which means no completions
@@ -120,21 +120,36 @@ static bool GetCompletions(struct fid_cq* completion_queue_ptr, struct fi_cq_dat
     } else {
         *packet_ack_count_ptr = 0;
         if (fi_ret < 0 && fi_ret != -FI_EAGAIN) {
-            // Got an error.
+            // Got one or more errors.
             ret = false;
             if (-FI_EAVAIL == fi_ret) {
-                // Get which completion event the error occurred on.
+                // Read out completion errors.
+                int i = 0;
                 struct fi_cq_err_entry cq_err = { 0 };
-                fi_ret = fi_cq_readerr(completion_queue_ptr, &cq_err, 0);
-                if (fi_ret > 0) {
-                    // Was able to get the error for a completion event.
-                    *packet_ack_count_ptr = fi_ret;
-                    comp_array->op_context = cq_err.op_context;
-                    comp_array->flags = cq_err.flags;
-                    comp_array->len = cq_err.len;
-                    comp_array->buf = cq_err.buf;
-                    comp_array->data = cq_err.data;
+                while (1 == fi_cq_readerr(completion_queue_ptr, &cq_err, 0)) {
+                    assert(0 != cq_err.err);
+                    char buf[1024] = { 0 };
+                    CDI_LOG_THREAD(kLogError,
+                        "Completion error: [%s][%s]. Ensure outbound security group is properly configured.",
+                        fi_strerror(cq_err.err),
+                        fi_cq_strerror(completion_queue_ptr, cq_err.prov_errno, cq_err.err_data, buf, sizeof(buf)));
+                    if (NULL != cq_err.op_context) {
+                        comp_array[i].op_context = cq_err.op_context;
+                        comp_array[i].flags = cq_err.flags;
+                        comp_array[i].len = cq_err.len;
+                        comp_array[i].buf = cq_err.buf;
+                        comp_array[i].data = cq_err.data;
+                        i++;
+                    }
+                    if (comp_array_size == i) {
+                        break;
+                    }
+                    memset(&cq_err, 0, sizeof(cq_err));
                 }
+                *packet_ack_count_ptr = i;
+            } else {
+                CDI_LOG_THREAD_WHEN(kLogError, true, 1000, "Failed to get completion event. fi_cq_read() failed[%d (%s)]",
+                    fi_ret, fi_strerror(-fi_ret));
             }
         }
     }
@@ -167,6 +182,7 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
     // Process any completions that were received.
     for (int i = 0; i < packet_ack_count; i++) {
         Packet* packet_ptr = comp_array[i].op_context;
+        assert(packet_ptr);
         packet_ptr->tx_state.ack_status = status ? kAdapterPacketStatusOk : kAdapterPacketStatusFailed;
 
         // Send the completion message for the packet.
@@ -295,8 +311,8 @@ CdiReturnStatus EfaTxEndpointStart(EfaEndpointState* endpoint_state_ptr)
     uint64_t flags = 0;
     void* context_ptr = NULL;
     int fi_ret = fi_av_insert(endpoint_state_ptr->address_vector_ptr,
-                           (void*)endpoint_state_ptr->remote_ipv6_gid_array, count,
-                           &endpoint_state_ptr->remote_fi_addr, flags, context_ptr);
+                              (void*)endpoint_state_ptr->remote_ipv6_gid_array, count,
+                              &endpoint_state_ptr->remote_fi_addr, flags, context_ptr);
     if (count != fi_ret) {
         // This is a fatal error.
         CDI_LOG_THREAD(kLogError, "Failed to start Tx connection. fi_av_insert() failed[%d (%s)]",

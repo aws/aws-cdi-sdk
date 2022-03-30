@@ -16,6 +16,7 @@
 #include "internal.h"
 
 #include <arpa/inet.h> // For inet_ntop()
+#include <inttypes.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -48,6 +49,33 @@ static CdiStaticMutexType global_context_mutex_lock = CDI_STATIC_MUTEX_INITIALIZ
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
+
+/**
+ * System monitor thread used to detect CDI-SDK thread stall periods.
+ *
+ * @param ptr Pointer to thread specific data.
+ *
+ * @return The return value is not used.
+ */
+static CDI_THREAD SystemMonitorThread(void* ptr)
+{
+    (void)ptr; // Not used.
+
+    uint64_t sleep_time_ms = SYSTEM_MONITORING_SLEEP_TIME_MS;
+    while (!CdiOsSignalGet(cdi_global_context.shutdown_signal)) {
+        uint64_t start_time_us = CdiOsGetMicroseconds();
+        CdiOsSleep(sleep_time_ms);
+        uint64_t end_time_us = CdiOsGetMicroseconds();
+
+        uint64_t actual_sleep_time_ms = ((end_time_us - start_time_us) + 500L) / 1000L;
+        if (actual_sleep_time_ms > SYSTEM_MONITORING_SLEEP_TIME_TOLERANCE_MS) {
+            SDK_LOG_GLOBAL(kLogWarning, "System monitor thread detected a CPU stall time of [%"PRIu64"]ms.",
+                           actual_sleep_time_ms);
+        }
+    }
+
+    return 0; // Return code not used.
+}
 
 /**
  * Payload thread used to notify application that payload has been transmitted and acknowledged as being received by the
@@ -187,6 +215,17 @@ static void FifoDebugCallback(const CdiFifoCbData* cb_ptr)
  */
 static void CleanupGlobalResources(void)
 {
+    if (cdi_global_context.system_monitor_thread_id) {
+        // Clean-up thread resources. We will wait for them to exit using thread join.
+        SdkThreadJoin(cdi_global_context.system_monitor_thread_id, cdi_global_context.shutdown_signal);
+        cdi_global_context.system_monitor_thread_id = NULL;
+    }
+
+    if (cdi_global_context.shutdown_signal) {
+        CdiOsSignalDelete(cdi_global_context.shutdown_signal);
+        cdi_global_context.shutdown_signal = NULL;
+    }
+
     // Adapter list should be empty here.
     if (!CdiListIsEmpty(&cdi_global_context.adapter_handle_list)) {
         SDK_LOG_GLOBAL(kLogError,
@@ -310,6 +349,21 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
         rs = MetricsGathererCreate(&config, &cdi_global_context.metrics_gathering_sdk_handle);
     }
 #endif  // METRICS_GATHERING_SERVICE_ENABLED
+
+    if (kCdiStatusOk == rs) {
+        // Create signal for shutting down global threads.
+        if (!CdiOsSignalCreate(&cdi_global_context.shutdown_signal)) {
+            rs = kCdiStatusNotEnoughMemory;
+        }
+    }
+
+    // Start the system monitor thread.
+    if (!CdiOsThreadCreate(SystemMonitorThread, &cdi_global_context.system_monitor_thread_id, "SystemMonitor",
+                           NULL,
+                           NULL)) { // NULL= Start thread immediately.
+        rs = kCdiStatusNotEnoughMemory;
+    }
+
 
     if (kCdiStatusOk == rs) {
         cdi_global_context.sdk_initialized = true;
@@ -751,8 +805,10 @@ void DumpPayloadConfiguration(const CdiCoreExtraData* core_extra_data_ptr, int e
     CDI_LOG_MULTILINE(&m_state, "origination_ptp_timestamp [%u:%u]",
                       core_extra_data_ptr->origination_ptp_timestamp.seconds,
                       core_extra_data_ptr->origination_ptp_timestamp.nanoseconds);
-    CDI_LOG_MULTILINE(&m_state, "payload_user_data         [%llu]", core_extra_data_ptr->payload_user_data);
-    CDI_LOG_MULTILINE(&m_state, "extra_data_size           [%d]", extra_data_size);
+    if (0 != core_extra_data_ptr->payload_user_data) {
+        CDI_LOG_MULTILINE(&m_state, "payload_user_data         [%#016"PRIx64"]", core_extra_data_ptr->payload_user_data);
+    }
+    CDI_LOG_MULTILINE(&m_state, "stream_identifier         [%u]", avm_union_ptr->common_header.avm_extra_data.stream_identifier);
 
     if (kProtocolTypeAvm == protocol_type && sizeof(avm_union_ptr->with_config) == extra_data_size) {
         CdiAvmBaselineConfig baseline_config;

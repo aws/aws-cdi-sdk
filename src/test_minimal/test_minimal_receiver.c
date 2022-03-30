@@ -28,7 +28,7 @@
 typedef struct {
     const char* local_adapter_ip_str;  ///< The local network adapter IP address.
     int dest_port;                     ///< The destination port number.
-    TestConnectionProtocolType protocol_type; ///< Protocol type (AVM or RAW).
+    CdiConnectionProtocolType protocol_type; ///< Protocol type (AVM or RAW).
     int num_transactions;              ///< The number of transactions in the test.
     int payload_size;                  ///< Payload size in bytes.
     bool use_efa;                      ///< Whether to use EFA adapter.
@@ -53,6 +53,9 @@ typedef struct {
     CdiSignalType connection_state_change_signal;   ///< Signal used for connection state changes.
     volatile CdiConnectionStatus connection_status; ///< Current status of the connection.
 } TestConnectionInfo;
+
+/// @brief Define TestConsoleLog.
+#define TestConsoleLog SimpleConsoleLog
 
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
@@ -92,9 +95,9 @@ static bool ParseCommandLine(int argc, const char** argv, TestSettings* test_set
         const char* arg_str = argv[i++];
         if (0 == CdiOsStrCmp("--rx", arg_str)) {
             if (0 == CdiOsStrCmp("AVM", argv[i])) {
-                test_settings_ptr->protocol_type = kTestProtocolAvm;
+                test_settings_ptr->protocol_type = kProtocolTypeAvm;
             } else if (0 == CdiOsStrCmp("RAW", argv[i])) {
-                test_settings_ptr->protocol_type = kTestProtocolRaw;
+                test_settings_ptr->protocol_type = kProtocolTypeRaw;
             } else {
                 CDI_LOG_THREAD(kLogError, "For --rx <protocol>, expected 'AVM' or 'RAW'. Got[%s].", argv);
                 ret = false;
@@ -155,7 +158,7 @@ static void TestConnectionCallback(const CdiCoreConnectionCbData* cb_data_ptr)
 static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
 {
     TestConnectionInfo* connection_info_ptr = (TestConnectionInfo*)cb_data_ptr->core_cb_data.user_cb_param;
-    assert(kTestProtocolAvm == connection_info_ptr->test_settings.protocol_type);
+    assert(kProtocolTypeAvm == connection_info_ptr->test_settings.protocol_type);
 
     if (kCdiStatusOk != cb_data_ptr->core_cb_data.status_code) {
         CDI_LOG_THREAD(kLogError, "Receive payload failed[%s].",
@@ -183,7 +186,7 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
 static void TestRawRxCallback(const CdiRawRxCbData* cb_data_ptr)
 {
     TestConnectionInfo* connection_info_ptr = (TestConnectionInfo*)cb_data_ptr->core_cb_data.user_cb_param;
-    assert(kTestProtocolRaw == connection_info_ptr->test_settings.protocol_type);
+    assert(kProtocolTypeRaw == connection_info_ptr->test_settings.protocol_type);
 
     if (kCdiStatusOk != cb_data_ptr->core_cb_data.status_code) {
         CDI_LOG_THREAD(kLogError, "Receive payload failed[%s].",
@@ -295,7 +298,7 @@ int main(int argc, const char** argv)
             .stats_config.stats_period_seconds = 0,
             .stats_config.disable_cloudwatch_stats = true
         };
-        if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
+        if (kProtocolTypeAvm == con_info.test_settings.protocol_type) {
             rs = CdiAvmRxCreate(&config_data, TestAvmRxCallback,  &con_info.connection_handle);
         } else {
             rs = CdiRawRxCreate(&config_data, TestRawRxCallback,  &con_info.connection_handle);
