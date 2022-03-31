@@ -138,7 +138,7 @@ static int ProcessSendCommandRetry(ProbeEndpointState* probe_ptr, const char* re
         probe_ptr->app_adapter_endpoint_handle->endpoint_stats_ptr->probe_command_retry_count++;
         if (probe_ptr->tx_probe_state.send_command_retry_count < TX_COMMAND_MAX_RETRIES) {
                 CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
-                    "Probe Tx remote IP[%s:%d] %s ACK timeout. Resending ping #[%d].",
+                    "Probe Tx remote IP[%s:%d] %s ACK timeout. Resending cmd #[%d].",
                     remote_ip_str, remote_dest_port, InternalUtilityKeyEnumToString(kKeyProbeCommand, command),
                     probe_ptr->tx_probe_state.send_command_retry_count);
         } else {

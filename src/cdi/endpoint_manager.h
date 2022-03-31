@@ -158,11 +158,13 @@ CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, bo
  *
  * @param handle Handle of Endpoint Manager.
  * @param dest_port Destination port.
+ * @param source_address_ptr Pointer to source address (from the sender).
  * @param ret_endpoint_handle_ptr Address where to write the handle of the new endpoint.
  *
  * @return kCdiStatusOk if the operation was successful or a value that indicates the nature of the failure.
  */
 CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, int dest_port,
+                                                const struct sockaddr_in* source_address_ptr,
                                                 CdiEndpointHandle* ret_endpoint_handle_ptr);
 
 /**

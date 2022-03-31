@@ -1012,6 +1012,7 @@ CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, bo
 }
 
 CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, int dest_port,
+                                                const struct sockaddr_in* source_address_ptr,
                                                 CdiEndpointHandle* ret_endpoint_handle_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;
@@ -1032,6 +1033,15 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
                             &endpoint_ptr->rx_state.free_buffer_queue_handle)) {
             rs = kCdiStatusAllocationFailed;
         }
+    }
+
+    // Since this endpoint can be created dynamically as part of a control command received from a remote transmitter,
+    // we need to save the remote address before creating the adapter endpoint. The adapter endpoint's control interface
+    // can start using it immediately.
+    if (source_address_ptr) {
+        inet_ntop(AF_INET, &source_address_ptr->sin_addr, endpoint_ptr->remote_ip_str,
+                  sizeof(endpoint_ptr->remote_ip_str));
+        endpoint_ptr->remote_sockaddr_in = *source_address_ptr;
     }
 
     if (kCdiStatusOk == rs) {

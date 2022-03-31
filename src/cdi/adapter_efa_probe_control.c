@@ -352,8 +352,7 @@ CdiReturnStatus ProbeControlSendAck(ProbeEndpointState* probe_ptr, ProbeCommand 
             }
         }
 
-        // Put packet message in the adapter's endpoint packet queue. We use "true" here so the packet is sent
-        // immediately.
+        // Put packet message in the adapter's endpoint packet queue.
         rs = CdiAdapterEnqueueSendPacket(ControlInterfaceGetEndpoint(adapter_con_ptr->control_interface_handle),
                                          EndpointManagerEndpointRemoteAddressGet(endpoint_ptr->cdi_endpoint_handle),
                                          &work_request_ptr->packet);
