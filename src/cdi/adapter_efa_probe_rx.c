@@ -390,7 +390,7 @@ uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
             // Did not complete EFA probe state within timeout. Reset the connection.
             CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
                 "Probe Rx EFA probe timeout. Sending reset to Tx.");
-            probe_ptr->rx_probe_state.rx_state = kProbeCommandReset; // Advance to resetting state.
+            probe_ptr->rx_probe_state.rx_state = kProbeStateSendReset; // Advance to resetting state.
             wait_timeout_ms = 0; // Do immediately.
             break;
         case kProbeStateEfaConnected:

@@ -141,9 +141,9 @@ static int vprintf_line(const char* prefix_str, const char* format_str, va_list 
     char format_buffer[MAX_MESSAGE_SIZE];
     if (prefix_size + format_size < sizeof(format_buffer) - 2) {
         char* p = format_buffer;
-        strncpy(p, prefix_str, prefix_size);
+        memcpy(p, prefix_str, prefix_size);
         p += prefix_size;
-        strncpy(p, format_str, format_size);
+        memcpy(p, format_str, format_size);
         p += format_size;
         *p++ = '\r';
         *p++ = '\n';
@@ -152,7 +152,7 @@ static int vprintf_line(const char* prefix_str, const char* format_str, va_list 
     } else {
         // If the buffer is too small we fall back on the non thread-safe way.
         if (prefix_size) {
-            printf(prefix_str);
+            printf("%s", prefix_str);
         }
         ret = vprintf(format_str, vars); // send to stdout
         if (ret >= 0) {
