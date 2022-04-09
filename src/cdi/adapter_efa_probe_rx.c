@@ -199,7 +199,8 @@ void ProbeRxControlMessageFromEndpoint(void* param_ptr, Packet* packet_ptr)
                                     header.senders_ip_str, header.senders_control_dest_port);
                     CdiReturnStatus rs = EndpointManagerRxCreateEndpoint(
                         EndpointManagerConnectionToEndpointManager(adapter_con_ptr->data_state.cdi_connection_handle),
-                        adapter_con_ptr->port_number, &senders_address, &cdi_endpoint_handle);
+                        adapter_con_ptr->port_number, &senders_address, header.senders_stream_name_str,
+                        &cdi_endpoint_handle);
                     if (kCdiStatusOk == rs) {
                         // Ensure all remote endpoint information is saved.
                         SaveRemoteEndpointInfo(cdi_endpoint_handle, &header, &senders_address);

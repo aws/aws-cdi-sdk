@@ -190,7 +190,7 @@ bool TestWaitForConnection(TestConnectionInfo* connection_info_ptr, int timeout_
 
 void TestConnectionCallback(const CdiCoreConnectionCbData* cb_data_ptr)
 {
-    TestConnectionInfo* connection_info_ptr = cb_data_ptr->connection_user_cb_param;
+    TestConnectionInfo* connection_info_ptr = (TestConnectionInfo*)cb_data_ptr->connection_user_cb_param;
     const char* connection_name_str = connection_info_ptr->test_settings_ptr->tx ?
                                       connection_info_ptr->config_data.tx.connection_name_str :
                                       connection_info_ptr->config_data.rx.connection_name_str;

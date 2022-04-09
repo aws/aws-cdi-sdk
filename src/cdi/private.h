@@ -159,7 +159,7 @@ struct TxPayloadState {
 /**
  *  @brief Generic type used to pass Tx/Rx callbacks to internal functions.
  *
- *  @param Pointer to callback type specific data.
+ *  @param param_ptr to callback type specific data.
  */
 typedef void (*CdiCallback)(const void* param_ptr);
 

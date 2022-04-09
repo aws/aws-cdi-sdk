@@ -285,7 +285,8 @@ bool TestConsoleCreate(bool multi_window_mode, int num_stats_lines)
 void TestConsoleDestroy(bool abnormal_termination)
 {
     if (CDI_INVALID_HANDLE_VALUE != pipe_fd_array[1]) {
-        close(pipe_fd_array[1]);  // Close the write end of the pipe, to prevent read() from continuing to block.
+        close(pipe_fd_array[1]); // Close the write end of the pipe, to prevent read() from continuing to block.
+        pipe_fd_array[1] = CDI_INVALID_HANDLE_VALUE;
         close(CDI_STDERR_FILENO); // Done with stderr for now. Will set back to the original value below.
     }
 
@@ -332,11 +333,13 @@ void TestConsoleDestroy(bool abnormal_termination)
         // Dump the saved stats window to the standard console so we can still see the info.
         DumpSavedWindowToStdout(stats_window_buffer_ptr, stats_window_height, console_width);
         CdiOsMemFree(stats_window_buffer_ptr);
+        stats_window_buffer_ptr = NULL;
     }
     if (log_window_buffer_ptr) {
         // Dump the saved log window to the standard console so we can still see the info.
         DumpSavedWindowToStdout(log_window_buffer_ptr, log_window_height, console_width);
         CdiOsMemFree(log_window_buffer_ptr);
+        log_window_buffer_ptr = NULL;
     }
 
     if (CDI_INVALID_HANDLE_VALUE != original_stdout_fd) {

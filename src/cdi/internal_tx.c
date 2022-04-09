@@ -796,14 +796,14 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
         payload_state_ptr = NULL; // Pointer is no longer valid, so clear it.
     }
 
+    CdiPoolPutAll(con_state_ptr->tx_state.payload_state_pool_handle);
+
     CdiPoolPutAll(con_state_ptr->tx_state.work_request_pool_handle);
     CdiQueueFlush(con_state_ptr->tx_state.work_req_comp_queue_handle);
     CdiPoolPutAll(con_state_ptr->tx_state.packet_sgl_entry_pool_handle);
 
-    // NOTE: Don't flush app_payload_message_queue_handle, payload_state_pool_handle or payload_sgl_entry_pool_handle
-    // here. They are handled by AppCallbackPayloadThread(). It doesn't use the Endpoint Manager since it calls
-    // user-registered callback functions in the application, which may erroneously block and would stall the internal
-    // pipeline.
+    // NOTE: Don't flush app_payload_message_queue_handle here. Entries are popped using AppCallbackPayloadThread().
+    // When a connection is destroyed, they are flushed in TxConnectionDestroyInternal().
 
     con_state_ptr->back_pressure_state = kCdiBackPressureNone; // Reset the back pressure state.
     endpoint_ptr->tx_state.payload_num = 0; // Clear payload number so receiver can expect payload zero first.
@@ -828,6 +828,14 @@ void TxConnectionDestroyInternal(CdiConnectionHandle con_handle)
     CdiConnectionState* con_state_ptr = (CdiConnectionState*)con_handle;
 
     if (con_state_ptr) {
+        // Destroying connection, so ensure app payload queues and pools are drained. NOTE: This must be done after
+        // the poll thread and AppCallbackPayloadThread have stopped.
+        AppPayloadCallbackData app_cb_data;
+        while (CdiQueuePop(con_state_ptr->app_payload_message_queue_handle, (void**)&app_cb_data)) {
+            PayloadErrorFreeBuffer(con_state_ptr->error_message_pool, &app_cb_data);
+        }
+        CdiPoolPutAll(con_state_ptr->tx_state.payload_sgl_entry_pool_handle);
+
         // Now that the connection and adapter threads have stopped, it is safe to clean up the remaining resources in
         // the opposite order of their creation.
         CdiQueueDestroy(con_state_ptr->tx_state.work_req_comp_queue_handle);

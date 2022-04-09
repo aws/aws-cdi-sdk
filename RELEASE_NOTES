@@ -22,6 +22,12 @@ What's New
 * Removed empty/unused functions CdiPoolGetBulk and CdiPoolPutBulk.
 * Improved error reporting in os_linux.c.
 * Added documentation about thread-pinning the poll threads.
+* Rx buffers used in adapters are limited to the size defined within the libfabric provider. For the libfabric socket
+  provider the limit is 376 adapter packets, which limits the maximum payload size to approximately 3,340,000 bytes. See
+  logic concerning packet_count in CreatePacketPool(), adapter_efa_rx.c. The version of libfabric being used contains a
+  memory leak if this limit is not enforced. The leak has been fixed in a later version of libfabric (see details at
+  https://github.com/ofiwg/libfabric/pull/7145). The next major release of the CDI-SDK will use the newer version of
+  libfabric.
 
 Bug Fixes
 ------------

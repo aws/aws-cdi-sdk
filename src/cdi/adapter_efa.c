@@ -985,7 +985,7 @@ CdiReturnStatus EfaAdapterEndpointStart(EfaEndpointState* endpoint_ptr)
     return rs;
 }
 
-CdiAdapterHandle EfaAdapterGetAdapterControlInterface(AdapterConnectionState* adapter_con_state_ptr )
+CdiAdapterHandle EfaAdapterGetAdapterControlInterface(AdapterConnectionState* adapter_con_state_ptr)
 {
     EfaAdapterState* efa_adapter_ptr = (EfaAdapterState*)adapter_con_state_ptr->adapter_state_ptr->type_specific_ptr;
     return efa_adapter_ptr->control_interface_adapter_handle;

@@ -1005,7 +1005,8 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
                                 test_settings_ptr->connection_name_str, cb_data_ptr->core_cb_data.status_code,
                                 CdiCoreStatusToString(cb_data_ptr->core_cb_data.status_code));
         }
-    } else if (stream_info_ptr->payload_count < test_settings_ptr->num_transactions) {
+    } else if ((0 == test_settings_ptr->num_transactions) ||
+               (stream_info_ptr->payload_count < test_settings_ptr->num_transactions)) {
         // Always check that the expected type of AVM payload (audio, video, etc.) was received if config provided.
         CdiAvmBaselineConfig baseline_config = { 0 };
         if (NULL != cb_data_ptr->config_ptr) {

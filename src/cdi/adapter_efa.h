@@ -184,6 +184,8 @@ CdiReturnStatus EfaRxPacketPoolCreate(EfaEndpointState* endpoint_state_ptr);
 
 /**
  * Frees the previously allocated receive packet buffer pool for the endpoint.
+ *
+ * @param endpoint_ptr Pointer to endpoint state data.
  */
 void EfaRxPacketPoolFree(EfaEndpointState* endpoint_ptr);
 

@@ -120,16 +120,6 @@ static CDI_THREAD AppCallbackPayloadThread(void* ptr)
         }
     }
 
-    // Shutting down, so ensure queues and pools are drained.
-    AppPayloadCallbackData app_cb_data;
-    while (CdiQueuePop(con_state_ptr->app_payload_message_queue_handle, (void**)&app_cb_data)) {
-        PayloadErrorFreeBuffer(con_state_ptr->error_message_pool, &app_cb_data);
-    }
-    if (con_state_ptr->handle_type == kHandleTypeTx) {
-        CdiPoolPutAll(con_state_ptr->tx_state.payload_state_pool_handle);
-        CdiPoolPutAll(con_state_ptr->tx_state.payload_sgl_entry_pool_handle);
-    }
-
     return 0; // Return code not used.
 }
 

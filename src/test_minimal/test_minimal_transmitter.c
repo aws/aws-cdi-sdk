@@ -180,7 +180,7 @@ static bool ParseCommandLine(int argc, const char** argv, TestSettings* test_set
  */
 static void TestConnectionCallback(const CdiCoreConnectionCbData* cb_data_ptr)
 {
-    TestConnectionInfo* connection_info_ptr = cb_data_ptr->connection_user_cb_param;
+    TestConnectionInfo* connection_info_ptr = (TestConnectionInfo*)cb_data_ptr->connection_user_cb_param;
 
     // Update connection state and set state change signal.
     connection_info_ptr->connection_status = cb_data_ptr->status_code;

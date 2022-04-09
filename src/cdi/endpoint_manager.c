@@ -648,8 +648,13 @@ void EndpointManagerRemoteEndpointInfoSet(CdiEndpointHandle handle, const struct
 {
     CdiEndpointState* endpoint_ptr = (CdiEndpointState*)handle;
 
-    inet_ntop(AF_INET, &remote_address_ptr->sin_addr, endpoint_ptr->remote_ip_str, sizeof(endpoint_ptr->remote_ip_str));
-    endpoint_ptr->remote_sockaddr_in = *remote_address_ptr;
+    if (remote_address_ptr) {
+        inet_ntop(AF_INET, &remote_address_ptr->sin_addr, endpoint_ptr->remote_ip_str,
+                  sizeof(endpoint_ptr->remote_ip_str));
+        endpoint_ptr->remote_sockaddr_in = *remote_address_ptr;
+    } else {
+        memset(&endpoint_ptr->remote_sockaddr_in, 0, sizeof(endpoint_ptr->remote_sockaddr_in));
+    }
 
     if (stream_name_str) {
         CdiOsStrCpy(endpoint_ptr->stream_name_str, sizeof(endpoint_ptr->stream_name_str),
@@ -1013,6 +1018,7 @@ CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, bo
 
 CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, int dest_port,
                                                 const struct sockaddr_in* source_address_ptr,
+                                                const char* stream_name_str,
                                                 CdiEndpointHandle* ret_endpoint_handle_ptr)
 {
     CdiReturnStatus rs = kCdiStatusOk;
@@ -1038,11 +1044,7 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
     // Since this endpoint can be created dynamically as part of a control command received from a remote transmitter,
     // we need to save the remote address before creating the adapter endpoint. The adapter endpoint's control interface
     // can start using it immediately.
-    if (source_address_ptr) {
-        inet_ntop(AF_INET, &source_address_ptr->sin_addr, endpoint_ptr->remote_ip_str,
-                  sizeof(endpoint_ptr->remote_ip_str));
-        endpoint_ptr->remote_sockaddr_in = *source_address_ptr;
-    }
+    EndpointManagerRemoteEndpointInfoSet(endpoint_ptr, source_address_ptr, stream_name_str);
 
     if (kCdiStatusOk == rs) {
         // Open an endpoint to receive packets from a remote host.
