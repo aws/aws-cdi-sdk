@@ -1287,6 +1287,9 @@ bool EndpointManagerPoll(CdiEndpointHandle* handle_ptr)
             if (!mgr_ptr->poll_thread_waiting) {
                 mgr_ptr->poll_thread_waiting = true;
                 IncrementThreadWaitCount(mgr_ptr);
+                // Now that we have incremented the thread wait count, the Endpoint Manager could try to process the
+                // pending command now, so don't let the poll thread do any work yet.
+                do_poll = false;
             } else if (CdiOsSignalReadState(mgr_ptr->command_done_signal)) {
                 DecrementThreadWaitCount(mgr_ptr);
                 // Even though this is a poll thread where we don't want to use OS resources, we need to use a critical

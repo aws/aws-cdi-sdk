@@ -211,7 +211,7 @@
 
 /// @brief This value is used by the transmitter to define how many times a command is sent without receiving an ACK
 /// reply before going into connection reset mode.
-#define TX_COMMAND_MAX_RETRIES                  (3)
+#define TX_COMMAND_MAX_RETRIES                  (6)
 
 /// @brief This value is used by the transmitter to define how long it waits for an ACK response to a command that it
 /// sent. If the timeout expires, the same command will be sent up to the amount specified by #TX_COMMAND_MAX_RETRIES.

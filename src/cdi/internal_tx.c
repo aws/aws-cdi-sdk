@@ -797,6 +797,8 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
     }
 
     CdiPoolPutAll(con_state_ptr->tx_state.payload_state_pool_handle);
+    // Don't free tx_state.payload_sgl_entry_pool_handle here. AppCallbackPayloadThread() frees them. When a connection
+    // is destroyed, the pool is flushed in TxConnectionDestroyInternal().
 
     CdiPoolPutAll(con_state_ptr->tx_state.work_request_pool_handle);
     CdiQueueFlush(con_state_ptr->tx_state.work_req_comp_queue_handle);
@@ -841,6 +843,9 @@ void TxConnectionDestroyInternal(CdiConnectionHandle con_handle)
         CdiQueueDestroy(con_state_ptr->tx_state.work_req_comp_queue_handle);
         con_state_ptr->tx_state.work_req_comp_queue_handle = NULL;
 
+        // The application may be destroying the connection with Tx payloads in flight, so ensure this pool has been
+        // flushed before destroying it.
+        CdiPoolPutAll(con_state_ptr->tx_state.payload_sgl_entry_pool_handle);
         CdiPoolDestroy(con_state_ptr->tx_state.payload_sgl_entry_pool_handle);
         con_state_ptr->tx_state.payload_sgl_entry_pool_handle = NULL;
 
