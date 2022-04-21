@@ -13,6 +13,7 @@
 // Include headers in the following order: Related header, C system headers, other libraries' headers, your project's
 // headers.
 
+#include "adapter_efa_probe.h"
 #include "adapter_control_interface.h"
 
 #include "adapter_api.h"
@@ -31,6 +32,7 @@
 typedef struct {
     AdapterConnectionHandle adapter_connection_handle; ///< Handle of adapter connection.
     AdapterEndpointHandle adapter_endpoint_handle;     ///< Handle of adapter endpoint.
+    CdiPoolHandle control_work_request_pool_handle;    ///< Handle of control work request pool.
 } ControlInterfaceState;
 
 //*********************************************************************************************************************
@@ -40,6 +42,22 @@ typedef struct {
 //*********************************************************************************************************************
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
+
+#ifdef DEBUG_ENABLE_POOL_DEBUGGING_EFA_PROBE
+/**
+ * Example pool debug callback function.
+ *
+ * @param cb_ptr: Pointer to pool data.
+ */
+static void PoolDebugCallback(const CdiPoolCbData* cb_ptr)
+{
+    if (cb_ptr->is_put) {
+        CDI_LOG_THREAD(kLogDebug, "PUT[%d]", cb_ptr->num_entries);
+    } else {
+        CDI_LOG_THREAD(kLogDebug, "GET[%d]", cb_ptr->num_entries);
+    }
+}
+#endif
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
@@ -76,6 +94,12 @@ AdapterEndpointHandle ControlInterfaceGetEndpoint(ControlInterfaceHandle handle)
     return state_ptr->adapter_endpoint_handle;
 }
 
+CdiPoolHandle ControlInterfaceGetWorkRequestPoolHandle(ControlInterfaceHandle handle)
+{
+    ControlInterfaceState* state_ptr = (ControlInterfaceState*)handle;
+    return state_ptr->control_work_request_pool_handle;
+}
+
 CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_data_ptr,
                                        ControlInterfaceHandle* ret_handle_ptr)
 {
@@ -84,6 +108,22 @@ CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_
     ControlInterfaceState* control_ptr = (ControlInterfaceState*)CdiOsMemAllocZero(sizeof *control_ptr);
     if (control_ptr == NULL) {
         rs = kCdiStatusNotEnoughMemory;
+    }
+
+    if (kCdiStatusOk == rs) {
+        // ProbePacketWorkRequests are used for sending control packets over the socket interface. One additional
+        // entry is required so a control packet can be sent while the probe packet queue is full.
+        if (!CdiPoolCreate("Send Control ProbePacketWorkRequest Pool", MAX_PROBE_CONTROL_COMMANDS_PER_CONNECTION + 1,
+                           NO_GROW_SIZE, NO_GROW_COUNT,
+                           sizeof(ProbePacketWorkRequest), true, // true= Make thread-safe
+                           &control_ptr->control_work_request_pool_handle)) {
+            rs = kCdiStatusAllocationFailed;
+        }
+#ifdef DEBUG_ENABLE_POOL_DEBUGGING_EFA_PROBE
+        if (kCdiStatusOk == rs) {
+            CdiPoolCallbackEnable(control_ptr->control_work_request_pool_handle, PoolDebugCallback);
+        }
+#endif
     }
 
     if (kCdiStatusOk == rs) {
@@ -116,6 +156,8 @@ CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_
             .port_number = config_data_ptr->port_number,
             .endpoint_stats_ptr = NULL,       // Not used by control interface.
         };
+        // Set returned handle, as it may get used as part of enabling the endpoint via CdiAdapterOpenEndpoint().
+        *ret_handle_ptr = (ControlInterfaceHandle)control_ptr;
         rs = CdiAdapterOpenEndpoint(&config_data, &control_ptr->adapter_endpoint_handle);
 
         // Save a copy of the handle so the poll thread can use it. See ControlInterfacePoll().
@@ -126,8 +168,8 @@ CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_
     if (kCdiStatusOk != rs) {
         ControlInterfaceDestroy((ControlInterfaceHandle)control_ptr);
         control_ptr = NULL;
+        *ret_handle_ptr = NULL;
     }
-    *ret_handle_ptr = (ControlInterfaceHandle)control_ptr;
 
     return rs;
 }
@@ -147,14 +189,30 @@ void ControlInterfaceDestroy(ControlInterfaceHandle handle)
         // Now that the poll thread has stopped, ok to free additional resources.
         if (control_ptr->adapter_endpoint_handle) {
             if (control_ptr->adapter_endpoint_handle->tx_packet_queue_handle) {
-                // Flush Tx packet queue.
-                CdiQueueFlush(control_ptr->adapter_endpoint_handle->tx_packet_queue_handle);
+                // Flush Tx packet queue. For each list in the queue, walk through each item (a packet) and return the
+                // related work request to the work request pool.
+                CdiSinglyLinkedList tx_packet_list;
+                while (CdiQueuePop(control_ptr->adapter_endpoint_handle->tx_packet_queue_handle, &tx_packet_list)) {
+                    CdiSinglyLinkedListEntry* entry_ptr = NULL;
+                    while (NULL != (entry_ptr = CdiSinglyLinkedListPopHead(&tx_packet_list))) {
+                        Packet* packet_ptr = CONTAINER_OF(entry_ptr, Packet, list_entry);
+                        ProbePacketWorkRequest* work_request_ptr =
+                            (ProbePacketWorkRequest*)packet_ptr->sg_list.internal_data_ptr;
+                        CdiPoolPut(control_ptr->control_work_request_pool_handle, work_request_ptr);
+                    }
+                }
             }
 
             // Close endpoint.
             CdiAdapterCloseEndpoint(control_ptr->adapter_endpoint_handle);
             control_ptr->adapter_endpoint_handle = NULL;
         }
+
+        // The Control Interface uses this pool, so don't destroy it until after the Control Interface's polling
+        // thread has been stopped.
+        CdiPoolPutAll(control_ptr->control_work_request_pool_handle);
+        CdiPoolDestroy(control_ptr->control_work_request_pool_handle);
+        control_ptr->control_work_request_pool_handle = NULL;
 
         if (control_ptr->adapter_connection_handle) {
             // Close connection.

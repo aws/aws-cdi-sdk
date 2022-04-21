@@ -135,6 +135,9 @@
     <ClInclude Include="..\src\cdi\receive_buffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\src\cdi\anc_payloads.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\cdi\adapter.c">
@@ -285,6 +288,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\cdi\test_unit_logger.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\anc_payloads.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\cdi\cdi_avm_payloads_api.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

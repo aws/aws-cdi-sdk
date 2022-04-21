@@ -104,17 +104,6 @@
 //******************************************* START OF STATIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
-#ifdef DEBUG_ENABLE_POOL_DEBUGGING_EFA_PROBE
-static void PoolDebugCallback(const CdiPoolCbData* cb_ptr)
-{
-    if (cb_ptr->is_put) {
-        CDI_LOG_THREAD(kLogDebug, "PUT[%d]", cb_ptr->num_entries);
-    } else {
-        CDI_LOG_THREAD(kLogDebug, "GET[%d]", cb_ptr->num_entries);
-    }
-}
-#endif
-
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
@@ -150,10 +139,7 @@ CdiReturnStatus ProbeEndpointCreate(AdapterEndpointHandle app_adapter_endpoint_h
         ProtocolVersionSet(&version, &probe_ptr->protocol_handle_sdk);
 
         // Create instance of the protocol compatible with version 1.
-        version.version_num = 1;
-        version.major_version_num = 0;
-        version.probe_version_num = CDI_PROBE_VERSION; // This is how post v1 protocols support new probe commands.
-        ProtocolVersionSet(&version, &probe_ptr->protocol_handle_v1);
+        ProtocolVersionSetLegacy(&probe_ptr->protocol_handle_v1);
     }
 
     if (kCdiStatusOk == rs) {

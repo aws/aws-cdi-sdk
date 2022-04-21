@@ -34,6 +34,16 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
+/// @brief Maximum IP string length for protocol version 1.
+#define MAX_IP_STRING_LENGTH_V2                 (64)
+
+/// @brief Maximum EFA device GID length for protocol version 1. Contains GID + QPN (see efa_ep_addr).
+#define MAX_IPV6_GID_LENGTH_V2                  (32)
+
+
+/// @brief Maximum stream name string length for protocol version 1.
+#define MAX_STREAM_NAME_STRING_LENGTH_V2        (128+10)
+
 // --------------------------------------------------------------------
 // All structures in the block below are byte packed (no byte padding).
 // --------------------------------------------------------------------
@@ -92,15 +102,24 @@ CDI_STATIC_ASSERT(CDI_RAW_PACKET_HEADER_SIZE_V2 == sizeof(PacketHeaderUnion), "T
 //char __foo[sizeof(PacketHeaderUnion) + 1] = {[sizeof(PacketHeaderUnion)] = ""};
 
 /**
- * @brief Common header for all probe control packets.
+ * @brief Common header for all probe control packets. NOTE: Last digit of Protocol Version is the probe version. This
+ * file supports probe version 4.
+ *
+ * SDK     Protocol Command    Raw Packet
+ * Version Version  Header     Header     Comments
+ * ------- -------- ---------  ---------- ----------------------------
+ * 2.2.0    2.1.4   252 bytes  47 bytes
+ * 2.3.0    2.1.4   252 bytes  47 bytes
+ * 2.3.1    2.1.4   252 bytes  47 bytes   Not supported (must upgrade)
+ * 2.3.2    2.1.4   252 bytes  47 bytes
  */
 typedef struct {
     CdiProtocolVersionNumber senders_version; ///< Sender's CDI protocol version number.
 
     ProbeCommand command; ///< Sender's command
-    char senders_ip_str[MAX_IP_STRING_LENGTH];   ///< Sender's IP address.
-    uint8_t senders_gid_array[MAX_IPV6_GID_LENGTH]; ///< Sender's device GID. Contains GID + QPN (see efa_ep_addr).
-    char senders_stream_name_str[CDI_MAX_STREAM_NAME_STRING_LENGTH]; ///< Sender's stream name string.
+    char senders_ip_str[MAX_IP_STRING_LENGTH_V2];   ///< Sender's IP address.
+    uint8_t senders_gid_array[MAX_IPV6_GID_LENGTH_V2]; ///< Sender's device GID. Contains GID + QPN (see efa_ep_addr).
+    char senders_stream_name_str[MAX_STREAM_NAME_STRING_LENGTH_V2]; ///< Sender's stream name string.
 
     /// @brief Sender's control interface destination port. Sent from Tx (client) to Rx (server) so the Rx can establish
     /// a transmit connection back to the Tx.
@@ -382,6 +401,7 @@ static CdiReturnStatus ProbeHeaderDecode(const void* encoded_data_ptr, int encod
         dest_header_ptr->senders_ip_str = common_hdr_ptr->senders_ip_str;
         dest_header_ptr->senders_gid_array = common_hdr_ptr->senders_gid_array;
         dest_header_ptr->senders_stream_name_str = common_hdr_ptr->senders_stream_name_str;
+
         // Copy additional data.
         dest_header_ptr->senders_control_dest_port = common_hdr_ptr->senders_control_dest_port;
         dest_header_ptr->control_packet_num = common_hdr_ptr->control_packet_num;
@@ -412,7 +432,6 @@ static int ProbeHeaderEncode(const CdiDecodedProbeHeader* src_header_ptr, CdiRaw
         memcpy(common_hdr_ptr->senders_stream_name_str, src_header_ptr->senders_stream_name_str,
                sizeof(common_hdr_ptr->senders_stream_name_str));
     }
-
     common_hdr_ptr->senders_control_dest_port = src_header_ptr->senders_control_dest_port;
     common_hdr_ptr->control_packet_num = src_header_ptr->control_packet_num;
 
@@ -456,9 +475,7 @@ bool ProtocolVersionSet2(const CdiProtocolVersionNumber* remote_version_ptr, Cdi
 
     // Override the default protocol version if the remote's is older.
     if (remote_version_ptr->version_num < CDI_PROTOCOL_VERSION) {
-        protocol_handle->negotiated_version.version_num = remote_version_ptr->version_num;
-        protocol_handle->negotiated_version.major_version_num = remote_version_ptr->major_version_num;
-        protocol_handle->negotiated_version.probe_version_num = remote_version_ptr->probe_version_num;
+        protocol_handle->negotiated_version = *remote_version_ptr;
     } else if (remote_version_ptr->version_num == CDI_PROTOCOL_VERSION) {
         if (!(remote_version_ptr->major_version_num > CDI_PROTOCOL_MAJOR_VERSION)) {
             // Remote's major version # is less than ours, so use it.

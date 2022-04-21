@@ -124,6 +124,46 @@ static void DumpSavedWindowToStdout(chtype* buffer_ptr, int height, int width) {
 }
 
 /**
+ * Behaves like vprintf but adds a prefix and a newline to the format string.
+ *
+ * @param prefix_str Prefix string.
+ * @param format_str Format string.
+ * @param vars Argument list (see vprintf).
+ *
+ * @return
+ */
+static int vprintf_line(const char* prefix_str, const char* format_str, va_list vars)
+{
+    int ret = 0;
+
+    const size_t prefix_size = strlen(prefix_str);
+    const size_t format_size = strlen(format_str);
+    char format_buffer[MAX_MESSAGE_SIZE];
+    if (prefix_size + format_size < sizeof(format_buffer) - 2) {
+        char* p = format_buffer;
+        memcpy(p, prefix_str, prefix_size);
+        p += prefix_size;
+        memcpy(p, format_str, format_size);
+        p += format_size;
+        *p++ = '\r';
+        *p++ = '\n';
+        *p = 0;
+        ret = vprintf(format_buffer, vars);
+    } else {
+        // If the buffer is too small we fall back on the non thread-safe way.
+        if (prefix_size) {
+            printf("%s", prefix_str);
+        }
+        ret = vprintf(format_str, vars); // send to stdout
+        if (ret >= 0) {
+            ret += printf("\r\n");
+        }
+    }
+
+    return ret;
+}
+
+/**
  * This function monitors the stderr pipe, and sends any data to the console log window.
  *
  * @param arg_ptr Pointer to parameter for use by the thread (not used here).
@@ -245,7 +285,8 @@ bool TestConsoleCreate(bool multi_window_mode, int num_stats_lines)
 void TestConsoleDestroy(bool abnormal_termination)
 {
     if (CDI_INVALID_HANDLE_VALUE != pipe_fd_array[1]) {
-        close(pipe_fd_array[1]);  // Close the write end of the pipe, to prevent read() from continuing to block.
+        close(pipe_fd_array[1]); // Close the write end of the pipe, to prevent read() from continuing to block.
+        pipe_fd_array[1] = CDI_INVALID_HANDLE_VALUE;
         close(CDI_STDERR_FILENO); // Done with stderr for now. Will set back to the original value below.
     }
 
@@ -292,11 +333,13 @@ void TestConsoleDestroy(bool abnormal_termination)
         // Dump the saved stats window to the standard console so we can still see the info.
         DumpSavedWindowToStdout(stats_window_buffer_ptr, stats_window_height, console_width);
         CdiOsMemFree(stats_window_buffer_ptr);
+        stats_window_buffer_ptr = NULL;
     }
     if (log_window_buffer_ptr) {
         // Dump the saved log window to the standard console so we can still see the info.
         DumpSavedWindowToStdout(log_window_buffer_ptr, log_window_height, console_width);
         CdiOsMemFree(log_window_buffer_ptr);
+        log_window_buffer_ptr = NULL;
     }
 
     if (CDI_INVALID_HANDLE_VALUE != original_stdout_fd) {
@@ -309,8 +352,10 @@ void TestConsoleDestroy(bool abnormal_termination)
         original_stdout_fd = CDI_INVALID_HANDLE_VALUE;
     }
 
-    CdiOsCritSectionDelete(log_window_lock);
-    log_window_lock = NULL;
+    if (log_window_lock) {
+        CdiOsCritSectionDelete(log_window_lock);
+        log_window_lock = NULL;
+    }
 }
 
 void TestConsoleLogMessageCallback(const CdiLogMessageCbData* cb_data_ptr)
@@ -376,8 +421,7 @@ void TestConsoleStats(int x, int y, int attribute, const char* format_str, ...)
 
         CdiOsCritSectionRelease(log_window_lock);
     } else {
-        vprintf(format_str, vars); // send to stdout
-        printf("\r\n");
+        vprintf_line("", format_str, vars); // send to stdout
         fflush(stdout);
     }
     va_end(vars);
@@ -432,11 +476,8 @@ void TestConsoleLog(CdiLogLevel log_level, const char* format_str, ...)
             wrefresh(log_window_ptr); // Update the text in the window.
             CdiOsCritSectionRelease(log_window_lock);
         } else {
-            if (kLogError == log_level) {
-                printf("ERROR: ");
-            }
-            vprintf(format_str, vars); // Send to stdout.
-            printf("\n\r");
+            const char* prefix_str = (kLogError == log_level) ? "ERROR: " : "";
+            vprintf_line(prefix_str, format_str, vars); // Send to stdout.
             fflush(stdout);
         }
         va_end(vars);

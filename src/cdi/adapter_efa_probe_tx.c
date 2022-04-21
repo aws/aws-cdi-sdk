@@ -38,13 +38,15 @@
 //*********************************************************************************************************************
 
 /**
- * Send a batch of probe packets using the EFA adapter interface to the endpoint associated with the probe connection.
+ * Send a probe packet using the EFA adapter interface to the endpoint associated with the probe connection. Only one
+ * packet is sent at a time, waiting for the packet's ACK before sending the next one. Probe doesn't send very many
+ * packets so no need to optimize and require additional DMA packet buffers.
  *
  * @param probe_ptr Pointer to probe connection state data.
  *
  * @return True is successful, otherwise false is returned.
  */
-static bool EfaEnqueueSendProbePackets(ProbeEndpointState* probe_ptr)
+static bool EfaEnqueueSendProbePacket(ProbeEndpointState* probe_ptr)
 {
     bool ret = true;
 
@@ -54,45 +56,46 @@ static bool EfaEnqueueSendProbePackets(ProbeEndpointState* probe_ptr)
     CdiProtocolHandle protocol_handle = probe_ptr->app_adapter_endpoint_handle->protocol_handle;
     TxPayloadState payload_state = { 0 };
 
-    // For each EFA probe packet, create a work request and add it to a packet list. The list will be sent to the
-    // adapter's endpoint using a single call - CdiAdapterEnqueueSendPackets().
-    for (int i = 0; i < EFA_PROBE_PACKET_COUNT && ret; i++) {
-        ProbePacketWorkRequest* work_request_ptr = ProbeControlWorkRequestGet(probe_ptr->efa_work_request_pool_handle);
-        if (NULL == work_request_ptr) {
-            ret = false;
-        } else {
-            EfaProbePacket* packet_ptr = &work_request_ptr->packet_data.efa_packet;
-            packet_ptr->packet_sequence_num = i;
+    // For a EFA probe packet, create a work request and add it to a packet list. The list will be sent to the adapter's
+    // endpoint.
+    ProbePacketWorkRequest* work_request_ptr =
+        ProbeControlWorkRequestGet(probe_ptr->efa_work_request_pool_handle);
+    if (NULL == work_request_ptr) {
+        ret = false;
+    } else {
+        EfaProbePacket* packet_ptr = &work_request_ptr->packet_data.efa_packet;
+        packet_ptr->packet_sequence_num = probe_ptr->tx_probe_state.packets_enqueued_count;
 
-            // Set the EFA data to a pattern.
-            memset(packet_ptr->efa_data, EFA_PROBE_PACKET_DATA_PATTERN, sizeof(packet_ptr->efa_data));
+        // Set the EFA data to a pattern.
+        memset(packet_ptr->efa_data, EFA_PROBE_PACKET_DATA_PATTERN, sizeof(packet_ptr->efa_data));
 
-            work_request_ptr->packet.sg_list.total_data_size = EFA_PROBE_PACKET_DATA_SIZE;
-            work_request_ptr->packet.sg_list.sgl_head_ptr = &work_request_ptr->sgl_entry;
+        work_request_ptr->packet.sg_list.total_data_size = EFA_PROBE_PACKET_DATA_SIZE;
+        work_request_ptr->packet.sg_list.sgl_head_ptr = &work_request_ptr->sgl_entry;
 
-            work_request_ptr->sgl_entry.size_in_bytes = EFA_PROBE_PACKET_DATA_SIZE;
-            work_request_ptr->sgl_entry.address_ptr = packet_ptr->efa_data;
+        work_request_ptr->sgl_entry.size_in_bytes = EFA_PROBE_PACKET_DATA_SIZE;
+        work_request_ptr->sgl_entry.address_ptr = packet_ptr->efa_data;
 
-            // Set the CDI common header.
-            int msg_prefix_size = probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle->adapter_endpoint_ptr-> \
-                                  adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
-            CdiRawPacketHeader* header_ptr = (CdiRawPacketHeader*)((char*)packet_ptr->efa_data + msg_prefix_size);
-            payload_state.payload_packet_state.payload_type = kPayloadTypeProbe;
-            payload_state.payload_packet_state.payload_num = 0;
-            payload_state.payload_packet_state.packet_sequence_num = packet_ptr->packet_sequence_num;
-            payload_state.payload_packet_state.packet_id = i;
+        // Set the CDI common header.
+        int msg_prefix_size = probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle->adapter_endpoint_ptr-> \
+                                adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
+        CdiRawPacketHeader* header_ptr = (CdiRawPacketHeader*)((char*)packet_ptr->efa_data + msg_prefix_size);
+        payload_state.payload_packet_state.payload_type = kPayloadTypeProbe;
+        payload_state.payload_packet_state.payload_num = 0;
+        payload_state.payload_packet_state.packet_sequence_num = packet_ptr->packet_sequence_num;
+        payload_state.payload_packet_state.packet_id = packet_ptr->packet_sequence_num;
 
-            payload_state.source_sgl.total_data_size = EFA_PROBE_PACKET_DATA_SIZE;
-            ProtocolPayloadHeaderInit(protocol_handle, header_ptr, &payload_state);
+        payload_state.source_sgl.total_data_size = EFA_PROBE_PACKET_DATA_SIZE;
+        ProtocolPayloadHeaderInit(protocol_handle, header_ptr, &payload_state);
 
-            // Set flag to true if last packet of the payload. This is used to decrement tx_in_flight_ref_count when
-            // the last packet of a payload is ACKed.
-            work_request_ptr->packet.payload_last_packet = (i+1 == EFA_PROBE_PACKET_COUNT);
+        // Set flag to true if last packet of the payload. This is used to decrement tx_in_flight_ref_count when
+        // the last packet of a payload is ACKed.
+        work_request_ptr->packet.payload_last_packet =
+            (packet_ptr->packet_sequence_num + 1 == EFA_PROBE_PACKET_COUNT);
 
-            CdiSinglyLinkedListPushTail(&packet_list, &work_request_ptr->packet.list_entry);
-            // Increment in-flight reference counter once for each packet.
-            CdiOsAtomicInc32(&probe_ptr->app_adapter_endpoint_handle->tx_in_flight_ref_count);
-        }
+        CdiSinglyLinkedListPushTail(&packet_list, &work_request_ptr->packet.list_entry);
+        // Increment in-flight reference counter once for each packet.
+        CdiOsAtomicInc32(&probe_ptr->app_adapter_endpoint_handle->tx_in_flight_ref_count);
+        probe_ptr->tx_probe_state.packets_enqueued_count++;
     }
 
     // Now that all the work requests have been created, put the list in the adapter's endpoint packet queue.
@@ -135,7 +138,7 @@ static int ProcessSendCommandRetry(ProbeEndpointState* probe_ptr, const char* re
         probe_ptr->app_adapter_endpoint_handle->endpoint_stats_ptr->probe_command_retry_count++;
         if (probe_ptr->tx_probe_state.send_command_retry_count < TX_COMMAND_MAX_RETRIES) {
                 CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
-                    "Probe Tx remote IP[%s:%d] %s ACK timeout. Resending ping #[%d].",
+                    "Probe Tx remote IP[%s:%d] %s ACK timeout. Resending cmd #[%d].",
                     remote_ip_str, remote_dest_port, InternalUtilityKeyEnumToString(kKeyProbeCommand, command),
                     probe_ptr->tx_probe_state.send_command_retry_count);
         } else {
@@ -179,6 +182,12 @@ void ProbeTxEfaMessageFromEndpoint(void* param_ptr, Packet* packet_ptr, Endpoint
     probe_ptr->tx_probe_state.packets_acked_count++;
 
     CdiAdapterTxPacketComplete(probe_ptr->app_adapter_endpoint_handle, packet_ptr);
+
+    // Do until we have queued all the probe packets.
+    if (probe_ptr->tx_probe_state.packets_acked_count < EFA_PROBE_PACKET_COUNT) {
+        // No need to check for errors. Probe will timeout and restart the connection negotiation process.
+        EfaEnqueueSendProbePacket(probe_ptr);
+    }
 }
 
 void ProbeTxControlMessageFromEndpoint(void* param_ptr, Packet* packet_ptr)
@@ -186,9 +195,10 @@ void ProbeTxControlMessageFromEndpoint(void* param_ptr, Packet* packet_ptr)
     AdapterConnectionState* adapter_con_ptr = (AdapterConnectionState*)param_ptr;
 
     // Put back work request into the pool.
-    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
     ProbePacketWorkRequest* work_request_ptr = (ProbePacketWorkRequest*)packet_ptr->sg_list.internal_data_ptr;
-    CdiPoolPut(efa_con_ptr->control_work_request_pool_handle, work_request_ptr);
+    CdiPoolHandle control_work_request_pool_handle =
+        ControlInterfaceGetWorkRequestPoolHandle(adapter_con_ptr->control_interface_handle);
+    CdiPoolPut(control_work_request_pool_handle, work_request_ptr);
 }
 
 bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecodedProbeHeader* probe_hdr_ptr,
@@ -404,7 +414,8 @@ uint64_t ProbeTxControlProcessProbeState(ProbeEndpointState* probe_ptr)
                                      "Probe Tx remote IP[%s:%d] starting the SRD probe process",
                                      remote_ip_str, remote_dest_port);
             ProbeControlEfaConnectionStart(probe_ptr);
-            EfaEnqueueSendProbePackets(probe_ptr);
+            probe_ptr->tx_probe_state.packets_enqueued_count = 0; // Initialize counter to start.
+            EfaEnqueueSendProbePacket(probe_ptr);
             probe_ptr->tx_probe_state.tx_state = kProbeStateEfaProbe;
             // If the EFA probe does not complete by this timeout, we return back to connection reset state.
             wait_timeout_ms = EFA_PROBE_MONITOR_TIMEOUT_MSEC;

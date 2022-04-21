@@ -93,4 +93,13 @@ AdapterConnectionHandle ControlInterfaceGetConnection(ControlInterfaceHandle han
  */
 AdapterEndpointHandle ControlInterfaceGetEndpoint(ControlInterfaceHandle handle);
 
+/**
+ * Return the handle of the work request pool associated with the specified control interface.
+ *
+ * @param handle Handle of control interface.
+ *
+ * @return Handle of work request pool.
+ */
+CdiPoolHandle ControlInterfaceGetWorkRequestPoolHandle(ControlInterfaceHandle handle);
+
 #endif // ADAPTER_CONTROL_INTERFACE_H__

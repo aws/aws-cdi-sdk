@@ -22,6 +22,9 @@
 /// @brief The maximum number of command line tokens allowed in a text file when using the @ command line option.
 #define MAX_CMD_TOKENS_IN_FILE        (10000)
 
+/// @brief Define TestConsoleLog.
+#define TestConsoleLog SimpleConsoleLog
+
 /**
  * Structure use to hold command line state data.
  *
@@ -270,6 +273,19 @@ static bool CommandsFromFile(char** file_buffer_str, const char** cmd_array_ptr,
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
+
+void SimpleConsoleLog(CdiLogLevel log_level, const char* format_str, ...)
+{
+    if (CdiLoggerIsEnabled(NULL, kLogComponentGeneric, log_level)) {
+        va_list vars;
+
+        va_start(vars, format_str);
+        vprintf(format_str, vars); // Send to stdout.
+        printf("\n\r");
+        fflush(stdout);
+        va_end(vars);
+    }
+}
 
 bool TestStringToInt(const char* str, int* num_ptr, char** ret_end_str)
 {

@@ -95,6 +95,7 @@ typedef struct {
     /// @brief When in kProbeStateEfaConnectedPing or kProbeStateSendProtocolVersion state, this is the number of
     /// consecutive commands that have been sent without receiving an ack.
     int send_command_retry_count;
+    int packets_enqueued_count; ///< Number of probe packets that have been enqueued to send.
     int packets_acked_count; ///< Number of probe packets that have been acked.
     int packets_ack_wait_count; ///< Number of times have waited for probe packets ACKs to arrive.
 } TxEndpointProbeState;
@@ -109,6 +110,7 @@ typedef struct {
     int send_reset_retry_count;
     int packets_received_count; ///< Number of probe packets that have been received.
     int pings_received_count;   ///< Number of pings that have been received.
+    uint32_t total_packet_count_snapshot; ///< Snapshot of total packet received count.
 } RxEndpointProbeState;
 
 typedef struct ProbeEndpointState ProbeEndpointState;

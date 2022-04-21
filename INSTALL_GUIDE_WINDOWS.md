@@ -1,6 +1,8 @@
 # Windows Installation Guide
 Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windows instances.
 
+**In addition to filing [bugs/issues](https://github.com/aws/aws-cdi-sdk/issues), please use the CDI-SDK [discussion pages](https://github.com/aws/aws-cdi-sdk/discussions) for Q&A, Ideas, Show and Tell or other General topics so the whole community can benefit.**
+
 ---
 
 - [Windows Installation Guide](#windows-installation-guide)

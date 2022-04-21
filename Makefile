@@ -130,6 +130,7 @@ src_dir.test := $(top.src)/test
 src_dir.test_common := $(top.test_common)/src
 src_dir.test_minimal := $(top.test_minimal)
 src_dir.test_unit := $(top.test_unit)
+src_dir.tools := $(top.src)/tools
 ifeq ($(require_aws_sdk),yes)
 src_extensions := c cpp
 else
@@ -197,6 +198,15 @@ depends.test_min_rx := $(patsubst %.o,%.d,$(objs.test_min_rx))
 
 # the end goal of building cdi_test_min_rx program
 test_min_rx_program := $(build_dir.bin)/cdi_test_min_rx
+
+# generate lists for building the dump_riff program
+srcs.dump_riff := $(src_dir.test)/riff.c $(wildcard $(src_dir.tools)/*.c) $(wildcard $(src_dir.test_common)/*.c)
+objs.dump_riff := $(addprefix $(build_dir.obj)/,$(patsubst %.c,%.o,$(notdir $(srcs.dump_riff))))
+headers.dump_riff := $(include_dir.test)/riff.h
+depends.dump_riff := $(patsubst %.o,%.d,$(objs.dump_riff))
+
+# the goal of building the dump_riff program
+dump_riff_program := $(build_dir.bin)/dump_riff
 
 # all of the header files, used only for "headers" target
 headers.all := $(foreach dir,cdi test test_common test_min_tx test_min_rx test_unit,$(headers.$(dir)))
@@ -310,11 +320,11 @@ help ::
 	@echo ""
 	@echo "Output files are placed into build/{debug|release}/{lib|bin}."
 
-# look for .c files in the CDI and test source directories.
+# look for .c files in the CDI, test and tool source directories.
 #
 # NOTE: the vpath function does not support ambiguity of files with the same name in different directories. Therefore
 # all .c files used in this project MUST have unique names.
-vpath %.c $(foreach proj,cdi common test test_common test_minimal test_unit,$(src_dir.$(proj)))
+vpath %.c $(foreach proj,cdi common test test_common test_minimal test_unit tools,$(src_dir.$(proj)))
 ifeq ($(require_aws_sdk),yes)
 vpath %.cpp $(src_dir.cdi)
 endif
@@ -430,6 +440,13 @@ $(test_unit_program) : $(objs.test_unit) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
 	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_unit) $(CDI_LDFLAGS) $(CDI_TEST_LDFLAGS)
 
+# rules for building the tool programs
+.PHONY : tools
+tools : $(dump_riff_program)
+$(dump_riff_program) : $(objs.dump_riff) | $(build_dir.bin)
+	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
+	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.dump_riff) $(CDI_LDFLAGS) $(CDI_TEST_LDFLAGS)
+
 # how to build the docs
 docs_dir.docs := $(build_dir.doc)/all
 docs_dir.docs_api := $(build_dir.doc)/api
@@ -481,7 +498,7 @@ $(depends.cdi) : $(libfabric_config_h) $(aws_h)
 
 # include dependency rules from generated files; this is conditional so .d files are only created if needed.
 ifneq ($(real_build_goals),)
--include $(foreach proj,cdi test test_min_tx test_min_rx test_unit,$(depends.$(proj)))
+-include $(foreach proj,cdi test test_min_tx test_min_rx test_unit dump_riff,$(depends.$(proj)))
 endif
 
 # Users can add their own rules to this makefile by creating a makefile in this directory called

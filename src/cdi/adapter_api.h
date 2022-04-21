@@ -23,6 +23,10 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
+
+/// Forward reference
+typedef struct ControlInterfaceState* ControlInterfaceHandle;
+
 /**
  * @brief Values used for adapter packet acknowledgment status.
  */
@@ -276,6 +280,10 @@ struct AdapterConnectionState {
     PollThreadState* poll_thread_state_ptr; ///< Pointer to poll thread state data associated with this connection.
 
     CdiSignalType shutdown_signal; ///< Signal used to shutdown adapter connection threads.
+
+    ControlInterfaceHandle control_interface_handle; ///< Handle of control interface for the connection.
+
+    CdiCsID endpoint_lock; ///< Lock used to protect access to endpoint resources.
 
     void* type_specific_ptr;       ///< Adapter specific connection data.
 };

@@ -33,6 +33,9 @@
 /// @brief Default Tx timeout.
 #define DEFAULT_TX_TIMEOUT                  (16666)
 
+/// @brief Define TestConsoleLog.
+#define TestConsoleLog SimpleConsoleLog
+
 /**
  * @brief A structure that holds all the test settings as set from the command line.
  */
@@ -40,7 +43,7 @@ typedef struct {
     const char* local_adapter_ip_str;  ///< The local network adapter IP address.
     int dest_port;                     ///< The destination port number.
     const char* remote_adapter_ip_str; ///< The remote network adapter IP address.
-    TestConnectionProtocolType protocol_type; ///< Protocol type (AVM or RAW).
+    CdiConnectionProtocolType protocol_type; ///< Protocol type (AVM or RAW).
     int num_transactions;              ///< The number of transactions in the test.
     int payload_size;                  ///< Payload size in bytes.
     int rate_numerator;                ///< The numerator for the number of payloads per second to send.
@@ -118,9 +121,9 @@ static bool ParseCommandLine(int argc, const char** argv, TestSettings* test_set
         const char* arg_str = argv[i++];
         if (0 == CdiOsStrCmp("--tx", arg_str)) {
             if (0 == CdiOsStrCmp("AVM", argv[i])) {
-                test_settings_ptr->protocol_type = kTestProtocolAvm;
+                test_settings_ptr->protocol_type = kProtocolTypeAvm;
             } else if (0 == CdiOsStrCmp("RAW", argv[i])) {
-                test_settings_ptr->protocol_type = kTestProtocolRaw;
+                test_settings_ptr->protocol_type = kProtocolTypeRaw;
             } else {
                 CDI_LOG_THREAD(kLogError, "For --tx <protocol>, expected 'AVM' or 'RAW'. Got[%s].", argv);
                 ret = false;
@@ -177,7 +180,7 @@ static bool ParseCommandLine(int argc, const char** argv, TestSettings* test_set
  */
 static void TestConnectionCallback(const CdiCoreConnectionCbData* cb_data_ptr)
 {
-    TestConnectionInfo* connection_info_ptr = cb_data_ptr->connection_user_cb_param;
+    TestConnectionInfo* connection_info_ptr = (TestConnectionInfo*)cb_data_ptr->connection_user_cb_param;
 
     // Update connection state and set state change signal.
     connection_info_ptr->connection_status = cb_data_ptr->status_code;
@@ -222,7 +225,7 @@ static void ProcessCoreTxCallback(TestConnectionInfo* connection_info_ptr, const
 static void TestAvmTxCallback(const CdiAvmTxCbData* cb_data_ptr)
 {
     TestConnectionInfo* connection_info_ptr = (TestConnectionInfo*)cb_data_ptr->core_cb_data.user_cb_param;
-    assert(kTestProtocolAvm == connection_info_ptr->test_settings.protocol_type);
+    assert(kProtocolTypeAvm == connection_info_ptr->test_settings.protocol_type);
 
     ProcessCoreTxCallback(connection_info_ptr, &cb_data_ptr->core_cb_data);
 }
@@ -313,7 +316,7 @@ static CdiReturnStatus SendAvmPayload(TestConnectionInfo* connection_info_ptr, C
 static void TestRawTxCallback(const CdiRawTxCbData* cb_data_ptr)
 {
     TestConnectionInfo* connection_info_ptr = (TestConnectionInfo*)cb_data_ptr->core_cb_data.user_cb_param;
-    assert(kTestProtocolRaw == connection_info_ptr->test_settings.protocol_type);
+    assert(kProtocolTypeRaw == connection_info_ptr->test_settings.protocol_type);
 
     ProcessCoreTxCallback(connection_info_ptr, &cb_data_ptr->core_cb_data);
 }
@@ -448,7 +451,7 @@ int main(int argc, const char** argv)
             .stats_config.stats_period_seconds = 0,
             .stats_config.disable_cloudwatch_stats = true,
         };
-        if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
+        if (kProtocolTypeAvm == con_info.test_settings.protocol_type) {
             rs = CdiAvmTxCreate(&config_data, TestAvmTxCallback,  &con_info.connection_handle);
         } else {
             rs = CdiRawTxCreate(&config_data, TestRawTxCallback,  &con_info.connection_handle);
@@ -478,7 +481,7 @@ int main(int argc, const char** argv)
 
     if (kCdiStatusOk == rs) {
         // Fill Tx payload buffer with a simple pattern.
-        if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
+        if (kProtocolTypeAvm == con_info.test_settings.protocol_type) {
 
             // 10-bit 4:2:2 pixel color patterns:
             //   Black: 0x80, 0x04, 0x08, 0x00, 0x40
@@ -526,7 +529,7 @@ int main(int argc, const char** argv)
         CdiPtpTimestamp timestamp = CdiCoreGetPtpTimestamp(NULL);
 
         // Send the payload.
-        if (kTestProtocolAvm == con_info.test_settings.protocol_type) {
+        if (kProtocolTypeAvm == con_info.test_settings.protocol_type) {
             int stream_identifier = 0; // Used by AVM APIs to identify the stream within a connection.
             rs = SendAvmPayload(&con_info, &sgl, &timestamp, &avm_config, stream_identifier);
         } else {

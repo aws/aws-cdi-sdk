@@ -885,6 +885,11 @@ void CdiLoggerMultilineBegin(CdiLogHandle handle, CdiLogComponent component, Cdi
 
     memset(state_ptr, 0, sizeof(*state_ptr)); // Clear all the state data
 
+    if (NULL == function_name_str) {
+        function_name_str = "";
+        line_number = 0;
+    }
+
     // Check if logging is enabled.
     if (CdiLoggerIsEnabled(handle, component, log_level)) {
         state_ptr->logging_enabled = true;

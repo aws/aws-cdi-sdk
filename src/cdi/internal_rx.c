@@ -32,6 +32,9 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
+/// @brief Size of CDIPacketAvmWithConfig structure used in SDK 1.x.x.
+#define SIZE_OF_CDI_PACKET_AVM_WITH_CONFIG_SDK_1    (58)
+
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
@@ -151,6 +154,10 @@ static void InvokeAvmPayloadCallback(CdiConnectionState* con_state_ptr, AppPaylo
         if (sizeof(avm_union_ptr->with_config) == extra_data_size) {
             cb_data.config_ptr = &avm_union_ptr->with_config.config;
         } else {
+            if (SIZE_OF_CDI_PACKET_AVM_WITH_CONFIG_SDK_1 == extra_data_size) {
+              CDI_LOG_THREAD(kLogError,
+                             "Ignoring AVM extra data from legacy CDI-SDK 1.x.x. Remote host should upgrade.");
+            }
             cb_data.config_ptr = NULL;
         }
     }
@@ -244,6 +251,7 @@ static bool InitializePayloadState(CdiProtocolHandle protocol_handle, CdiEndpoin
 
         // Initialize memory state data.
         memory_state_ptr->magic = kMagicMemory;
+        memory_state_ptr->cdi_connection_handle = (CdiConnectionHandle)endpoint_ptr->connection_state_ptr;
         memory_state_ptr->cdi_endpoint_handle = endpoint_ptr;
         memory_state_ptr->buffer_type = con_state_ptr->rx_state.config_data.rx_buffer_type;
 
@@ -714,7 +722,8 @@ CdiReturnStatus RxCreateInternal(CdiConnectionProtocolType protocol_type, CdiRxC
 
     // Socket adapter does not dynamically create Rx endpoints, so create it here.
     if (kCdiStatusOk == rs && kCdiAdapterTypeSocket == config_data_ptr->adapter_handle->adapter_data.adapter_type) {
-        rs = EndpointManagerRxCreateEndpoint(con_state_ptr->endpoint_manager_handle, config_data_ptr->dest_port, NULL);
+        rs = EndpointManagerRxCreateEndpoint(con_state_ptr->endpoint_manager_handle, config_data_ptr->dest_port, NULL,
+                                             NULL, NULL);
     }
 
     if (kCdiStatusOk == rs) {
@@ -888,9 +897,11 @@ void RxPacketReceive(void* param_ptr, Packet* packet_ptr, EndpointMessageType me
     int payload_num = decoded_header.payload_num;
     int packet_sequence_num = decoded_header.packet_sequence_num;
     int cdi_header_size = decoded_header.encoded_header_size;
+    CdiPayloadType payload_type = decoded_header.payload_type;
+    assert(kPayloadTypeData == payload_type || kPayloadTypeDataOffset == payload_type);
+    (void)payload_type;
 
 #ifdef DEBUG_PACKET_SEQUENCES
-    CdiPayloadType payload_type = decoded_header.payload_type;
     CDI_LOG_THREAD(kLogInfo, "T[%d] P[%3d] S[%3d] A[%p]", payload_type, payload_num, packet_sequence_num,
                    packet_ptr->sg_list.sgl_head_ptr->address_ptr);
 #endif
@@ -1107,21 +1118,31 @@ CdiReturnStatus RxEnqueueFreeBuffer(const CdiSgList* sgl_ptr)
 
     CdiReturnStatus rs = kCdiStatusOk;
     CdiMemoryState* memory_state_ptr = (CdiMemoryState*)sgl_ptr->internal_data_ptr;
+    CdiConnectionState* con_state_ptr = memory_state_ptr->cdi_connection_handle;
+
+    // Get thread-safe access to endpoint resources. Users can free buffers here while internally an endpoint is being
+    // destroyed via DestroyEndpoint().
+    CdiOsCritSectionReserve(con_state_ptr->adapter_connection_ptr->endpoint_lock);
+
+    // Only use the endpoint if it is valid (has not been dynamically deleted).
     CdiEndpointState* endpoint_ptr = memory_state_ptr->cdi_endpoint_handle;
+    if (EndpointManagerIsEndpoint(con_state_ptr->endpoint_manager_handle, endpoint_ptr)) {
+        if (kCdiConnectionStatusConnected != endpoint_ptr->adapter_endpoint_ptr->connection_status_code) {
+            // Currently not connected, so no need to free pending resources. All resources have already been freed
+            // internally when the connection was disconnected.
+            return kCdiStatusOk;
+        }
+        if (kHandleTypeRx != endpoint_ptr->connection_state_ptr->handle_type) {
+            return kCdiStatusWrongDirection;
+        }
 
-    if (kHandleTypeRx != endpoint_ptr->connection_state_ptr->handle_type) {
-        return kCdiStatusWrongDirection;
-    }
-    if (kCdiConnectionStatusConnected != endpoint_ptr->adapter_endpoint_ptr->connection_status_code) {
-        // Currently not connected, so no need to free pending resources. All resources have already been freed
-        // internally when the connection was disconnected.
-        return kCdiStatusOk;
+        // Add the free buffer message into the Rx free buffer queue processing by PollThread().
+        if (!CdiQueuePush(endpoint_ptr->rx_state.free_buffer_queue_handle, sgl_ptr)) {
+            rs = kCdiStatusQueueFull;
+        }
     }
 
-    // Add the free buffer message into the Rx free buffer queue processing by PollThread().
-    if (!CdiQueuePush(endpoint_ptr->rx_state.free_buffer_queue_handle, sgl_ptr)) {
-        rs = kCdiStatusQueueFull;
-    }
+    CdiOsCritSectionRelease(con_state_ptr->adapter_connection_ptr->endpoint_lock);
 
     return rs;
 }

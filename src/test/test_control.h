@@ -44,6 +44,9 @@ extern CdiLoggerHandle test_app_logger_handle;
 /// @brief The number of bytes in a test pattern word.
 #define BYTES_PER_PATTERN_WORD  (sizeof(uint64_t))
 
+/// @brief The maximum payload count in the test application, the upper byte is reserved.
+#define MAX_TEST_PAYLOAD_COUNT  (0x00FFFFFF)
+
 /// Forward reference.
 typedef struct TestConnectionInfo TestConnectionInfo;
 /// Forward reference.
@@ -80,14 +83,9 @@ typedef struct {
     /// File handle for file to write received payload data to.
     CdiFileID user_data_write_file_handle;
 
-    /// When read_riff_file=true the next_payload_size will be the size of the next payload to send.
+    /// When riff_file=true then next_payload_size will be the size of the next payload to send.
     /// Otherwise next_payload_size is always equal to stream_settings->payload_size.
     int next_payload_size;
-
-    /// Video and ancillary data timestamps are based on 90kHz sampling so the counts per payload is counts =
-    /// (90,000 * rate_den) / rate_num. For audio there can be a variable sized number of samples per payload so for
-    /// audio count = (payload_size * 8) / (bit_depth * group_size).
-    uint32_t rtp_counts_per_payload;
 
     /// Rx expected payload data buffer pointer.
     void* rx_expected_data_buffer_ptr;
@@ -136,6 +134,9 @@ struct TestConnectionInfo {
         CdiRxConfigData     rx; ///<Rx Configuration data.
         CdiTxConfigData     tx; ///<Tx Configuration data.
     } config_data;
+
+    /// Pointer to thread-local storage.
+    void* local_data_ptr;
 
     /// Pointer to the test_settings data structure provided by the user to describe the test parameters for this
     /// connection.
@@ -277,31 +278,28 @@ bool PreparePayloadData(StreamSettings* stream_settings_ptr, int payload_buffer_
  * identifier value when using patterns.
  *
  * @param   connection_info_ptr     Pointer to test connection information.
- * @param   stream_id               Stream identifier.
+ * @param   stream_settings_ptr     Pointer to stream settings.
  * @param   payload_id              Payload identifier.
  * @param   read_file_handle        The file handle for reading the next pattern from, if the pattern type is from file.
  * @param   sgl_ptr                 Pointer to an SGL describing the buffer to be filled with payload data.
  *
  * @return                          if successful return true, otherwise returns false.
  */
-bool GetNextPayloadDataSgl(TestConnectionInfo* connection_info_ptr, int stream_id, int payload_id,
-                           CdiFileID read_file_handle, CdiSgList* sgl_ptr);
+bool GetNextPayloadDataSgl(const TestConnectionInfo* connection_info_ptr, const StreamSettings* stream_settings_ptr,
+    int payload_id, CdiFileID read_file_handle, CdiSgList* sgl_ptr);
 
 /**
  * Prepare next set of payload data. This is either reading the next payload from the file or incrementing the payload
  * identifier value when using patterns.
  *
  * @param   connection_info_ptr     Pointer to test connection information.
- * @param   stream_id               Stream identifier.
- * @param   payload_id              Payload identifier.
- * @param   read_file_handle        The file handle for reading the next pattern from, if the pattern type is from file.
- * @param   buffer_ptr              Pointer to the buffer to be filled with payload data.
- * @param   buffer_size             The size in bytes of the buffer at buffer_ptr.
+ * @param   stream_settings_ptr     Pointer to stream settings.
+ * @param   stream_info_ptr         Pointer to stream state.
  *
  * @return                          if successful return true, otherwise returns false.
  */
-bool GetNextPayloadDataLinear(TestConnectionInfo* connection_info_ptr, int stream_id, int payload_id,
-                              CdiFileID read_file_handle, uint8_t* buffer_ptr, int buffer_size);
+bool GetNextPayloadDataLinear(const TestConnectionInfo* connection_info_ptr, const StreamSettings* stream_settings_ptr,
+    TestConnectionStreamInfo* stream_info_ptr);
 
 /**
  * Create a unique log file name for this application's connection and associate it with the current thread. This

@@ -94,10 +94,6 @@ typedef struct {
  */
 typedef struct {
     AdapterConnectionState* adapter_con_ptr; ///< Pointer to adapter connection data.
-    ControlInterfaceHandle control_interface_handle; ///< Handle of control interface for the connection.
-
-    /// Memory pool of send control work requests (ProbeControlPacketWorkRequest).
-    CdiPoolHandle control_work_request_pool_handle;
 } EfaConnectionState;
 
 //*********************************************************************************************************************
@@ -188,6 +184,8 @@ CdiReturnStatus EfaRxPacketPoolCreate(EfaEndpointState* endpoint_state_ptr);
 
 /**
  * Frees the previously allocated receive packet buffer pool for the endpoint.
+ *
+ * @param endpoint_ptr Pointer to endpoint state data.
  */
 void EfaRxPacketPoolFree(EfaEndpointState* endpoint_ptr);
 

@@ -158,11 +158,15 @@ CdiReturnStatus EndpointManagerTxCreateEndpoint(EndpointManagerHandle handle, bo
  *
  * @param handle Handle of Endpoint Manager.
  * @param dest_port Destination port.
+ * @param source_address_ptr Pointer to source address (from the sender).
+ * @param stream_name_str Pointer to stream name string.
  * @param ret_endpoint_handle_ptr Address where to write the handle of the new endpoint.
  *
  * @return kCdiStatusOk if the operation was successful or a value that indicates the nature of the failure.
  */
 CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, int dest_port,
+                                                const struct sockaddr_in* source_address_ptr,
+                                                const char* stream_name_str,
                                                 CdiEndpointHandle* ret_endpoint_handle_ptr);
 
 /**
@@ -176,10 +180,21 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
  */
 CdiReturnStatus EndpointManagerProtocolVersionSet(CdiEndpointHandle handle,
                                                   const CdiProtocolVersionNumber* remote_version_ptr);
+
+/**
+ * Returns true if the specified endpoint exists within the specified Endpoint Manager.
+ *
+ * @param handle Handle of CDI Endpoint Manager.
+ * @param endpoint_handle Handle of CDI endpoint.
+ *
+ * @return Handle of first endpoint in the list. Returns NULL if the list is empty.
+ */
+bool EndpointManagerIsEndpoint(EndpointManagerHandle handle, CdiEndpointHandle endpoint_handle);
+
 /**
  * Returns the first endpoint in the list of endpoints associated with the specified Endpoint Manager.
  *
- * @param handle Handle of CDI endpoint.
+ * @param handle Handle of CDI Endpoint Manager.
  *
  * @return Handle of first endpoint in the list. Returns NULL if the list is empty.
  */

@@ -228,19 +228,12 @@ static bool SetupSignalHandlers(void) {
  */
 static void FreeAppLoggerResources(void)
 {
+    TestConsoleDestroy(false); // false= Normal termination.
     CdiLoggerThreadLogUnset();
     CdiLoggerDestroyLog(global_test_settings.test_app_global_log_handle);
     global_test_settings.test_app_global_log_handle = NULL;
     CdiLoggerDestroyLogger(test_app_logger_handle);
     test_app_logger_handle = NULL;
-}
-
-//*********************************************************************************************************************
-//******************************************* START OF PUBLIC FUNCTIONS ***********************************************
-//*********************************************************************************************************************
-
-GlobalTestSettings* GetGlobalTestSettings(void) {
-    return &global_test_settings;
 }
 
 /**
@@ -283,37 +276,13 @@ static bool CreateStringFromArray(const char* array_of_strings_ptr[], int num_en
     return ret;
 }
 
-#if COMPILE_UNUSED_FUNCTIONS
-/**
- * Search through an array of strings and return true if a given string is found.
- *
- * @param   array_ptr  Pointer to array of strings.
- * @param   size       The number of strings in the array.
- * @param   str        The string we are looking for in array_ptr.
- * @param   index_ptr  Pointer to the index variable for where the string was found in the array.
- * @return             True if string is found; false if string is not found.
- */
-static bool IsStringInArray(const char* array_ptr[], int size, const char* str, int* index_ptr)
-{
-    int i;
+//*********************************************************************************************************************
+//******************************************* START OF PUBLIC FUNCTIONS ***********************************************
+//*********************************************************************************************************************
 
-    for (i = 0; i < size; i++) {
-        if (index_ptr != NULL) {
-            *index_ptr = i;
-        }
-        // Check for the case of NULL terminated array.  If NULL then we didn't find our entry.
-        if (array_ptr[i] == NULL) {
-            return false;
-        }
-        // Otherwise, check for our string.
-        if (CdiOsStrCaseCmp(array_ptr[i], str) == 0) {
-            return true;
-        }
-    }
-    // If not a null-terminated array and we checked 'size' entries, then return false.
-    return false;
+GlobalTestSettings* GetGlobalTestSettings(void) {
+    return &global_test_settings;
 }
-#endif
 
 /**
  * C main entry function.
@@ -460,7 +429,7 @@ int main(int argc, const char **argv)
 
         // Call the initialize function so we can start creating connections.
         CdiCoreConfigData core_config = {
-            .default_log_level = DEFAULT_LOG_LEVEL,
+            .default_log_level = global_test_settings.log_level,
             .global_log_method_data_ptr = &sdk_log_method_data,
             .cloudwatch_config_ptr = NULL,
         };
@@ -522,7 +491,6 @@ int main(int argc, const char **argv)
     CdiLoggerShutdown(false); // Matches call to CdiLoggerInitialize(). NOTE: false= Normal termination.
 
     TestCommandLineParserDestroy(command_line_handle);
-    TestConsoleDestroy(false); // false= Normal termination.
 
     // Free signal handler lock, if it was created.
     CdiOsCritSectionDelete(signal_handler_lock);

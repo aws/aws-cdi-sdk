@@ -60,34 +60,36 @@ static uint16_t GetNextPayloadNum(CdiEndpointState* endpoint_ptr)
 /**
  * Dump Tx packet SGL entries to log or stdout.
  *
+ * @param protocol_handle Protocol handle.
  * @param work_request_ptr Pointer to work request state data.
  */
-static void DebugTxPacketSglEntries(TxPacketWorkRequest* work_request_ptr)
+static void DebugTxPacketSglEntries(CdiProtocolHandle protocol_handle, TxPacketWorkRequest* work_request_ptr)
 {
     CdiLogMultilineState m_state;
     CDI_LOG_THREAD_MULTILINE_BEGIN(kLogInfo, &m_state);
 
-    CdiPacketCommonHeader* common_header_ptr =
-        (CdiPacketCommonHeader*)work_request_ptr->packet.sg_list.sgl_head_ptr->address_ptr;
+    CdiDecodedPacketHeader packet_header;
+    CdiSglEntry sgl_entry = *work_request_ptr->packet.sg_list.sgl_head_ptr;
+    ProtocolPayloadHeaderDecode(protocol_handle, sgl_entry.address_ptr, sgl_entry.size_in_bytes, &packet_header);
 
     // The payload_data_offset value is not used for packet sequence number zero, since the offset is always
     // zero.
-    if (0 != common_header_ptr->packet_sequence_num &&
-        kPayloadTypeDataOffset == common_header_ptr->payload_type) {
-        CdiPacketDataOffsetHeader *ptr = (CdiPacketDataOffsetHeader*)common_header_ptr;
-        CDI_LOG_MULTILINE(&m_state, "Tx Total Packet Size[%d]. Packet Type[%d] Packet[%d] Payload[%d] Offset[%d] Entries:",
-                          work_request_ptr->packet.sg_list.total_data_size, ptr->hdr.payload_type,
-                          ptr->hdr.packet_sequence_num, ptr->hdr.payload_num, ptr->payload_data_offset);
+    if (0 != packet_header.packet_sequence_num &&
+        kPayloadTypeDataOffset == packet_header.payload_type) {
+        CDI_LOG_MULTILINE(&m_state, "Tx Total Packet Size[%d]. Packet Type[%d] Packet[%d/%d] Payload[%d] Offset[%d] Entries:",
+                          work_request_ptr->packet.sg_list.total_data_size, packet_header.payload_type,
+                          packet_header.packet_sequence_num, packet_header.packet_id, packet_header.payload_num,
+                          packet_header.data_offset_info.payload_data_offset);
     } else {
-        CDI_LOG_MULTILINE(&m_state, "Tx Total Packet Size[%d]. Packet Type[%d] Packet[%d] Payload[%d] Entries:",
-                          work_request_ptr->packet.sg_list.total_data_size, common_header_ptr->payload_type,
-                          common_header_ptr->packet_sequence_num, common_header_ptr->payload_num);
+        CDI_LOG_MULTILINE(&m_state, "Tx Total Packet Size[%d]. Packet Type[%d] Packet[%d/%d] Payload[%d] Entries:",
+                          work_request_ptr->packet.sg_list.total_data_size, packet_header.payload_type,
+                          packet_header.packet_sequence_num, packet_header.packet_id, packet_header.payload_num);
     }
 
     CdiSglEntry *packet_entry_ptr = work_request_ptr->packet.sg_list.sgl_head_ptr;
     while (packet_entry_ptr) {
         CDI_LOG_MULTILINE(&m_state, "Size[%4d] Addr[%p]", packet_entry_ptr->size_in_bytes,
-                            packet_entry_ptr->address_ptr);
+                          packet_entry_ptr->address_ptr);
         packet_entry_ptr = packet_entry_ptr->next_ptr;
     }
     CDI_LOG_MULTILINE_END(&m_state);
@@ -156,9 +158,7 @@ static CDI_THREAD TxPayloadThread(void* ptr)
 
     CdiSignalType comp_queue_signal = CdiQueueGetPopWaitSignal(con_state_ptr->tx_state.work_req_comp_queue_handle);
 
-    CdiSignalType signal_array[2];
-    signal_array[0] = notification_signal;
-    signal_array[1] = comp_queue_signal;
+    CdiSignalType signal_array[2] = { notification_signal, comp_queue_signal };
 
     // Packets are sent to the endpoint in batches starting with a single packet. The number is doubled with each
     // batch. This gives a quick start but as the queue backs up, the larger batch sizes lead to higher efficiency
@@ -296,7 +296,7 @@ static CDI_THREAD TxPayloadThread(void* ptr)
                 }
             }
 
-            if (kPayloadStatePacketizing == payload_processing_state) {
+            if (keep_going && kPayloadStatePacketizing == payload_processing_state) {
                 // NOTE: These pools are not thread-safe, so must ensure that only one thread is accessing them at a
                 // time.
                 if (!PayloadPacketizerPacketGet(adapter_endpoint_handle->protocol_handle,
@@ -308,7 +308,7 @@ static CDI_THREAD TxPayloadThread(void* ptr)
                     keep_going = false;
                 } else {
 #ifdef DEBUG_TX_PACKET_SGL_ENTRIES
-                    DebugTxPacketSglEntries(work_request_ptr);
+                    DebugTxPacketSglEntries(adapter_endpoint_handle->protocol_handle, work_request_ptr);
 #endif
                     // Fill in the work request with the specifics of the packet.
                     work_request_ptr->payload_state_ptr = payload_state_ptr;
@@ -796,14 +796,16 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
         payload_state_ptr = NULL; // Pointer is no longer valid, so clear it.
     }
 
+    CdiPoolPutAll(con_state_ptr->tx_state.payload_state_pool_handle);
+    // Don't free tx_state.payload_sgl_entry_pool_handle here. AppCallbackPayloadThread() frees them. When a connection
+    // is destroyed, the pool is flushed in TxConnectionDestroyInternal().
+
     CdiPoolPutAll(con_state_ptr->tx_state.work_request_pool_handle);
     CdiQueueFlush(con_state_ptr->tx_state.work_req_comp_queue_handle);
     CdiPoolPutAll(con_state_ptr->tx_state.packet_sgl_entry_pool_handle);
 
-    // NOTE: Don't flush app_payload_message_queue_handle, payload_state_pool_handle or payload_sgl_entry_pool_handle
-    // here. They are handled by AppCallbackPayloadThread(). It doesn't use the Endpoint Manager since it calls
-    // user-registered callback functions in the application, which may erroneously block and would stall the internal
-    // pipeline.
+    // NOTE: Don't flush app_payload_message_queue_handle here. Entries are popped using AppCallbackPayloadThread().
+    // When a connection is destroyed, they are flushed in TxConnectionDestroyInternal().
 
     con_state_ptr->back_pressure_state = kCdiBackPressureNone; // Reset the back pressure state.
     endpoint_ptr->tx_state.payload_num = 0; // Clear payload number so receiver can expect payload zero first.
@@ -828,11 +830,22 @@ void TxConnectionDestroyInternal(CdiConnectionHandle con_handle)
     CdiConnectionState* con_state_ptr = (CdiConnectionState*)con_handle;
 
     if (con_state_ptr) {
+        // Destroying connection, so ensure app payload queues and pools are drained. NOTE: This must be done after
+        // the poll thread and AppCallbackPayloadThread have stopped.
+        AppPayloadCallbackData app_cb_data;
+        while (CdiQueuePop(con_state_ptr->app_payload_message_queue_handle, (void**)&app_cb_data)) {
+            PayloadErrorFreeBuffer(con_state_ptr->error_message_pool, &app_cb_data);
+        }
+        CdiPoolPutAll(con_state_ptr->tx_state.payload_sgl_entry_pool_handle);
+
         // Now that the connection and adapter threads have stopped, it is safe to clean up the remaining resources in
         // the opposite order of their creation.
         CdiQueueDestroy(con_state_ptr->tx_state.work_req_comp_queue_handle);
         con_state_ptr->tx_state.work_req_comp_queue_handle = NULL;
 
+        // The application may be destroying the connection with Tx payloads in flight, so ensure this pool has been
+        // flushed before destroying it.
+        CdiPoolPutAll(con_state_ptr->tx_state.payload_sgl_entry_pool_handle);
         CdiPoolDestroy(con_state_ptr->tx_state.payload_sgl_entry_pool_handle);
         con_state_ptr->tx_state.payload_sgl_entry_pool_handle = NULL;
 

@@ -32,7 +32,7 @@ typedef struct CommandLineState* CommandLineHandle;
 #define PAYLOAD_PROGRESS_UPDATE_FREQUENCY   (60)
 
 /// @brief Default value for protocol type.
-#define DEFAULT_PROTOCOL_TYPE               (kTestProtocolRaw)
+#define DEFAULT_PROTOCOL_TYPE               (kProtocolTypeRaw)
 
 /// @brief Default number of transactions.
 #define DEFAULT_NUM_TRANSACTIONS            (1000)
@@ -40,13 +40,8 @@ typedef struct CommandLineState* CommandLineHandle;
 /// @brief Default payload size.
 #define DEFAULT_PAYLOAD_SIZE                (5184000)
 
-/**
- * Enum for connection protocol types.
- */
-typedef enum {
-    kTestProtocolRaw, ///< Raw connection
-    kTestProtocolAvm, ///< Audio, Video and Metadata (AVM) connection
-} TestConnectionProtocolType;
+/// @brief Number of elements in a static array.
+#define ARRAY_ELEMENT_COUNT(thisarray) ((int)(sizeof(thisarray)/sizeof(thisarray[0])))
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
@@ -81,9 +76,6 @@ bool TestCommandLineParserCreate(int* argc_ptr, const char*** argv_ptr, CommandL
  */
 void TestCommandLineParserDestroy(CommandLineHandle handle);
 
-#ifdef USE_CONSOLE_LOGGER
-extern void TestConsoleLog(CdiLogLevel log_level, const char* format_str, ...);
-#else
 /**
  * Not using the console logger, so implement this API here so it can be used from within test_common.c and test
  * applications that use this file.
@@ -92,18 +84,6 @@ extern void TestConsoleLog(CdiLogLevel log_level, const char* format_str, ...);
  * @param format_str Format string specifier.
  * @param ...  The remaining parameters contain a variable length list of arguments.
  */
-static inline void TestConsoleLog(CdiLogLevel log_level, const char* format_str, ...)
-{
-    if (CdiLoggerIsEnabled(NULL, kLogComponentGeneric, log_level)) {
-        va_list vars;
-
-        va_start(vars, format_str);
-        vprintf(format_str, vars); // Send to stdout.
-        printf("\n\r");
-        fflush(stdout);
-        va_end(vars);
-    }
-}
-#endif
+void SimpleConsoleLog(CdiLogLevel log_level, const char* format_str, ...);
 
 #endif // TEST_COMMON_H__

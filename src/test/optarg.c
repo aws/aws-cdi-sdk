@@ -143,7 +143,7 @@ static int CheckArg(const char* arg_str, const OptDef* opt_array_ptr, OptArg* fo
 
     // If this is just a '-', illegal short option.
     if (opt_len < 2) {
-        TestConsoleLog(kLogDebug, "ERROR: Illegal option [%s].", arg_str);
+        TestConsoleLog(kLogError, "Invalid option [%s].", arg_str);
         return kArgError;
     }
 
@@ -449,7 +449,7 @@ bool GetOpt(int argc, const char* argv[], int* index_ptr, OptDef* opt_array_ptr,
                                this_opt_ptr->args_array[thisarg]);
             }
         } else {
-            // unknown option
+            TestConsoleLog(kLogError, "unknown option %s", argv[*index_ptr]);
             return false;
         }
         if (advance_index) {

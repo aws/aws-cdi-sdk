@@ -199,8 +199,10 @@ void ProbeRxControlMessageFromEndpoint(void* param_ptr, Packet* packet_ptr)
                                     header.senders_ip_str, header.senders_control_dest_port);
                     CdiReturnStatus rs = EndpointManagerRxCreateEndpoint(
                         EndpointManagerConnectionToEndpointManager(adapter_con_ptr->data_state.cdi_connection_handle),
-                        adapter_con_ptr->port_number, &cdi_endpoint_handle);
+                        adapter_con_ptr->port_number, &senders_address, header.senders_stream_name_str,
+                        &cdi_endpoint_handle);
                     if (kCdiStatusOk == rs) {
+                        // Ensure all remote endpoint information is saved.
                         SaveRemoteEndpointInfo(cdi_endpoint_handle, &header, &senders_address);
                         EfaEndpointState* efa_endpoint_ptr = cdi_endpoint_handle->adapter_endpoint_ptr->type_specific_ptr;
                         probe_ptr = efa_endpoint_ptr->probe_endpoint_handle;
@@ -233,8 +235,8 @@ void ProbeRxControlMessageFromEndpoint(void* param_ptr, Packet* packet_ptr)
 
         // Since didn't put the packet into the FIFO for processing, we need to return it to the pool here.
         if (!command_packet_valid || fifo_write_failed) {
-            EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_con_ptr->type_specific_ptr;
-            CdiAdapterFreeBuffer(ControlInterfaceGetEndpoint(efa_con_ptr->control_interface_handle), &packet_ptr->sg_list);
+            CdiAdapterFreeBuffer(ControlInterfaceGetEndpoint(adapter_con_ptr->control_interface_handle),
+                                                             &packet_ptr->sg_list);
         }
     }
 }
@@ -318,12 +320,14 @@ uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
     uint64_t wait_timeout_ms = DEFAULT_TIMEOUT_MSEC;
     AdapterEndpointHandle adapter_endpoint_handle = probe_ptr->app_adapter_endpoint_handle;
     CdiEndpointHandle cdi_endpoint_handle = adapter_endpoint_handle->cdi_endpoint_handle;
-    EfaConnectionState* efa_con_ptr = (EfaConnectionState*)adapter_endpoint_handle->adapter_con_state_ptr->type_specific_ptr;
+    AdapterConnectionState* adapter_con_ptr = adapter_endpoint_handle->adapter_con_state_ptr;
 
-    CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Probe Rx remote IP[%s:%d] state[%s].",
-                             EndpointManagerEndpointRemoteIpGet(cdi_endpoint_handle),
-                             EndpointManagerEndpointRemotePortGet(cdi_endpoint_handle),
-                             InternalUtilityKeyEnumToString(kKeyProbeState, probe_ptr->rx_probe_state.rx_state));
+    if (kProbeStateEfaConnectedPing != probe_ptr->rx_probe_state.rx_state) {
+        CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe, "Probe Rx remote IP[%s:%d] state[%s].",
+                                EndpointManagerEndpointRemoteIpGet(cdi_endpoint_handle),
+                                EndpointManagerEndpointRemotePortGet(cdi_endpoint_handle),
+                                InternalUtilityKeyEnumToString(kKeyProbeState, probe_ptr->rx_probe_state.rx_state));
+    }
 
     switch (probe_ptr->rx_probe_state.rx_state) {
         case kProbeStateEfaStart:
@@ -355,7 +359,7 @@ uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
                         probe_ptr->rx_probe_state.send_reset_retry_count);
                 // If we have received a reset command from the remote Tx (client) connection, which contains the
                 // remote IP and destination port, we can send reset commands to it.
-                if (efa_con_ptr->control_interface_handle) {
+                if (adapter_con_ptr->control_interface_handle) {
                     // Send command to reset the remote Tx (client) connection. Will not expect an ACK back.
                     ProbeControlSendCommand(probe_ptr, kProbeCommandReset, false);
                 }
@@ -369,7 +373,7 @@ uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
         case kProbeStateResetDone:
             // If the reset was triggered by the remote connection, respond with an ACK command.
             if (probe_ptr->send_ack_command_valid) {
-                ProbeControlSendAck(probe_ptr, probe_ptr->send_ack_command, probe_ptr->send_ack_control_packet_num);
+                ProbeControlSendAck(probe_ptr, probe_ptr->send_ack_command, (int)probe_ptr->send_ack_control_packet_num);
                 probe_ptr->send_ack_command_valid = false;
                 // For Rx, the EFA endpoint has been started in ProbeEndpointResetDone(), so we can advance to the
                 // kProbeStateEfaProbe state.
@@ -387,7 +391,7 @@ uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
             // Did not complete EFA probe state within timeout. Reset the connection.
             CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
                 "Probe Rx EFA probe timeout. Sending reset to Tx.");
-            probe_ptr->rx_probe_state.rx_state = kProbeCommandReset; // Advance to resetting state.
+            probe_ptr->rx_probe_state.rx_state = kProbeStateSendReset; // Advance to resetting state.
             wait_timeout_ms = 0; // Do immediately.
             break;
         case kProbeStateEfaConnected:
@@ -399,18 +403,33 @@ uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
             // last probe packet arrives. NOTE: We will not expect an ACK back.
             ProbeControlSendCommand(probe_ptr, kProbeCommandConnected, false);
             probe_ptr->rx_probe_state.send_reset_retry_count = 0; // Reset retry counter.
+            // Save current total Rx packet count so we can use to determine if packets have arrived since it was
+            // saved.
+            probe_ptr->rx_probe_state.total_packet_count_snapshot = cdi_endpoint_handle->rx_state.total_packet_count;
+
 #ifdef DISABLE_PROBE_MONITORING
             wait_timeout_ms = CDI_INFINITE;
 #else
             // Just connected, so advance to ping state and timeout if we miss receiving a ping.
             probe_ptr->rx_probe_state.rx_state = kProbeStateEfaConnectedPing;
-            wait_timeout_ms = TX_COMMAND_ACK_TIMEOUT_MSEC;
+            wait_timeout_ms = RX_PING_MONITOR_TIMEOUT_MSEC;
 #endif
             break;
         case kProbeStateEfaConnectedPing:
-            // Did not get a ping within the timeout period. Reset the connection.
-            DestroyRxEndpoint(probe_ptr);
-            wait_timeout_ms = 0; // Do immediately.
+            // Rx ping not received without timeout period. Check to see if any Rx packets were received during the
+            // timeout period.
+            if (probe_ptr->rx_probe_state.total_packet_count_snapshot !=
+                cdi_endpoint_handle->rx_state.total_packet_count) {
+                // Got Rx packets since last ping, so ignore the missing ping (ping control packets could have been
+                // dropped). Reset counters and wait again for next ping.
+                probe_ptr->rx_probe_state.send_reset_retry_count = 0;
+                probe_ptr->rx_probe_state.total_packet_count_snapshot = cdi_endpoint_handle->rx_state.total_packet_count;
+                wait_timeout_ms = RX_PING_MONITOR_TIMEOUT_MSEC;
+            } else {
+                // Did not get a ping or an Rx packets within the timeout period. Reset the connection.
+                DestroyRxEndpoint(probe_ptr);
+                wait_timeout_ms = 0; // Do immediately.
+            }
             break;
         case kProbeStateDestroy:
         case kProbeStateSendProtocolVersion:

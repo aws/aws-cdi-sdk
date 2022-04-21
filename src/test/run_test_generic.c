@@ -137,6 +137,24 @@ static void DestroyCommonResources(TestConnectionInfo* connection_info_ptr)
 }
 
 /**
+ * Tell if any of the connections is in connected state.
+ *
+ * @param connection_info_array Pointer to array of all the test connection structures.
+ * @param num_connections Number of connections.
+ *
+ * @return True if and only if at least one connection is in connected state.
+ */
+static bool IsAnyConnected(TestConnectionInfo* connection_info_array, int num_connections)
+{
+    for (int i = 0; i < num_connections; i++) {
+        if (kCdiConnectionStatusConnected == connection_info_array[i].connection_status) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Wait for test to complete and provides stats update on the console while tests are running.
  *
  * @param connection_info_array Pointer to array of all the test connection structures.
@@ -144,6 +162,9 @@ static void DestroyCommonResources(TestConnectionInfo* connection_info_ptr)
  */
 static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int num_connections)
 {
+    const uint32_t timeout_ms = (uint32_t)(REFRESH_STATS_PERIOD_SECONDS * 1000);
+    const uint32_t connection_timeout_ms = (uint32_t)(GetGlobalTestSettings()->connection_timeout_seconds * 1000);
+
     uint64_t start_time = CdiOsGetMicroseconds();
 
     // Create an array of all the connection done signals so we can get a signal when they are all done.
@@ -153,9 +174,9 @@ static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int
     }
 
     int time_pos_x = 16; // Set starting X-position of elapsed time digits "00:00:00" as used in first line below:
-    const char* line1_str = "| Elapsed Time: 00:00:00  |                         Payload Latency (us)                  |       | Connection | Control |";
-    const char* line2_str = "|      Payload Counts     |    Overall    |                 Most Recent Series            |       |            | Command |";
-    const char* line3_str = "| Success | Errors | Late |  Min  |  Max  |  Min  |  P50  |  P90  |  P99  |  Max  | Count | CPU%%  | Drop Count | Retries |";
+    const char* line1_str = "| Elapsed Time: 00:00:00  |                         Payload Latency (us)                  |         | Connection | Control |";
+    const char* line2_str = "|      Payload Counts     |    Overall    |                 Most Recent Series            |         |            | Command |";
+    const char* line3_str = "| Success | Errors | Late |  Min  |  Max  |  Min  |  P50  |  P90  |  P99  |  Max  | Count |  CPU%%   | Drop Count | Retries |";
     //       Example values: |00000000 |0000000 |00000 |000000 |000000 |000000 |000000 |000000 |000000 |000000 | 0000  | 00(00) |     0000   |  0000
     // NOTE: The "CPU%" contains two values. The first value is the CPU load of the poll thread for the specific
     // endpoint. The second value, surrounded by parenthesis, is the total CPU load of all poll thread(s) used by all
@@ -175,7 +196,7 @@ static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int
         TestConsoleStatsHorzLine(0, STATS_WINDOW_STATIC_HEIGHT-1+num_connections, 0);
 
         // Convert how often to update the message from seconds to milliseconds.
-        uint32_t timeout_ms = (uint32_t)(REFRESH_STATS_PERIOD_SECONDS * 1000.0);
+        uint32_t time_since_last_connection_ms = 0;
         bool all_done = false;
         bool first_time = true;
         while (!all_done) {
@@ -183,12 +204,26 @@ static void WaitForTestToComplete(TestConnectionInfo* connection_info_array, int
                 // Wait for all the done signals or the timeout.
                 uint32_t signal_index;
                 CdiOsSignalsWait(signal_array, num_connections, true, timeout_ms, &signal_index);
-                if (CDI_OS_SIG_TIMEOUT != signal_index) {
+                if (CDI_OS_SIG_TIMEOUT == signal_index) {
+                    time_since_last_connection_ms += timeout_ms;
+                } else {
                     // All the done signals are set, so we can exit the loop after displaying the stats message.
                     all_done = true;
                 }
             } else {
                 first_time = false;
+            }
+
+            if (IsAnyConnected(connection_info_array, num_connections)) {
+                time_since_last_connection_ms = 0;
+            }
+
+            // If we got disconnected and the connection does not get recreated, then shutdown the connection so the
+            // test terminates. We use the same connection timeout here as during startup (in TestWaitForConnection).
+            if (time_since_last_connection_ms > connection_timeout_ms) {
+                for (int i = 0; i < num_connections; i++) {
+                    CdiOsSignalSet(connection_info_array[i].connection_shutdown_signal);
+                }
             }
 
             if (GetGlobalTestSettings()->use_multiwindow_console) {

@@ -13,10 +13,6 @@
 #ifndef TEST_ARGS_H__
 #define TEST_ARGS_H__
 
-/// @brief Using the console logger. This define is used in test_common.h to determine if the TestConsoleLog() API
-/// function needs to be implemented or not in that header file.
-#define USE_CONSOLE_LOGGER
-
 #include <stdbool.h>
 
 #include "cdi_baseline_profile_01_00_api.h"
@@ -25,7 +21,6 @@
 #include "cdi_logger_api.h"
 #include "cdi_os_api.h"
 #include "cdi_utility_api.h"
-#include "test_common.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
@@ -181,7 +176,7 @@ typedef struct {
     /// String defining the connection name assigned to this connection.
     char connection_name_str[CDI_MAX_CONNECTION_NAME_STRING_LENGTH];
     /// Enum representing the connection protocol type.
-    TestConnectionProtocolType connection_protocol;
+    CdiConnectionProtocolType connection_protocol;
     /// When true, receiver stays alive even after the first test finishes.
     bool keep_alive;
     /// Enum representing the buffer type.
@@ -192,7 +187,7 @@ typedef struct {
     int dest_port;
     /// The remote network adapter IP address.
     const char* remote_adapter_ip_str;
-    /// The number of transactions in the test.  One transaction can multiple stream payloads.
+    /// The number of transactions in the test.  One transaction can transfer multiple stream payloads.
     int num_transactions;
     /// The numerator for the number of payloads per second to send during the test.
     int rate_numerator;

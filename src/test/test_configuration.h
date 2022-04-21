@@ -22,7 +22,7 @@
 
 /// @brief Option to increase or decrease transmitter test timeout time.
 /// This number must be large enough to compensate for payloads that may be in flight when test completes.
-#define TX_ALL_DONE_TIMEOUT_FACTOR      (32)
+#define TX_ALL_DONE_TIMEOUT_MS          (2000)
 
 /// @brief How often to refresh transfer stats on the console in seconds.
 #define REFRESH_STATS_PERIOD_SECONDS    (1)
