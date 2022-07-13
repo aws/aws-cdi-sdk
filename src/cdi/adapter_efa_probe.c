@@ -204,18 +204,16 @@ CdiReturnStatus ProbeEndpointError(ProbeEndpointHandle handle)
     return rs;
 }
 
-CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle, bool reopen)
+CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle)
 {
     CdiReturnStatus rs = kCdiStatusOk;
     ProbeEndpointState* probe_ptr = (ProbeEndpointState*)handle;
-    AdapterConnectionState* adapter_con_ptr = probe_ptr->app_adapter_endpoint_handle->adapter_con_state_ptr;
 
     if (probe_ptr) {
-        // Receiver can immediately start the EFA connection. Transmitter must wait until we have the remote GID before
-        // it can start.
-        if (kEndpointDirectionReceive == adapter_con_ptr->direction && reopen) {
-            ProbeControlEfaConnectionStart(probe_ptr);
-        }
+        // NOTE: Receiver will be started after protocol version has been negotiated. This prevents in-flight packet
+        // acks from erroneously being received from a previously established connection. In this case, in
+        // rxr_cq_insert_addr_from_rts() the packet type can be RXR_CONNACK_PKT instead of RXR_RTS_PKT. Transmitter must
+        // wait until we have the remote GID before it can start.
 
         // Post control command to notify probe that resetting the connection has completed.
         ProbeControlQueueStateChange(probe_ptr, kProbeStateResetDone);

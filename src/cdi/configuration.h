@@ -205,13 +205,17 @@
 /// @brief Once a command has been sent to the Endpoint Manager, this defines how long to wait before it completes.
 #define ENDPOINT_MANAGER_COMPLETION_TIMEOUT_MSEC (1000)
 
+/// @brief After probe packet ACKs have been received, this is how long to wait before changing to the connected state.
+/// The value is in milliseconds.
+#define TX_CONNECTION_DELAY_MSEC                (1000)
+
 /// @brief Once a connection has been established, this defines how often the transmitter sends a ping to command to the
 /// receiver using the control interface. The value is in milliseconds.
-#define SEND_PING_COMMAND_FREQUENCY_MSEC        (1000)
+#define SEND_PING_COMMAND_FREQUENCY_MSEC        (5000)
 
 /// @brief This value is used by the transmitter to define how many times a command is sent without receiving an ACK
 /// reply before going into connection reset mode.
-#define TX_COMMAND_MAX_RETRIES                  (6)
+#define TX_COMMAND_MAX_RETRIES                  (40)
 
 /// @brief This value is used by the transmitter to define how long it waits for an ACK response to a command that it
 /// sent. If the timeout expires, the same command will be sent up to the amount specified by #TX_COMMAND_MAX_RETRIES.
@@ -222,7 +226,7 @@
 /// @brief Defines how long the receiver waits for a ping command from the remote target before changing to connection
 /// reset mode. The value is in milliseconds. This should be long enough to avoid false disconnects due to a few TX ping
 /// packets getting dropped.
-#define RX_PING_MONITOR_TIMEOUT_MSEC            (3000+(TX_COMMAND_ACK_TIMEOUT_MSEC*(TX_COMMAND_MAX_RETRIES+1)))
+#define RX_PING_MONITOR_TIMEOUT_MSEC            (5000 + (SEND_PING_COMMAND_FREQUENCY_MSEC*3))
 
 /// @brief Defines the EFA interface probe packet data size.
 #define EFA_PROBE_PACKET_DATA_SIZE              (1024)

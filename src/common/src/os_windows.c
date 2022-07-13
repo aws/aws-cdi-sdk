@@ -1169,7 +1169,7 @@ int CdiOsGetLocalTimeString(char* time_str, int max_string_len)
 }
 
 // -- Sockets --
-bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* new_socket_ptr)
+bool CdiOsSocketOpen(const char* host_address_str, int port_number, const char* bind_address_str, CdiSocket* new_socket_ptr)
 {
     bool ret = false;
 
@@ -1195,12 +1195,26 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
                 if (iResult == 0) {
                     memcpy(&info_ptr->addr, result_ptr->ai_addr, result_ptr->ai_addrlen);
                     if (host_address_str == NULL) {
-                        if (bind(info_ptr->s, result_ptr->ai_addr, result_ptr->ai_addrlen) == 0) {
-                            ret = true;
+                        bool ok_to_bind = true;
+                        if (NULL != bind_address_str) {
+                            info_ptr->addr.sin_addr.s_addr = inet_addr(bind_address_str);
+                            if (info_ptr->addr.sin_addr.s_addr == -1) {
+                                // inet_addr does not set errno,
+                                ERROR_MESSAGE("inet_addr() failed with bind address[%s]", bind_address_str);
+                                ok_to_bind = false;
+                            }
                         } else {
-                            int code = WSAGetLastError();
-                            ERROR_MESSAGE("bind failed. Port[%d] might be in use by another application. Code[%d]",
-                                          port_number, code);
+                            // Bind to the specified port number on any interface.
+                            info_ptr->addr.sin_addr.s_addr = INADDR_ANY;
+                        }
+                        if (ok_to_bind) {
+                            if (bind(info_ptr->s, result_ptr->ai_addr, result_ptr->ai_addrlen) == 0) {
+                                ret = true;
+                            } else {
+                                int code = WSAGetLastError();
+                                ERROR_MESSAGE("bind failed. Port[%d] might be in use by another application. Code[%d]",
+                                    port_number, code);
+                            }
                         }
                     } else {
                         ret = true;

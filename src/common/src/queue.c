@@ -503,7 +503,7 @@ bool CdiQueuePushWaitMultiple(CdiQueueHandle handle, int timeout_ms, CdiSignalTy
     CdiSinglyLinkedListEntry* new_write_ptr = CdiSinglyLinkedListNextEntry(state_ptr->entry_write_ptr);
 
     // Wait here until the entry is pushed, get an abort signal or a timeout.
-    while (ret && CdiQueuePush(handle, item_ptr)) {
+    while (ret && !CdiQueuePush(handle, item_ptr)) {
         // Queue is full, so setup to wait for an item to be popped from it.
         ret = WaitForSignals(&state_ptr->entry_read_ptr, new_write_ptr, state_ptr->wake_push_waiters_signal,
                              timeout_ms, signal_array, num_signals, ret_signal_index_ptr);

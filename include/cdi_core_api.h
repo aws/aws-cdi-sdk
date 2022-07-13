@@ -71,13 +71,13 @@
 #define CDI_SDK_MAJOR_VERSION       4
 
 /// @brief CDI minor version.
-#define CDI_SDK_MINOR_VERSION       0
+#define CDI_SDK_MINOR_VERSION       1
 
 /// @brief CDI protcol version.
 #define CDI_PROTOCOL_VERSION             2
 
 /// @brief CDI protocol major version.
-#define CDI_PROTOCOL_MAJOR_VERSION       1
+#define CDI_PROTOCOL_MAJOR_VERSION       2
 
 /// @brief CDI probe command version. Possible value are:
 /// For Protocol version 2.0 (CDI_PROTOCOL_VERSION.CDI_PROTOCOL_MAJOR_VERSION):
@@ -90,7 +90,8 @@
 /// For Protocol version 2.1 (CDI_PROTOCOL_VERSION.CDI_PROTOCOL_MAJOR_VERSION):
 /// 4: SDK 2.2.x. Supports bidirectional sockets for probe control interface. Logic added to maintain compatibility with
 ///               previous probe version that used unidirectional sockets.
-#define CDI_PROBE_VERSION                4
+/// 5. SDK 2.4.1  Rx waits for connected ping from Tx before enabling adapter level endpoint (ie. libfabric).
+#define CDI_PROBE_VERSION                5
 
 /// @brief Define to limit the max number of allowable Tx or Rx connections that can be created in the SDK.
 #define CDI_MAX_SIMULTANEOUS_CONNECTIONS                (30)
@@ -620,6 +621,11 @@ typedef struct {
     /// match the value configured for the receiving connection.
     int dest_port;
 
+    /// @brief The IP address of the host interface to bind to for internal CDI command communication. If NULL,
+    /// interface binding is not used (default behavior). NOTE: This must be the dotted form of an IPv4 address. DNS may
+    /// be supported in the future.
+    const char* bind_ip_addr_str;
+
     /// @brief To reduce CPU core usage, multiple connections can share the same poll thread by specifying a shared poll
     /// thread identifier. Any connection that uses the same identifier will share a single instance of the poll thread.
     /// Dynamically adding/removing connections while payloads are transferring may cause them to be late. Therefore,
@@ -748,6 +754,11 @@ typedef struct {
     /// unprivileged port numbers.
     int dest_port;
 
+    /// @brief The IP address of the host interface to bind to for internal CDI command communication. If NULL,
+    /// interface binding is not used (default behavior). NOTE: This must be the dotted form of an IPv4 address. DNS may
+    /// be supported in the future.
+    const char* bind_ip_addr_str;
+
     /// @brief To reduce CPU core usage, multiple connections can share the same poll thread by specifying a shared poll
     /// thread identifier. Any connection that uses the same identifier will share a single instance of the poll thread.
     /// Dynamically adding/removing connections while payloads are transferring may cause them to be late. Therefore,
@@ -854,6 +865,20 @@ typedef struct {
     /// changed at any time using CdiCoreStatsReconfigure(). If this value is NULL, then CloudWatch will not be used.
     const CdiCloudWatchConfigData* cloudwatch_config_ptr;
 } CdiCoreConfigData;
+
+/**
+ * @brief SDK read-only settings used internally by SDK.
+ */
+typedef struct {
+    /// @brief How long a Tx endpoint retries in milliseconds to send an out-of-band command to Rx before disconnecting
+    /// from the Rx endpoint. If disconnected, the Tx endpoint will continuously attempt to re-establish the
+    /// connection.
+    uint64_t tx_retry_timeout_ms;
+
+    /// @brief How long a Rx endpoint waits in milliseconds for an out-of-band ping command from Tx before removing the
+    /// Rx endpoint. if removed, all resources associated with the endpoint are freed. See RX_PING_MONITOR_TIMEOUT_MSEC.
+    uint64_t rx_wait_timeout_ms;
+} CdiCoreReadOnlySettings;
 
 //*********************************************************************************************************************
 //******************************************* START OF PUBLIC FUNCTIONS ***********************************************
@@ -1012,5 +1037,12 @@ CDI_INTERFACE uint64_t CdiCoreGetTaiTimeMicroseconds();
  * @return const char* A character array which describes the requested code.
  */
 CDI_INTERFACE const char* CdiCoreStatusToString(CdiReturnStatus status);
+
+/**
+ * Returns the core configuration read-only settings.
+ *
+ * @return Pointer to const structure that contains the settings.
+ */
+CDI_INTERFACE const CdiCoreReadOnlySettings* CdiCoreGetSettings();
 
 #endif // CDI_CORE_API_H__

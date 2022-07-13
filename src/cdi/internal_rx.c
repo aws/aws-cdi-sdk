@@ -709,6 +709,7 @@ CdiReturnStatus RxCreateInternal(CdiConnectionProtocolType protocol_type, CdiRxC
             .thread_core_num = config_data_ptr->thread_core_num,
 
             .direction = kEndpointDirectionReceive,
+            .bind_ip_addr_str = con_state_ptr->rx_state.config_data.bind_ip_addr_str,
             .rx_state.reserve_packet_buffers = reserve_packet_buffers,
 
             // This endpoint is used for normal data transmission (not used for control). This means that the Endpoint

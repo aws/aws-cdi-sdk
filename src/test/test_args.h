@@ -83,6 +83,7 @@ typedef enum {
     kTestOptionLocalIP,
     kTestOptionDestPort,
     kTestOptionRemoteIP,
+    kTestOptionBindIP,
     kTestOptionShareThread,
     kTestOptionCore,
     kTestOptionPayloadSize,
@@ -187,6 +188,8 @@ typedef struct {
     int dest_port;
     /// The remote network adapter IP address.
     const char* remote_adapter_ip_str;
+    /// The adapter IP address to bind to.
+    const char* bind_ip_addr_str;
     /// The number of transactions in the test.  One transaction can transfer multiple stream payloads.
     int num_transactions;
     /// The numerator for the number of payloads per second to send during the test.

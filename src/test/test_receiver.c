@@ -1082,6 +1082,7 @@ CDI_THREAD TestRxCreateThread(void* arg_ptr)
 
     // Set up receiver parameters. and create the RX connection.
     connection_info_ptr->config_data.rx.dest_port = test_settings_ptr->dest_port;
+    connection_info_ptr->config_data.rx.bind_ip_addr_str = test_settings_ptr->bind_ip_addr_str;
     connection_info_ptr->config_data.rx.shared_thread_id = test_settings_ptr->shared_thread_id;
     connection_info_ptr->config_data.rx.thread_core_num = test_settings_ptr->thread_core_num;
     connection_info_ptr->config_data.rx.rx_buffer_type = test_settings_ptr->buffer_type;
@@ -1106,6 +1107,7 @@ CDI_THREAD TestRxCreateThread(void* arg_ptr)
     connection_info_ptr->config_data.rx.stats_cb_ptr = TestStatisticsCallback;
     connection_info_ptr->config_data.rx.stats_user_cb_param = connection_info_ptr;
 
+    // Create a FIFO instance for the callback routine to pass SGL pointers to the checking thread.
     // Create a FIFO instance for the callback routine to pass SGL pointers to the checking thread.
     if (!got_error) {
         got_error = !CdiFifoCreate("TestRxPayloadState FIFO", CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION*10,

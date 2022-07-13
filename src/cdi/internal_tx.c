@@ -561,6 +561,7 @@ static CdiReturnStatus TxCreateConnection(CdiConnectionProtocolType protocol_typ
             .thread_core_num = config_data_ptr->thread_core_num,
             .direction = kEndpointDirectionSend,
             .port_number = con_state_ptr->tx_state.config_data.dest_port,
+            .bind_ip_addr_str = con_state_ptr->tx_state.config_data.bind_ip_addr_str,
 
             // This endpoint is used for normal data transmission (not used for control). This means that the Endpoint
             // Manager is used for managing threads related to the connection.
@@ -606,6 +607,16 @@ static void PayloadTransferComplete(CdiEndpointState* endpoint_ptr, TxPayloadSta
     if (!CdiQueuePush(con_state_ptr->app_payload_message_queue_handle, &payload_state_ptr->app_payload_cb_data)) {
         CDI_LOG_THREAD(kLogError, "Queue[%s] full, push failed.",
                         CdiQueueGetName(con_state_ptr->app_payload_message_queue_handle));
+
+        // Since queue was full, need to free the resources associated with the payload.
+        CdiSglEntry* entry_ptr = payload_state_ptr->app_payload_cb_data.tx_source_sgl.sgl_head_ptr;
+        while (entry_ptr) {
+            CdiSglEntry* next_ptr = entry_ptr->next_ptr; // Save next entry, since Put() will free its memory.
+            CdiPoolPut(con_state_ptr->tx_state.payload_sgl_entry_pool_handle, entry_ptr);
+            entry_ptr = next_ptr;
+        }
+        // If error message exists, return it to pool.
+        PayloadErrorFreeBuffer(con_state_ptr->error_message_pool, &payload_state_ptr->app_payload_cb_data);
     }
 
     // Done with payload state data, so free it.

@@ -297,7 +297,7 @@ typedef struct AdapterConnectionState* AdapterConnectionHandle;
 struct AdapterVirtualFunctionPtrTable {
     /// @brief Create a new connection.
     /// @see CdiAdapterCreateConnection
-    CdiReturnStatus (*CreateConnection)(AdapterConnectionHandle handle, int port_number);
+    CdiReturnStatus (*CreateConnection)(AdapterConnectionHandle handle, int port_number, const char* bind_ip_addr_str);
 
     /// @brief Destroy an open connection.
     /// @see CdiAdapterDestroyConnection
@@ -305,7 +305,8 @@ struct AdapterVirtualFunctionPtrTable {
 
     /// @brief Opens a new endpoint. For send type (transmit) endpoints, a pointer to the remote_address_str must
     /// be provided, otherwise the value must be NULL. etc.). @see CdiAdapterOpenEndpoint
-    CdiReturnStatus (*Open)(AdapterEndpointHandle handle, const char* remote_address_str, int port_number);
+    CdiReturnStatus (*Open)(AdapterEndpointHandle handle, const char* remote_address_str, int port_number,
+                            const char* bind_ip_addr_str);
 
     /// @brief Closes an open endpoint.
     /// @see CdiAdapterCloseEndpoint
@@ -335,7 +336,7 @@ struct AdapterVirtualFunctionPtrTable {
 
     /// @brief Reset an open endpoint.
     /// @see CdiAdapterResetEndpoint
-    CdiReturnStatus (*Reset)(AdapterEndpointHandle handle, bool reopen);
+    CdiReturnStatus (*Reset)(AdapterEndpointHandle handle);
 
     /// @brief Start an open endpoint.
     /// @see CdiAdapterStartEndpoint
@@ -429,6 +430,9 @@ typedef struct {
     /// the port number on the local host to listen to.
     int port_number;
 
+    /// @brief Address IP to bind to.
+    const char* bind_ip_addr_str;
+
     /// @brief Identifier of poll thread to associate with this connection. Specify -1 to create a unique poll thread
     /// only used by this connection.
     int shared_thread_id;
@@ -465,6 +469,9 @@ typedef struct {
     /// @brief For send type endpoints, the port number on the remote host to connect to. For receive type endpoints,
     /// the port number on the local host to listen to.
     int port_number;
+
+    /// @brief A string representing the IP address to bind to in dotted decimal format.
+    const char* bind_address_str;
 } CdiAdapterEndpointConfigData;
 
 //*********************************************************************************************************************
@@ -555,11 +562,10 @@ CdiReturnStatus CdiAdapterStartEndpoint(AdapterEndpointHandle handle);
  * Reset an endpoint and free its resources.
  *
  * @param handle The handle of the endpoint to reset.
- * @param reopen If true the endpoint is re-opened after resetting it, otherwise just reset it.
  *
  * @return CdiReturnStatus kCdiStatusOk upon success otherwise an indication of the failure.
  */
-CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle, bool reopen);
+CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle);
 
 /**
  * Close an endpoint and free its resources.

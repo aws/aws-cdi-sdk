@@ -321,6 +321,11 @@ int main(int argc, const char **argv)
         }
     }
 
+    const CdiCoreReadOnlySettings* settings_ptr = CdiCoreGetSettings();
+    TestConsoleLog(kLogInfo, "Read-only Settings:");
+    TestConsoleLog(kLogInfo, "   tx_retry_timeout_ms : %llu", settings_ptr->tx_retry_timeout_ms);
+    TestConsoleLog(kLogInfo, "   rx_wait_timeout_ms  : %llu", settings_ptr->rx_wait_timeout_ms);
+
     // Loop through the test. If the --num_loops is not used in the command-line, it will default to run the test once.
     for (int loop_num = 0;
          kProgramExecutionStatusContinue == status && (global_test_settings.num_loops > loop_num ||

@@ -364,6 +364,8 @@ static OptDef my_options[] =
         "Set a connection-specific destination port."},
     { "rip",  "remote_ip",    1, "<ip address>",     NULL,
         "Only for Tx connections, the IP address of the remote network adapter."},
+    { "bip",  "bind_ip",    1, "<ip address>",     NULL,
+        "The IP address of the network adapter to bind to. If not used, the default adapter is used."},
     { "tc", "thread_conn",    1, "<id>",       NULL,
         "Share a single poll thread with all connections that use this ID. ID must be > 0."},
     { "core", "core",         1, "<core num>",       NULL,
@@ -1465,6 +1467,8 @@ void PrintTestSettings(const TestSettings* const test_settings_ptr, const int nu
             TestConsoleLog(kLogInfo, "    Dest Port    : %d", test_settings_ptr[i].dest_port);
             TestConsoleLog(kLogInfo, "    Remote IP    : %s",
                         CdiGetEmptyStringIfNull(test_settings_ptr[i].remote_adapter_ip_str));
+            TestConsoleLog(kLogInfo, "    Bind IP      : %s",
+                        CdiGetEmptyStringIfNull(test_settings_ptr[i].bind_ip_addr_str));
         }
         if (test_settings_ptr[i].shared_thread_id > 0) {
             TestConsoleLog(kLogInfo, "    Shared Thread ID : %d", test_settings_ptr[i].shared_thread_id);
@@ -1690,6 +1694,24 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                 }
                 if (!arg_error && !IsIPAddrValid(opt.args_array[0])) {
                     TestConsoleLog(kLogError, "The --remote_ip (-rip) argument [%s] is invalid.", opt.args_array[0]);
+                    arg_error = true;
+                }
+                break;
+            case kTestOptionBindIP:
+                if (!is_parsing_stream_option) {
+                    test_settings_ptr[connection_index].bind_ip_addr_str = opt.args_array[0];
+                    if (test_settings_ptr[connection_index].multiple_endpoints) {
+                        TestConsoleLog(kLogError,
+                                       "The --bind_ip (-bip) argument cannot be used with --new_conns (-XS) option.");
+                        arg_error = true;
+                    }
+                } else {
+                    TestConsoleLog(kLogError,
+                                    "The --bind_ip (-bip) argument cannot be used with --new_conns (-XS) option.");
+                        arg_error = true;
+                }
+                if (!arg_error && !IsIPAddrValid(opt.args_array[0])) {
+                    TestConsoleLog(kLogError, "The --bind_ip (-bip) argument [%s] is invalid.", opt.args_array[0]);
                     arg_error = true;
                 }
                 break;

@@ -894,11 +894,13 @@ CDI_INTERFACE int CdiOsGetLocalTimeString(char* time_str, int max_string_len);
  *                    to listen for incoming datagrams. For the client side of a bidirectional socket, use zero for this
  *                    value so that a randomly selected port number is used. Call @see CdiOsSocketGetPort to determine
  *                    the port number that was assigned.
+ * @param bind_address_str Optional bind address (dotted IPv4 address). If NULL, default interface is used.
  * @param new_socket_ptr A pointer to the location which will get the new socket handle written to it.
  *
  * @return true if the socket was successfully opened and is ready for communications, otherwise false.
  */
-CDI_INTERFACE bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* new_socket_ptr);
+CDI_INTERFACE bool CdiOsSocketOpen(const char* host_address_str, int port_number, const char* bind_address_str,
+                                   CdiSocket* new_socket_ptr);
 
 /**
  * Gets the number of the port to which the specified socket is bound. This is useful for receive sockets opened with

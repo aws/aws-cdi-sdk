@@ -96,6 +96,10 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
     const size_t msg_prefix_size = aep_ptr->adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
 
     struct fi_cq_data_entry comp_array[MAX_RX_BULK_COMPLETION_QUEUE_MESSAGES];
+    if (!efa_endpoint_ptr->fabric_initialized) {
+        return false; // Libfabric has not been initialized yet, so don't do anything here.
+    }
+
     int fi_ret = fi_cq_read(efa_endpoint_ptr->completion_queue_ptr, &comp_array,
                             MAX_RX_BULK_COMPLETION_QUEUE_MESSAGES);
     // If the returned value is greater than zero, then the value is the number of completion queue messages that

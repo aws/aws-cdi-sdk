@@ -1267,7 +1267,8 @@ int CdiOsGetLocalTimeString(char* time_str, int max_string_len)
 }
 
 // -- Sockets --
-bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* new_socket_ptr)
+bool CdiOsSocketOpen(const char* host_address_str, int port_number, const char* bind_address_str,
+                     CdiSocket* new_socket_ptr)
 {
     bool ret = false;
     int observed_errno = 0;
@@ -1284,14 +1285,30 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
             info_ptr->addr.sin_port = htons(port_number);
 
             if (host_address_str == NULL) {
-                // Bind to the specified port number on any interface.
-                info_ptr->addr.sin_addr.s_addr = INADDR_ANY;
-                const int rv = bind(info_ptr->fd, (struct sockaddr*)&info_ptr->addr, sizeof info_ptr->addr);
-                observed_errno = errno;
-                if (rv == 0) {
-                    ret = true;
+                bool ok_to_bind = true;
+                if (NULL != bind_address_str) {
+                    info_ptr->addr.sin_addr.s_addr = inet_addr(bind_address_str);
+                    if (info_ptr->addr.sin_addr.s_addr == (in_addr_t)-1) {
+                        // inet_addr does not set errno,
+                        ERROR_MESSAGE("inet_addr() failed with bind address[%s]", bind_address_str);
+                        ok_to_bind = false;
+                    }
                 } else {
-                    ERROR_MESSAGE("bind() failed[%s]", strerror(errno));
+                    // Bind to the specified port number on any interface.
+                    info_ptr->addr.sin_addr.s_addr = INADDR_ANY;
+                }
+                if (ok_to_bind) {
+                    const int rv = bind(info_ptr->fd, (struct sockaddr*)&info_ptr->addr, sizeof info_ptr->addr);
+                    observed_errno = errno;
+                    if (rv == 0) {
+                        ret = true;
+                    } else {
+                        if (bind_address_str) {
+                            ERROR_MESSAGE("bind() failed[%s] using bind address[%s]", strerror(errno), bind_address_str);
+                        } else {
+                            ERROR_MESSAGE("bind() failed[%s]", strerror(errno));
+                        }
+                    }
                 }
             } else {
                 // Convert the IP address from a string to a binary representation.
@@ -1300,7 +1317,7 @@ bool CdiOsSocketOpen(const char* host_address_str, int port_number, CdiSocket* n
                     ret = true;
                 } else {
                     // inet_addr does not set errno,
-                    ERROR_MESSAGE("inet_addr() failed");
+                    ERROR_MESSAGE("inet_addr() failed with host address[%s]", host_address_str);
                 }
             }
             if (ret) {
