@@ -226,7 +226,8 @@ int main(int argc, const char** argv)
     TestConnectionInfo con_info = {
         .test_settings.protocol_type = DEFAULT_PROTOCOL_TYPE,
         .test_settings.num_transactions = DEFAULT_NUM_TRANSACTIONS,
-        .test_settings.payload_size = DEFAULT_PAYLOAD_SIZE
+        .test_settings.payload_size = DEFAULT_PAYLOAD_SIZE,
+        .test_settings.use_efa = DEFAULT_USE_EFA,
     };
 
     // Parse command line.

@@ -40,6 +40,9 @@ typedef struct CommandLineState* CommandLineHandle;
 /// @brief Default payload size.
 #define DEFAULT_PAYLOAD_SIZE                (5184000)
 
+/// @brief Default EFA usage
+#define DEFAULT_USE_EFA                     1
+
 /// @brief Number of elements in a static array.
 #define ARRAY_ELEMENT_COUNT(thisarray) ((int)(sizeof(thisarray)/sizeof(thisarray[0])))
 

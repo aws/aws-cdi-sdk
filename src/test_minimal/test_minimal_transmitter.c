@@ -377,7 +377,8 @@ int main(int argc, const char** argv)
         .test_settings.payload_size = DEFAULT_PAYLOAD_SIZE,
         .test_settings.rate_numerator = DEFAULT_RATE_NUMERATOR,
         .test_settings.rate_denominator = DEFAULT_RATE_DENOMINATOR,
-        .test_settings.tx_timeout = DEFAULT_TX_TIMEOUT
+        .test_settings.tx_timeout = DEFAULT_TX_TIMEOUT,
+        .test_settings.use_efa = DEFAULT_USE_EFA,
     };
 
     // Parse command line.
