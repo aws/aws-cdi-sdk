@@ -8,10 +8,10 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 - [Linux Installation Guide](#linux-installation-guide)
 - [Create an EFA enabled instance](#create-an-efa-enabled-instance)
 - [Install EFA driver](#install-efa-driver)
+- [Install Package Dependencies](#install-package-dependencies)
 - [Install AWS CDI SDK](#install-aws-cdi-sdk)
 - [Install AWS CloudWatch and AWS CLI](#install-aws-cloudwatch-and-aws-cli)
   - [Install AWS CLI](#install-aws-cli)
-  - [Install Package Dependencies](#install-package-dependencies)
   - [Download AWS SDK](#download-aws-sdk)
 - [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications)
   - [(Optional) Disable the display of performance metrics to your Amazon CloudWatch account](#optional-disable-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
@@ -46,6 +46,24 @@ For Linux installations, follow step 3 in [launch an Elastic Fabric Adapter (EFA
 1. During **Confirm that the EFA software components were successfully installed**, note that the ```fi_info``` command does not work when installing the minimum version of EFA software. You will perform this check later after installing the AWS CDI SDK.
 
 ---
+
+# Install Package Dependencies
+Installation of dependent packages is required before building the AWS CDI SDK:
+
+- CentOS 7 and Amazon Linux 2:
+
+    ```bash
+    sudo yum update -y
+    sudo yum -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel unzip
+    ```
+
+- Ubuntu:
+
+    ```bash
+    sudo apt update
+    sudo apt-get upgrade -y
+    sudo apt-get -y install build-essential libncurses-dev autoconf automake libtool cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev unzip
+    ```
 
 # Install AWS CDI SDK
 
@@ -149,21 +167,6 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
 
     ```bash
     ls ~/.aws
-    ```
-
-## Install Package Dependencies
-Installation of dependent packages is required before building the AWS CDI SDK:
-
-- CentOS 7 and Amazon Linux 2:
-
-    ```bash
-    sudo yum -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel
-    ```
-
-- Ubuntu:
-
-    ```bash
-    sudo apt-get install –y build-essential libncurses-dev autoconf automake libtool cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev
     ```
 
 ## Download AWS SDK
