@@ -123,7 +123,7 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
     If AWS CLI is installed, you will see a response that looks something like this:
 
     ```bash
-    > aws-cli/1.16.300 Python/2.7.18 Linux/4.14.173-137.228.amzn2.x86_64 botocore/1.13.36
+    aws-cli/2.8.9 Python/3.9.11 Linux/5.15.0-1019-aws exe/x86_64.ubuntu.22 prompt/off
     ```
 
 1. If AWS CLI is not installed, perform the steps in [install AWS CLI (version 2)](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html).
@@ -172,8 +172,6 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
 ## Download AWS SDK
 AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is only necessary to download it.
 
-**Note**: AWS CDI SDK has been tested with version 1.8.x of AWS SDK C++.
-
 **Note**: The AWS SDK for C++ is essential for metrics gathering functions of AWS CDI SDK to operate properly.  Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
 
 1. Verify that the necessary [requirements are met and libraries installed for AWS SDK for C++](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup-linux.html).
@@ -183,7 +181,7 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
 
        ```bash
        cd <install_dir>
-       git clone -b 1.8.x https://github.com/aws/aws-sdk-cpp.git
+       git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp
        ```
 
   The **<install_dir>** should now contain the folder hierarchy as shown below:
@@ -211,8 +209,16 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
 
     **Note**: A trailing ```/``` may be required on the path given in <path to AWS SDK C++> above. For example:
 
-    ```
+    ```bash
+    cd aws-cdi-sdk/
     make DEBUG=y AWS_SDK=../aws-sdk-cpp/
+    ```
+    
+    **Note**: Pipe the StdOut/Err to a log file for future review/debug:
+    
+    ```bash
+    cd aws-cdi-sdk/
+    make DEBUG=y AWS_SDK=../aws-sdk-cpp/ 2>&1 | tee build.log
     ```
 
    **Note**: After a successful compile, the locations for the results are at:
@@ -253,6 +259,23 @@ Run the following commands to verify that the EFA interface is operational, repl
 
 ```bash
 PATH=path/to/dir/libfabric/build/debug/util:$PATH
+fi_info -p efa -t FI_EP_RDM
+```
+
+This command should return information about the Libfabric EFA interface. The following example shows the command output:
+
+```bash
+provider: efa
+    fabric: EFA-fe80::4dd:7eff:fe99:4620
+    domain: rdmap0s6-rdm
+    version: 2.0
+    type: FI_EP_RDM
+    protocol: FI_PROTO_EFA
+```
+
+If successful, proceed with the next command:
+
+```bash
 cd $HOME/aws-efa-installer
 ./efa_test.sh
 ```
@@ -271,7 +294,7 @@ bytes   #sent   #ack     total       time     MB/sec    usec/xfer   Mxfers/sec
 1m      10      =10      20m         0.01s   2359.00     444.50       0.00
 ```
 
-If you get an error, please check this issue: https://github.com/aws/aws-cdi-sdk/issues/48
+If you get an error, please review these [Troubleshooting](README.md#troubleshooting) steps and check this issue: https://github.com/aws/aws-cdi-sdk/issues/48
 
 ---
 
@@ -295,6 +318,9 @@ To create a new instance, create an Amazon Machine Image (AMI) of the existing i
   1. In the EC2 console Under **Images**, select **AMIs**. Locate the AMI and wait until the **Status** shows **available**. It will may several minutes for the AMI to be created and become available for use. After it becomes available, select the AMI and use the **Action** menu to select **Launch**.
   1. Select the same instance type as the existing instance and select **Next: Configure Instance Details**.
   1. To **Configure Instance Details**, **Add Storage**, **Add Tags** and **Configure Security Group** follow the steps at [Create an EFA-enabled instance](#create-an-efa-enabled-instance).
+  1. If access to this instance from outside the Amazon network is needed, enable **Auto-assign public IP.**
+  1. Make sure to enable EFA by checking the **Elastic Fabric Adapter** checkbox here. **Note**: To enable the checkbox, you must select the subnet even if using the default subnet value.
+  1. Amazon recommends putting EFA-enabled instances using AWS CDI SDK in a placement group, so select or create one under **Placement Group – Add instance to placement group.**  The **Placement Group Strategy** should be set to **cluster**.
   1. The new instance will contain the host name stored in the AMI and not the private IP name used by the new instance. Edit **/etc/hostname**. The private IP name can be obtained from the AWS Console or use **ifconfig** on the instance. For example, if **ifconfig** shows **1.2.3.4** then the name should look something like (region may be different):
 
      ```
