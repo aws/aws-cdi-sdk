@@ -937,7 +937,7 @@ bool CdiOsRead(CdiFileID file_handle, void* buffer_ptr, uint32_t byte_count, uin
     if (file_handle && buffer_ptr) {
         status = ReadFile(file_handle, buffer_ptr, byte_count, &bytes_read, NULL);
 
-        if (!status || (bytes_read != byte_count)) {
+        if (!status || ((bytes_read > 0) && (bytes_read != byte_count))) {
             ERROR_MESSAGE("ReadFile failed. Byte Count[%d]. Bytes Read[%d]", byte_count, bytes_read);
             return_val = false;
         }

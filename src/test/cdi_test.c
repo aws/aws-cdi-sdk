@@ -209,7 +209,6 @@ static bool SetupSignalHandlers(void) {
 
     CdiOsSignalHandlerSet(SIGSEGV, SignalHandler); // Handle segfaults
     CdiOsSignalHandlerSet(SIGABRT, SignalHandler); // Handle asserts
-    CdiOsSignalHandlerSet(SIGINT, SignalHandler);  // Handle Ctrl+C (doesn't do anything in windows).
     CdiOsSignalHandlerSet(SIGILL, SignalHandler);  // Handle illegal instruction
     CdiOsSignalHandlerSet(SIGFPE, SignalHandler);  // Handle floating point error
 #ifdef _WIN32
@@ -218,6 +217,8 @@ static bool SetupSignalHandlers(void) {
     if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)Win32CtrlHandler, true)) {
         assert(0);
     }
+#else
+    CdiOsSignalHandlerSet(SIGINT, SignalHandler);  // Handle Ctrl+C
 #endif
     return true;
 }

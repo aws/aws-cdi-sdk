@@ -949,7 +949,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
     }
 
     // Check the log file name.
-    if (GetGlobalTestSettings()->base_log_filename_str) {
+    if ('\0' == GetGlobalTestSettings()->base_log_filename_str[0]) {
         TestConsoleLog(kLogInfo, "Connection[%s]: No --log argument given, logging to console.", connection_name_str);
     }
 
