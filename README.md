@@ -253,7 +253,7 @@ Community reported issues may be found [here](https://github.com/aws/aws-cdi-sdk
 ## Known issues
 
 * The maximum data rate supported is approximately 12 Gbps per stream and has been tested with an aggregate of up to 50 Gbps across all streams, in either direction. This assumes the largest size instance that supports EFA, for example, c5n.18xlarge.
-* Windows compilation of the ```cdi_test``` application under the Debug configuration does not support 4K bandwidth.
+* Windows compilation of the ```cdi_test``` application under the *Debug* configuration does not support 4K bandwidth.
 
 ## Known limitations
 
@@ -262,7 +262,7 @@ Community reported issues may be found [here](https://github.com/aws/aws-cdi-sdk
 
 ## Performance
 
-The best performance for transferring data between instances is *within a placement group*. You can use placement groups to influence the placement of a group of interdependent instances to meet the needs of your workload.
+The best performance for transferring data between instances is *within a **cluster** placement group*. You can use placement groups to influence the placement of a group of interdependent instances to meet the needs of your workload.
 
 ### AWS CDI SDK CPU usage
 
@@ -303,10 +303,54 @@ If there is a problem with the transmitter and receiver communication, it can ma
 [RxCreateInternal:343] Successfully created Rx connection. Name[Rx_0]
 ```
 
+* For ```fi_pingpong``` via ```efa_test.sh``` test, if returned exit code is non-zero, such as ```test returned 5``` or ```prov_error 13```:
+
+```bash
+$ ./efa_test.sh
+Starting server...
+Starting client...
+[error] .../libfabric/util/pingpong.c:1063: cq_readerr: unknown error
+Error: fi_pingpong test returned 5.
+
+# increase FI log verbosity by setting ENV VAR and executing efa_test.sh again:
+export FI_LOG_LEVEL=warn
+
+$ ./efa_test.sh
+Starting server...
+Starting client...
+libfabric:1428:core:core:fi_getinfo_():962<warn> fi_getinfo: provider ofi_rxm returned -61 (No data available)
+libfabric:1428:ofi_mrail:fabric:mrail_get_core_info():288<warn> OFI_MRAIL_ADDR_STRC env variable not set!
+libfabric:1428:core:core:fi_getinfo_():962<warn> fi_getinfo: provider ofi_mrail returned -61 (No data available)
+libfabric:1428:core:mr:ofi_uffd_init():346<warn> syscall/userfaultfd Operation not permitted
+libfabric:1428:efa:cq:rxr_cq_handle_cq_error():341<warn> fi_cq_readerr: err: Input/output error (5), prov_err: unknown error (13)
+libfabric:1428:efa:cq:rxr_cq_handle_tx_error():215<warn> rxr_cq_handle_tx_error: err: 5, prov_err: Unknown error -13 (13)
+[error] .../libfabric/util/pingpong.c:1063: cq_readerr: unknown error
+Error: fi_pingpong test returned 5.
+```
+
 If any of these issues occurs, check your firewall settings. There are three different locations where the packets could be filtered: EC2 Security Groups, VPC Network Access Control Lists (ACLs), or a firewall on the Linux or Windows instance itself.
 
+**Critical**
+> Ensure the EC2 Security Group allows **all traffic** for both inbound and outbound traffic to and from the Security Group itself.
+
 For socket-based communication and for the control ports for EFA-based communication, make sure that UDP traffic is allowed to access that port from the instance you are sending from. The easiest way to ensure this is to use the same security group on all EC2 instances that you have communicating with each other, and then make sure to use private IPv4 addresses instead of public ones. If you use public IP addresses, you may need to add explicit entries for any IP addresses that you want to allow traffic from. Note that for the control ports for EFA, there is bidirectional communication between the instances, so make sure that the transmitter and receiver instances have ports open for each other. The security group configuration can be found in the EC2 section of the AWS console.
+
 Also, ensure that the traffic is not being blocked by network ACLs. The network ACL configuration can be found in the VPC section of the AWS console.
+
+## CDI enabled application only works when run as root
+
+The ```efa-config``` package which is part of the ```efa-installer```, automates the deployment of required ulimits to ```/etc/security/limits.d/01_efa.comf```. However these system-wide ulimits are ignored if the CDI-SDK integrated application is invoked within a GUI (instead of SSH/daemon) on Linux, as the DM (DisplayManager) is owned by ```systemd``` which has its own ulimits at system and user level. The solution is to apply the identical ulimits at the ```systemd``` **system** level only. The ```efa-config``` package may automate this fix in the future. In the example below, we apply the required ulimits at the ```systemd``` **system** level for all users.
+
+```bash
+sudo mkdir /etc/systemd/system.conf.d
+sudo vi /etc/systemd/system.conf.d/limits.conf
+# add the following lines to limits.conf file
+[Manager]
+DefaultLimitNOFILE=8192
+DefaultLimitMEMLOCK=infinity
+# reboot system to take effect
+sudo reboot
+```
 
 ## Communication failure and firewall settings
 

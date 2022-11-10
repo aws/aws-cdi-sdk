@@ -5,7 +5,7 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
-CDI (Cloud Digital Interface) SDK Version 2.4.1 - xx/xx/xx
+CDI (Cloud Digital Interface) SDK Version 2.4.1 - 11/11/22
 ---------------------------------------------------------------------------
 
 What's New
@@ -21,6 +21,7 @@ Bug Fixes
   Tx/Rx connection remains valid.
 * Fixed bug in CdiQueuePushWaitMultiple(). See changes in queue.c and cdi_queue_api.h. Details in GitHub Issue #76 at
   https://github.com/aws/aws-cdi-sdk/issues/76
+* Fixed problems with the test application that were identified in GitHub Issue #82.
 
 ---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 2.4.0 - 04/22/22
