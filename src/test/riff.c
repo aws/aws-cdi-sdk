@@ -132,7 +132,7 @@ static void StringDumpChunk(int indentation, RiffChunkHeader chunk_header, const
 
     uint32_t j = 0;
     while (i < max_line_length && j < chunk_header.size) {
-        print_buffer_ptr[i++] = isprint(data_ptr[j]) ? data_ptr[j] : '.';
+        print_buffer_ptr[i++] = isprint((unsigned char)data_ptr[j]) ? data_ptr[j] : '.';
         j++;
     }
 

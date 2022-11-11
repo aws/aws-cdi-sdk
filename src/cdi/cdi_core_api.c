@@ -227,3 +227,13 @@ const char* CdiCoreStatusToString(CdiReturnStatus status)
 
     return CdiUtilityEnumValueToString(key_array, status);
 }
+
+const CdiCoreReadOnlySettings* CdiCoreGetSettings()
+{
+    static const CdiCoreReadOnlySettings settings = {
+        .tx_retry_timeout_ms = TX_COMMAND_MAX_RETRIES * TX_COMMAND_ACK_TIMEOUT_MSEC,
+        .rx_wait_timeout_ms = RX_PING_MONITOR_TIMEOUT_MSEC,
+    };
+
+    return &settings;
+}

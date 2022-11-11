@@ -82,6 +82,7 @@ typedef struct {
     struct fid_ep* endpoint_ptr;              ///< Pointer to fabric endpoint (transport level communication portal)
     struct fid_av* address_vector_ptr;        ///< Pointer to address vector map (high-level to fabric address map)
     fi_addr_t remote_fi_addr;                 ///< Remote memory address (we don't use so it is always FI_ADDR_UNSPEC)
+    volatile bool fabric_initialized;         ///< True of libfabric has been initialized
 
     uint8_t local_ipv6_gid_array[MAX_IPV6_GID_LENGTH]; ///< Pointer to local device GID for this endpoint.
     uint8_t remote_ipv6_gid_array[MAX_IPV6_GID_LENGTH]; ///< Pointer to remote device GID related to this endpoint.

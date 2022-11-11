@@ -167,7 +167,6 @@ bool ProbeControlEfaConnectionStart(ProbeEndpointState* probe_ptr)
         // Reset EFA Rx packet/ping received counters.
         probe_ptr->rx_probe_state.send_reset_retry_count = 0;
         probe_ptr->rx_probe_state.packets_received_count = 0;
-        probe_ptr->rx_probe_state.pings_received_count = 0;
     }
     endpoint_ptr->msg_from_endpoint_param_ptr = probe_ptr;
 
@@ -442,19 +441,18 @@ CDI_THREAD ProbeControlThread(void* ptr)
             // Still have some time remaining before timeout period has elapsed. Adjust how long to wait and then wait
             // again.
             wait_timeout_ms -= elapsed_time_ms;
-            continue;
+        } else {
+            // Got timeout. Perform operation based on our current state.
+            do {
+                assert(kEndpointDirectionBidirectional != adapter_con_ptr->direction);
+                if (kEndpointDirectionSend == adapter_con_ptr->direction) {
+                    wait_timeout_ms = ProbeTxControlProcessProbeState(probe_ptr); // Transmitter
+                } else {
+                    wait_timeout_ms = ProbeRxControlProcessProbeState(probe_ptr); // Receiver
+                }
+                // Stay in the loop, in case we need to process multiple states.
+            } while (0 == wait_timeout_ms);
         }
-
-        // Got timeout. Perform operation based on our current state.
-        do {
-            assert(kEndpointDirectionBidirectional != adapter_con_ptr->direction);
-            if (kEndpointDirectionSend == adapter_con_ptr->direction) {
-                wait_timeout_ms = ProbeTxControlProcessProbeState(probe_ptr); // Transmitter
-            } else {
-                wait_timeout_ms = ProbeRxControlProcessProbeState(probe_ptr); // Receiver
-            }
-            // Stay in the loop, in case we need to process multiple states.
-        } while (0 == wait_timeout_ms);
 
         // Processed a command, so reset the command start time to the current time.
         start_time_us = CdiOsGetMicroseconds();

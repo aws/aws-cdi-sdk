@@ -109,7 +109,6 @@ typedef struct {
     /// that have been sent without receiving any commands back.
     int send_reset_retry_count;
     int packets_received_count; ///< Number of probe packets that have been received.
-    int pings_received_count;   ///< Number of pings that have been received.
     uint32_t total_packet_count_snapshot; ///< Snapshot of total packet received count.
 } RxEndpointProbeState;
 

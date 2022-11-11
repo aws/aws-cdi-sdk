@@ -911,6 +911,7 @@ CDI_THREAD TestTxCreateThread(void* arg_ptr)
         // Set up transmitter parameters and create the Tx connection.
         connection_info_ptr->config_data.tx.dest_ip_addr_str = test_settings_ptr->remote_adapter_ip_str;
         connection_info_ptr->config_data.tx.dest_port = test_settings_ptr->dest_port;
+        connection_info_ptr->config_data.tx.bind_ip_addr_str = test_settings_ptr->bind_ip_addr_str;
         connection_info_ptr->config_data.tx.shared_thread_id = test_settings_ptr->shared_thread_id;
         connection_info_ptr->config_data.tx.thread_core_num = test_settings_ptr->thread_core_num;
         connection_info_ptr->config_data.tx.connection_log_method_data_ptr = &log_method_data;
@@ -944,10 +945,11 @@ CDI_THREAD TestTxCreateThread(void* arg_ptr)
     }
 
     if (!got_error) {
-        CDI_LOG_THREAD(kLogInfo, "Setting up Tx connection. Protocol[%s] Destination IP[%s] Destination Port[%d] Name[%s]",
+        CDI_LOG_THREAD(kLogInfo, "Setting up Tx connection. Protocol[%s] Destination IP[%s] Destination Port[%d] Bind IP[%s] Name[%s]",
                        CdiUtilityKeyEnumToString(kKeyConnectionProtocolType, test_settings_ptr->connection_protocol),
                        connection_info_ptr->config_data.tx.dest_ip_addr_str,
                        connection_info_ptr->config_data.tx.dest_port,
+                       CdiGetEmptyStringIfNull(connection_info_ptr->config_data.tx.bind_ip_addr_str),
                        CdiGetEmptyStringIfNull(connection_info_ptr->config_data.tx.connection_name_str));
 
         // Based on the user-specified protocol type, we either plan to transmit RAW payloads or AVM payloads.

@@ -163,7 +163,7 @@ CDI_INTERFACE bool CdiQueuePushWait(CdiQueueHandle handle, int timeout_ms, CdiSi
  *                             don't care.
  * @param item_ptr Address where to copy the item from.
  *
- * @return true if successful, otherwise false (queue is empty and timeout expired or signal got set).
+ * @return true if successful, otherwise false (queue is full and timeout expired or signal got set).
  */
 CDI_INTERFACE bool CdiQueuePushWaitMultiple(CdiQueueHandle handle, int timeout_ms,
                                             CdiSignalType* abort_wait_signal_array, int num_signals,

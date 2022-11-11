@@ -389,13 +389,6 @@ CdiReturnStatus StatsCreate(CdiConnectionState* con_state_ptr, CdiCoreStatsCallb
         rs = CloudWatchConfigure(stats_state_ptr->metrics_gatherer_handle, &stats_config);
     }
 
-#ifdef METRICS_GATHERING_SERVICE_ENABLED
-    // Create the statistics update thread that feeds the queue for the metrics gathering service.
-    if (kCdiStatusOk == rs) {
-        rs = CreateStatsThread(stats_state_ptr, SendToCdiMetricsService, kMetricsDestinationGatheringService);
-    }
-#endif  // METRICS_GATHERING_SERVICE_ENABLED
-
     // NOTE: The worker thread StatsThread() is created/destroyed dynamically by StatsConfigure(), depending if stats
     // is enabled or disabled.
     if (kCdiStatusOk != rs) {
@@ -448,9 +441,13 @@ CdiReturnStatus StatsConfigure(StatisticsHandle handle, const CdiStatsConfigData
     CdiReturnStatus rs = kCdiStatusOk;
     StatisticsState* stats_state_ptr = (StatisticsState*)handle;
 
-    // The StatsThread() is created/destroyed here dynamically as needed in order to minimize thread resources. Other
+    // The StatsThread()'s are created/destroyed here dynamically as needed in order to minimize thread resources. Other
     // than during system startup, this function will typically not be used very often.
     StatsThreadDestroy(&stats_state_ptr->destination_info[kMetricsDestinationCloudWatch]);
+
+#ifdef METRICS_GATHERING_SERVICE_ENABLED
+    StatsThreadDestroy(&stats_state_ptr->destination_info[kMetricsDestinationGatheringService]);
+#endif  // METRICS_GATHERING_SERVICE_ENABLED
 
     // Set stats period, converting seconds to milliseconds.
     stats_state_ptr->stats_period_ms = stats_config_ptr->stats_period_seconds * 1000;
@@ -465,6 +462,14 @@ CdiReturnStatus StatsConfigure(StatisticsHandle handle, const CdiStatsConfigData
     if (kCdiStatusOk == rs && stats_state_ptr->cloudwatch_handle) {
         rs = CloudWatchConfigure(stats_state_ptr->cloudwatch_handle, stats_config_ptr);
     }
+
+#ifdef METRICS_GATHERING_SERVICE_ENABLED
+    // If the user specified stats period is non-zero, create the statistics update thread that feeds the queue for the
+    // metrics gathering service.
+    if (kCdiStatusOk == rs && (0 != stats_state_ptr->stats_period_ms)) {
+        rs = CreateStatsThread(stats_state_ptr, SendToCdiMetricsService, kMetricsDestinationGatheringService);
+    }
+#endif  // METRICS_GATHERING_SERVICE_ENABLED
 
     return rs;
 }

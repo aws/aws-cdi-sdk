@@ -71,7 +71,7 @@ static bool SearchOptions(const char* opt_str, int type, const OptDef* opt_array
     {
         TestConsoleLog(kLogDebug, "Checking option [%s]", type == kOptLong ?
                  opt_array_ptr[i].long_name_str : opt_array_ptr[i].short_name_str);
-        TestConsoleLog(kLogDebug, "Comparing [%s] with [%s]", kOptLong ?
+        TestConsoleLog(kLogDebug, "Comparing [%s] with [%s]", type == kOptLong ?
                  opt_array_ptr[i].long_name_str : opt_array_ptr[i].short_name_str, opt_str);
 
         // If we are looking for a long option and we find it in the options array. It's possible for there to not be a

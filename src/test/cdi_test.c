@@ -209,7 +209,6 @@ static bool SetupSignalHandlers(void) {
 
     CdiOsSignalHandlerSet(SIGSEGV, SignalHandler); // Handle segfaults
     CdiOsSignalHandlerSet(SIGABRT, SignalHandler); // Handle asserts
-    CdiOsSignalHandlerSet(SIGINT, SignalHandler);  // Handle Ctrl+C (doesn't do anything in windows).
     CdiOsSignalHandlerSet(SIGILL, SignalHandler);  // Handle illegal instruction
     CdiOsSignalHandlerSet(SIGFPE, SignalHandler);  // Handle floating point error
 #ifdef _WIN32
@@ -218,6 +217,8 @@ static bool SetupSignalHandlers(void) {
     if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)Win32CtrlHandler, true)) {
         assert(0);
     }
+#else
+    CdiOsSignalHandlerSet(SIGINT, SignalHandler);  // Handle Ctrl+C
 #endif
     return true;
 }
@@ -320,6 +321,11 @@ int main(int argc, const char **argv)
             status = kProgramExecutionStatusExitError;
         }
     }
+
+    const CdiCoreReadOnlySettings* settings_ptr = CdiCoreGetSettings();
+    TestConsoleLog(kLogInfo, "Read-only Settings:");
+    TestConsoleLog(kLogInfo, "   tx_retry_timeout_ms : %llu", settings_ptr->tx_retry_timeout_ms);
+    TestConsoleLog(kLogInfo, "   rx_wait_timeout_ms  : %llu", settings_ptr->rx_wait_timeout_ms);
 
     // Loop through the test. If the --num_loops is not used in the command-line, it will default to run the test once.
     for (int loop_num = 0;

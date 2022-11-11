@@ -28,12 +28,13 @@
 #define kSocketMtu (1500 - 0x2a)
 
 /// Forward declaration of function.
-static CdiReturnStatus SocketConnectionCreate(AdapterConnectionHandle handle, int port_number);
+static CdiReturnStatus SocketConnectionCreate(AdapterConnectionHandle handle, int port_number,
+                                              const char* bind_ip_addr_str);
 /// Forward declaration of function.
 static CdiReturnStatus SocketConnectionDestroy(AdapterConnectionHandle handle);
 /// Forward declaration of function.
 static CdiReturnStatus SocketEndpointOpen(AdapterEndpointHandle endpoint, const char* remote_address_str,
-                                          int port_number);
+                                          int port_number, const char* bind_ip_addr_str);
 /// Forward declaration of function.
 static CdiReturnStatus SocketEndpointClose(AdapterEndpointHandle handle);
 /// Forward declaration of function.
@@ -192,10 +193,12 @@ static bool SocketEndpointPoolItemInit(const void* context_ptr, void* item_ptr)
     return true;
 }
 
-static CdiReturnStatus SocketConnectionCreate(AdapterConnectionHandle handle, int port_number)
+static CdiReturnStatus SocketConnectionCreate(AdapterConnectionHandle handle, int port_number,
+                                              const char* bind_ip_addr_str)
 {
     CdiReturnStatus ret = kCdiStatusOk;
     (void)port_number;
+    (void)bind_ip_addr_str;
 
     if (kEndpointDirectionSend == handle->direction &&
         0 == handle->adapter_state_ptr->adapter_data.tx_buffer_size_bytes) {
@@ -219,18 +222,19 @@ static CdiReturnStatus SocketConnectionDestroy(AdapterConnectionHandle handle)
  * @param endpoint_handle Handle of adapter endpoint to open.
  * @param remote_address_str Pointer to remote target's IP address string.
  * @param port_number Destination port to use.
+ * @param bind_address_str Pointer to optional bind IP address string.
  *
  * @return kCdiStatusOk if successful, otherwise a value that indicates the nature of the failure is returned.
  *
  */
 static CdiReturnStatus SocketEndpointOpen(AdapterEndpointHandle endpoint_handle, const char* remote_address_str,
-                                          int port_number)
+                                          int port_number, const char* bind_address_str)
 {
     CdiReturnStatus ret = kCdiStatusOk;
 
     // Create an Internet socket which will be used for writing or reading.
     CdiSocket new_socket;
-    if (CdiOsSocketOpen(remote_address_str, port_number, &new_socket)) {
+    if (CdiOsSocketOpen(remote_address_str, port_number, bind_address_str, &new_socket)) {
         // Allocate memory in which to store socket endpoint specific state.
         endpoint_handle->type_specific_ptr = (SocketEndpointState*)CdiOsMemAllocZero(sizeof(SocketEndpointState));
         SocketEndpointState* private_state_ptr = (SocketEndpointState*)endpoint_handle->type_specific_ptr;

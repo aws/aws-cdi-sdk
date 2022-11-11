@@ -5,6 +5,25 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
+CDI (Cloud Digital Interface) SDK Version 2.4.1 - 11/11/22
+---------------------------------------------------------------------------
+
+What's New
+* Added optional bind IP address when creating connections using CdiAvmTxCreate() and CdiRawTxCreate(). See
+  bind_ip_addr_str in CdiTxConfigData and CdiRxConfigData.
+* Added new command line option to the test application to support specifying the bind IP address. See "-bind_ip" or
+  "-bip".
+* Added new core API to return internal read-only settings. See CdiCoreReadOnlySettings() in cdi_core_api.h.
+
+Bug Fixes
+------------
+* Fixed issues causing false disconnects related to the out-of-band Tx/Rx ping (keep-alive) mechanism that ensures a
+  Tx/Rx connection remains valid.
+* Fixed bug in CdiQueuePushWaitMultiple(). See changes in queue.c and cdi_queue_api.h. Details in GitHub Issue #76 at
+  https://github.com/aws/aws-cdi-sdk/issues/76
+* Fixed problems with the test application that were identified in GitHub Issue #82.
+
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 2.4.0 - 04/22/22
 ---------------------------------------------------------------------------
 

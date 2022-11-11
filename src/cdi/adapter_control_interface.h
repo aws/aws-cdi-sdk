@@ -40,6 +40,7 @@ typedef struct {
 
     const char* tx_dest_ip_addr_str; ///< Tx destination IP. Only used by Tx control interface.
     int port_number;        ///< Port number related to this control interface.
+    const char* bind_ip_addr_str; ///< IP address to bind to.
 } ControlInterfaceConfigData;
 
 //*********************************************************************************************************************

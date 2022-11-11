@@ -154,6 +154,7 @@ CdiReturnStatus ControlInterfaceCreate(const ControlInterfaceConfigData* config_
             .msg_from_endpoint_param_ptr = config_data_ptr->msg_from_endpoint_param_ptr,
             .remote_address_str = config_data_ptr->tx_dest_ip_addr_str,
             .port_number = config_data_ptr->port_number,
+            .bind_address_str = config_data_ptr->bind_ip_addr_str,
             .endpoint_stats_ptr = NULL,       // Not used by control interface.
         };
         // Set returned handle, as it may get used as part of enabling the endpoint via CdiAdapterOpenEndpoint().

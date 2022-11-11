@@ -755,7 +755,8 @@ CdiReturnStatus CdiAdapterCreateConnection(CdiAdapterConnectionConfigData* confi
         // Do adapter specific open connection actions. NOTE> This will also start the poll-thread if it was just
         // created above.
         rs = config_data_ptr->cdi_adapter_handle->functions_ptr->CreateConnection(adapter_con_state_ptr,
-                                                                                  config_data_ptr->port_number);
+                                                                                  config_data_ptr->port_number,
+                                                                                  config_data_ptr->bind_ip_addr_str);
     }
 
 
@@ -877,7 +878,7 @@ CdiReturnStatus CdiAdapterOpenEndpoint(CdiAdapterEndpointConfigData* config_data
         // Do adapter specific open actions.
         CdiAdapterState* adapter_state_ptr = config_data_ptr->connection_handle->adapter_state_ptr;
         rs = adapter_state_ptr->functions_ptr->Open(endpoint_state_ptr, config_data_ptr->remote_address_str,
-                                                    config_data_ptr->port_number);
+                                                    config_data_ptr->port_number, config_data_ptr->bind_address_str);
     }
 
     if (kCdiStatusOk != rs) {
@@ -931,7 +932,7 @@ CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle, bool reope
     if (handle) {
         CdiAdapterState* adapter_state_ptr = handle->adapter_con_state_ptr->adapter_state_ptr;
         if (adapter_state_ptr->functions_ptr->Reset) {
-            rs = adapter_state_ptr->functions_ptr->Reset(handle, reopen);
+            rs = adapter_state_ptr->functions_ptr->Reset(handle);
         }
         if (handle->adapter_con_state_ptr->tx_poll_do_work_signal) {
             if (handle->tx_in_flight_ref_count) {

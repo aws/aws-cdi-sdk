@@ -29,6 +29,9 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
+/// @brief Legacy protocols before version 5 used 3000 for ping command frequency.
+#define LEGACY_SEND_PING_COMMAND_FREQUENCY_MSEC     (3000)
+
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
@@ -136,7 +139,7 @@ static int ProcessSendCommandRetry(ProbeEndpointState* probe_ptr, const char* re
     // If first time here, then skip this logic and just send the command.
     if (++probe_ptr->tx_probe_state.send_command_retry_count > 1) {
         probe_ptr->app_adapter_endpoint_handle->endpoint_stats_ptr->probe_command_retry_count++;
-        if (probe_ptr->tx_probe_state.send_command_retry_count < TX_COMMAND_MAX_RETRIES) {
+        if (probe_ptr->tx_probe_state.send_command_retry_count <= TX_COMMAND_MAX_RETRIES) {
                 CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
                     "Probe Tx remote IP[%s:%d] %s ACK timeout. Resending cmd #[%d].",
                     remote_ip_str, remote_dest_port, InternalUtilityKeyEnumToString(kKeyProbeCommand, command),
@@ -303,7 +306,12 @@ bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecoded
                         // Got an ACK for a ping command. Drop back to the EFA connected state, which will repeat the
                         // ping process. Setup wait period for next ping based on ping frequency.
                         probe_ptr->tx_probe_state.tx_state = kProbeStateEfaConnected;
-                        *wait_timeout_ms_ptr = SEND_PING_COMMAND_FREQUENCY_MSEC;
+                        CdiProtocolHandle protocol_handle = probe_ptr->app_adapter_endpoint_handle->protocol_handle;
+                        if (protocol_handle->negotiated_version.probe_version_num >= 5) {
+                            *wait_timeout_ms_ptr = SEND_PING_COMMAND_FREQUENCY_MSEC;
+                        } else {
+                            *wait_timeout_ms_ptr = LEGACY_SEND_PING_COMMAND_FREQUENCY_MSEC;
+                        }
                         ret_new_state = true;
                     } else {
                         assert(false); // No other supported commands return an Ack.
@@ -328,6 +336,9 @@ bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecoded
         case kProbeCommandConnected:
             if (kProbeStateEfaProbe != probe_ptr->tx_probe_state.tx_state) {
                 // We are not expecting a connection command yet, so send a reset.
+                CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
+                                         "Probe Tx remote IP[%s:%d] Received unexpected connected command. Sending reset.",
+                                         probe_hdr_ptr->senders_ip_str, probe_hdr_ptr->senders_control_dest_port);
                 probe_ptr->tx_probe_state.tx_state = kProbeStateSendReset;
                 *wait_timeout_ms_ptr = 0; // Take effect immediately.
                 ret_new_state = true;
@@ -434,10 +445,16 @@ uint64_t ProbeTxControlProcessProbeState(ProbeEndpointState* probe_ptr)
             if (probe_ptr->tx_probe_state.packets_acked_count >= EFA_PROBE_PACKET_COUNT) {
                 // Received all ACKs from probe packets, so advance to the EFA connected state.
                 ProbeControlEfaConnectionEnableApplication(probe_ptr);
-                // Advance to the connected state, which will start the ping process. Setup wait period for next ping
-                // based on ping frequency.
+                // Advance to the connected state, which will start the ping process.
                 probe_ptr->tx_probe_state.tx_state = kProbeStateEfaConnected;
-                wait_timeout_ms = SEND_PING_COMMAND_FREQUENCY_MSEC;
+                CdiProtocolHandle protocol_handle = probe_ptr->app_adapter_endpoint_handle->protocol_handle;
+                if (protocol_handle->negotiated_version.probe_version_num >= 5) {
+                    // Since all probe EFA packets have been ACK'ed, no need to wait for ping delay to advance to
+                    // connected state.
+                    wait_timeout_ms = TX_CONNECTION_DELAY_MSEC;
+                } else {
+                    wait_timeout_ms = LEGACY_SEND_PING_COMMAND_FREQUENCY_MSEC;
+                }
             } else {
                 if (++probe_ptr->tx_probe_state.packets_ack_wait_count < EFA_TX_PROBE_ACK_MAX_RETRIES) {
                     // Wait a little while and retry if we have not received all the ACKs yet.
@@ -459,7 +476,7 @@ uint64_t ProbeTxControlProcessProbeState(ProbeEndpointState* probe_ptr)
             // Advance state to send ping to the remote Rx (server) connection. Will expect an ACK back from the remote.
             probe_ptr->tx_probe_state.tx_state = kProbeStateEfaConnectedPing;
             probe_ptr->tx_probe_state.send_command_retry_count = 0; // Reset command retry counter.
-            wait_timeout_ms = 0; // Do immediately.
+            wait_timeout_ms = 0; // Do immediately
 #endif
             break;
         case kProbeStateEfaConnectedPing:

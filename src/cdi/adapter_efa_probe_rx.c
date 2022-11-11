@@ -289,15 +289,27 @@ bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr,
         case kProbeCommandProtocolVersion:
             // Set negotiated protocol version.
             EndpointManagerProtocolVersionSet(cdi_endpoint_handle, &probe_hdr_ptr->senders_version);
+
+            // The endpoint has not been started yet, so queue to start it now. Will send the ACK back to remote after
+            // the endpoint has been started. This will ensure it is ready before remote Tx starts sending EFA probe
+            // packets.
+            EndpointManagerQueueEndpointStart(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle);
+            probe_ptr->rx_probe_state.rx_state = kProbeStateWaitForStart;
+            *wait_timeout_ms_ptr = ENDPOINT_MANAGER_COMPLETION_TIMEOUT_MSEC;
+            ret_new_state = true;
+            probe_ptr->send_ack_command = probe_hdr_ptr->command;
+            probe_ptr->send_ack_control_packet_num = probe_hdr_ptr->control_packet_num;
+            probe_ptr->send_ack_command_valid = true;
+            break;
+        case kProbeCommandProtocolVersion:
+            // Set negotiated protocol version.
+            EndpointManagerProtocolVersionSet(cdi_endpoint_handle, &probe_hdr_ptr->senders_version);
             // Send an ACK back to the transmitter (client).
             ProbeControlSendAck(probe_ptr, probe_hdr_ptr->command, probe_hdr_ptr->control_packet_num);
             break;
         case kProbeCommandPing:
-            // Bump ping received counter.
-            probe_ptr->rx_probe_state.pings_received_count++;
-
-            // Set Rx state to connected and timeout based on ping monitor frequency.
-            probe_ptr->rx_probe_state.rx_state = kProbeStateEfaConnected;
+            // Set Rx state to connected ping and timeout based on ping monitor frequency.
+            probe_ptr->rx_probe_state.rx_state = kProbeStateEfaConnectedPing;
             *wait_timeout_ms_ptr = RX_PING_MONITOR_TIMEOUT_MSEC;
             ret_new_state = true;
 
@@ -332,7 +344,14 @@ uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
     switch (probe_ptr->rx_probe_state.rx_state) {
         case kProbeStateEfaStart:
         case kProbeStateWaitForStart:
-            // Not used, so nothing to do.
+            ProbeControlEfaConnectionStart(probe_ptr);
+            // Send an ACK back to the transmitter (client).
+            if (probe_ptr->send_ack_command_valid) {
+                ProbeControlSendAck(probe_ptr, probe_ptr->send_ack_command, (int)probe_ptr->send_ack_control_packet_num);
+                probe_ptr->send_ack_command_valid = false;
+            }
+            probe_ptr->rx_probe_state.rx_state = kProbeStateEfaProbe;
+            wait_timeout_ms = SEND_RESET_COMMAND_FREQUENCY_MSEC;
             break;
         case kProbeStateResetting:
             // Got timeout before these commands completed. Go to connection reset state.
@@ -371,20 +390,29 @@ uint64_t ProbeRxControlProcessProbeState(ProbeEndpointState* probe_ptr)
             }
             break;
         case kProbeStateResetDone:
-            // If the reset was triggered by the remote connection, respond with an ACK command.
-            if (probe_ptr->send_ack_command_valid) {
-                ProbeControlSendAck(probe_ptr, probe_ptr->send_ack_command, (int)probe_ptr->send_ack_control_packet_num);
-                probe_ptr->send_ack_command_valid = false;
-                // For Rx, the EFA endpoint has been started in ProbeEndpointResetDone(), so we can advance to the
-                // kProbeStateEfaProbe state.
-                probe_ptr->rx_probe_state.rx_state = kProbeStateEfaProbe; // Advance to EFA probe state.
-                // If the EFA probe does not complete by this timeout, we return back to connection reset state.
-                wait_timeout_ms = EFA_PROBE_MONITOR_TIMEOUT_MSEC;
+            // For protocol versions before 3 it will be already set when we get here. For these protocols, the version
+            // command is not supported, which is used to start the endpoint. In this case, we must queue to start
+            // endpoint before sending back the ACK for the reset.
+            if (adapter_endpoint_handle->protocol_handle) {
+                EndpointManagerQueueEndpointStart(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle);
+                probe_ptr->rx_probe_state.rx_state = kProbeStateWaitForStart;
+                wait_timeout_ms = ENDPOINT_MANAGER_COMPLETION_TIMEOUT_MSEC;
             } else {
-                // Reset was not triggered by the remote connection, so just setup to send another reset command to it.
-                // No need to stop/start local libfabric here.
-                probe_ptr->rx_probe_state.rx_state = kProbeStateSendReset;
-                wait_timeout_ms = 0; // Do immediately.
+                // If the reset was triggered by the remote connection, respond with an ACK command.
+                if (probe_ptr->send_ack_command_valid) {
+                    ProbeControlSendAck(probe_ptr, probe_ptr->send_ack_command, (int)probe_ptr->send_ack_control_packet_num);
+                    probe_ptr->send_ack_command_valid = false;
+                    // For Rx, the EFA endpoint has been started in ProbeEndpointResetDone(), so we can advance to the
+                    // kProbeStateEfaProbe state.
+                    probe_ptr->rx_probe_state.rx_state = kProbeStateEfaProbe; // Advance to EFA probe state.
+                    // If the EFA probe does not complete by this timeout, we return back to connection reset state.
+                    wait_timeout_ms = EFA_PROBE_MONITOR_TIMEOUT_MSEC;
+                } else {
+                    // Reset was not triggered by the remote connection, so just setup to send another reset command to it.
+                    // No need to stop/start local libfabric here.
+                    probe_ptr->rx_probe_state.rx_state = kProbeStateSendReset;
+                    wait_timeout_ms = 0; // Do immediately.
+                }
             }
             break;
         case kProbeStateEfaProbe:

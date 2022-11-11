@@ -203,11 +203,10 @@ static bool SetCommand(InternalEndpointState* internal_endpoint_ptr, EndpointMan
  * Flush resources associated with the specified connection.
  *
  * @param endpoint_ptr Pointer to endpoint to free resources.
- * @param shutting_down true if shutting down the connection, otherwise just resetting it.
  *
  * @return Status code indicating success or failure.
  */
-static CdiReturnStatus FlushResources(InternalEndpointState* endpoint_ptr, bool shutting_down)
+static CdiReturnStatus FlushResources(InternalEndpointState* endpoint_ptr)
 {
     EndpointManagerState* mgr_ptr = endpoint_ptr->endpoint_manager_ptr;
 
@@ -224,7 +223,7 @@ static CdiReturnStatus FlushResources(InternalEndpointState* endpoint_ptr, bool 
     // Clean up adapter level resources used by PollThread(). NOTE: For the EFA adapter, it will notify EFA Probe that
     // resetting the endpoint has completed. Therefore, this step must be the last one used as part of the connection
     // reset sequence.
-    return CdiAdapterResetEndpoint(endpoint_ptr->cdi_endpoint.adapter_endpoint_ptr, !shutting_down);
+    return CdiAdapterResetEndpoint(endpoint_ptr->cdi_endpoint.adapter_endpoint_ptr);
 }
 
 /**
@@ -244,7 +243,7 @@ static void DestroyEndpoint(CdiEndpointHandle handle)
                              EndpointManagerEndpointRemoteIpGet(handle), EndpointManagerEndpointRemotePortGet(handle));
 
     InternalEndpointState* internal_endpoint_ptr = CdiEndpointToInternalEndpoint(handle);
-    FlushResources(internal_endpoint_ptr, true); // true= shutting down the endpoint
+    FlushResources(internal_endpoint_ptr);
 
     // Close the adapter endpoint, if it exists.
     if (handle->adapter_endpoint_ptr) {
@@ -342,13 +341,13 @@ static CDI_THREAD EndpointManagerThread(void* ptr)
                             // Nothing special to do.
                             break;
                         case kEndpointStateReset:
-                            rs = FlushResources(internal_endpoint_ptr, false); // false= not shutting down the endpoint.
+                            rs = FlushResources(internal_endpoint_ptr);
                             break;
                         case kEndpointStateStart:
                             rs = CdiAdapterStartEndpoint(endpoint_handle->adapter_endpoint_ptr);
                             break;
                         case kEndpointStateShutdown:
-                            rs = FlushResources(internal_endpoint_ptr, true); // true= is shutting down the endpoint.
+                            rs = FlushResources(internal_endpoint_ptr);
                             keep_alive = false;
                             break;
                     }
@@ -1044,7 +1043,9 @@ CdiReturnStatus EndpointManagerRxCreateEndpoint(EndpointManagerHandle handle, in
     // Since this endpoint can be created dynamically as part of a control command received from a remote transmitter,
     // we need to save the remote address before creating the adapter endpoint. The adapter endpoint's control interface
     // can start using it immediately.
-    EndpointManagerRemoteEndpointInfoSet(endpoint_ptr, source_address_ptr, stream_name_str);
+    if (endpoint_ptr) {
+        EndpointManagerRemoteEndpointInfoSet(endpoint_ptr, source_address_ptr, stream_name_str);
+    }
 
     if (kCdiStatusOk == rs) {
         // Open an endpoint to receive packets from a remote host.
