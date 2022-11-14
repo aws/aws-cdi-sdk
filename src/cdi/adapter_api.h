@@ -336,7 +336,7 @@ struct AdapterVirtualFunctionPtrTable {
 
     /// @brief Reset an open endpoint.
     /// @see CdiAdapterResetEndpoint
-    CdiReturnStatus (*Reset)(AdapterEndpointHandle handle, bool reopen);
+    CdiReturnStatus (*Reset)(AdapterEndpointHandle handle);
 
     /// @brief Start an open endpoint.
     /// @see CdiAdapterStartEndpoint
@@ -562,11 +562,10 @@ CdiReturnStatus CdiAdapterStartEndpoint(AdapterEndpointHandle handle);
  * Reset an endpoint and free its resources.
  *
  * @param handle The handle of the endpoint to reset.
- * @param reopen If true the endpoint is re-opened after resetting it, otherwise just reset it.
  *
  * @return CdiReturnStatus kCdiStatusOk upon success otherwise an indication of the failure.
  */
-CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle, bool reopen);
+CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle);
 
 /**
  * Close an endpoint and free its resources.

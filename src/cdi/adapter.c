@@ -925,7 +925,7 @@ CdiReturnStatus CdiAdapterStartEndpoint(AdapterEndpointHandle handle)
     return rs;
 }
 
-CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle, bool reopen)
+CdiReturnStatus CdiAdapterResetEndpoint(AdapterEndpointHandle handle)
 {
     CdiReturnStatus rs = kCdiStatusOk;
 

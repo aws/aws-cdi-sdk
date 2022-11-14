@@ -237,12 +237,11 @@ void ProbeEndpointReset(ProbeEndpointHandle handle);
  * CdiAdapterResetEndpoint(), which uses this function to notify probe that the endpoint reset is done.
  *
  * @param handle Handle of probe related to the endpoint.
-* @param reopen If true re-opens the endpoint, otherwise does not re-open it.
-  *
+ *
  * @return CdiReturnStatus kCdiStatusOk if the operation was successful or a value that indicates the nature of the
  *         failure.
  */
-CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle, bool reopen);
+CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle);
 
 /**
  * The Endpoint Manager is in the final process of starting an endpoint by calling CdiAdapterStartEndpoint(), which uses

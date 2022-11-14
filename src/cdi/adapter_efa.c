@@ -66,7 +66,7 @@ static CdiReturnStatus EfaEndpointOpen(AdapterEndpointHandle endpoint_handle, co
 /// Forward declaration of function.
 static CdiReturnStatus EfaEndpointPoll(AdapterEndpointHandle handle);
 /// Forward declaration of function.
-static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle handle, bool reopen);
+static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle handle);
 /// Forward declaration of function.
 static CdiReturnStatus EfaEndpointStart(AdapterEndpointHandle handle);
 /// Forward declaration of function.
@@ -639,26 +639,18 @@ static CdiReturnStatus EfaEndpointPoll(AdapterEndpointHandle endpoint_handle)
  * Reset an EFA connection for the specified adapter endpoint.
  *
  * @param endpoint_handle Handle of adapter endpoint to reset.
- * @param reopen If true the endpoint is re-opened after resetting it, otherwise just reset it.
  *
  * @return kCdiStatusOk if successful, otherwise a value that indicates the nature of the failure is returned.
  */
-static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle endpoint_handle, bool reopen)
+static CdiReturnStatus EfaEndpointReset(AdapterEndpointHandle endpoint_handle)
 {
     // NOTE: This is only called within the SDK, so no special logging macros needed for logging.
     EfaEndpointState* endpoint_ptr = (EfaEndpointState*)endpoint_handle->type_specific_ptr;
 
     if (kEndpointDirectionSend == endpoint_handle->adapter_con_state_ptr->direction) {
         EfaTxEndpointReset(endpoint_ptr);
-        // Don't restart Tx endpoint here. Wait until after probe has successfully connected before restarting. Probe
-        // will use EfaEndpointStart() to start the endpoint after the protocol version has successfully been
-        // negotiated. This prevents in-flight packet acks from erroneously being received from a previously established
-        // connection. In this case, in rxr_cq_insert_addr_from_rts() the packet type can be RXR_CONNACK_PKT instead of
-        // RXR_RTS_PKT.
-        EfaAdapterEndpointStop(endpoint_ptr, false); // false= Don't restart.
     } else {
         EfaRxEndpointReset(endpoint_ptr);
-        EfaAdapterEndpointStop(endpoint_ptr, reopen);
     }
 
     // Don't restart endpoints here. Wait until after probe has successfully connected before restarting. Probe will use

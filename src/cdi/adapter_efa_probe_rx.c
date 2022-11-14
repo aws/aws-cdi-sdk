@@ -301,12 +301,6 @@ bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr,
             probe_ptr->send_ack_control_packet_num = probe_hdr_ptr->control_packet_num;
             probe_ptr->send_ack_command_valid = true;
             break;
-        case kProbeCommandProtocolVersion:
-            // Set negotiated protocol version.
-            EndpointManagerProtocolVersionSet(cdi_endpoint_handle, &probe_hdr_ptr->senders_version);
-            // Send an ACK back to the transmitter (client).
-            ProbeControlSendAck(probe_ptr, probe_hdr_ptr->command, probe_hdr_ptr->control_packet_num);
-            break;
         case kProbeCommandPing:
             // Set Rx state to connected ping and timeout based on ping monitor frequency.
             probe_ptr->rx_probe_state.rx_state = kProbeStateEfaConnectedPing;

@@ -204,7 +204,7 @@ CdiReturnStatus ProbeEndpointError(ProbeEndpointHandle handle)
     return rs;
 }
 
-CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle, bool reopen)
+CdiReturnStatus ProbeEndpointResetDone(ProbeEndpointHandle handle)
 {
     CdiReturnStatus rs = kCdiStatusOk;
     ProbeEndpointState* probe_ptr = (ProbeEndpointState*)handle;
