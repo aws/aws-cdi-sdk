@@ -637,6 +637,59 @@ CdiReturnStatus CdiAdapterCreateConnection(CdiAdapterConnectionConfigData* confi
         }
     }
 
+    if (kCdiStatusOk == rs && kEndpointDirectionSend == adapter_con_state_ptr->direction) {
+        // Determine memory required for Tx packet headers.
+        uint32_t tx_header_entries = MAX_TX_PACKET_WORK_REQUESTS_PER_CONNECTION;
+        uint32_t tx_header_size = sizeof(TxPacketHeader);
+        uint32_t tx_header_buffer_size_needed =  CdiPoolGetSizeNeeded(tx_header_entries, tx_header_size);
+
+        // Determine memory required for Tx extra packet headers.
+        uint32_t tx_extra_header_entries = TX_AVM_PACKET_HEADER_POOL_SIZE_PER_CONNECTION;
+        uint32_t tx_extra_header_size = sizeof(TxExtraPacketHeader);
+        uint32_t tx_extra_header_buffer_size_needed =  CdiPoolGetSizeNeeded(tx_extra_header_entries,
+                                                                            tx_extra_header_size);
+
+        uint32_t tx_buffer_size_needed = tx_header_buffer_size_needed + tx_extra_header_buffer_size_needed;
+        if (tx_buffer_size_needed) {
+            // If necessary, round up to next even-multiple of hugepages byte size.
+            uint64_t allocated_size = NextMultipleOf(tx_buffer_size_needed, CDI_HUGE_PAGES_BYTE_SIZE);
+
+            void* mem_ptr = NULL;
+            if (kCdiStatusOk == rs) {
+                mem_ptr = CdiOsMemAllocHugePage(allocated_size);
+                // Set flag so we know how to later free Tx buffer.
+                adapter_con_state_ptr->tx_header_buffer_is_hugepages = NULL != mem_ptr;
+                if (NULL == mem_ptr) {
+                    // Fallback using heap memory.
+                    mem_ptr = CdiOsMemAlloc(allocated_size);
+                    if (NULL == mem_ptr) {
+                        allocated_size = 0; // Since allocation failed, set allocated size to zero.
+                        rs = kCdiStatusNotEnoughMemory;
+                    }
+                }
+                adapter_con_state_ptr->tx_header_buffer_allocated_size = allocated_size;
+                adapter_con_state_ptr->tx_header_buffer_allocated_ptr = mem_ptr;
+            }
+
+            if (kCdiStatusOk == rs) {
+                if (!CdiPoolCreateUsingExistingBuffer("Send TxPacketHeader Pool", tx_header_entries, tx_header_size,
+                        false, mem_ptr, tx_header_buffer_size_needed, NULL,
+                        &adapter_con_state_ptr->tx_header_pool_handle)) {
+                    rs = kCdiStatusAllocationFailed;
+                }
+                mem_ptr = ((uint8_t*)mem_ptr) + tx_header_buffer_size_needed;
+            }
+
+            if (kCdiStatusOk == rs) {
+                if (!CdiPoolCreateUsingExistingBuffer("Send TxPacketHeader Pool", tx_extra_header_entries,
+                        tx_extra_header_size, false, mem_ptr, tx_extra_header_buffer_size_needed, NULL,
+                        &adapter_con_state_ptr->tx_extra_header_pool_handle)) {
+                    rs = kCdiStatusAllocationFailed;
+                }
+            }
+        }
+    }
+
     if (kCdiStatusOk == rs) {
         // Create/setup poll thread prior to creating the connection. This ensures the thread will be started properly
         // by CreateConnection().
@@ -795,6 +848,17 @@ CdiReturnStatus CdiAdapterDestroyConnection(AdapterConnectionHandle handle)
         rs = CdiAdapterStopConnection(handle);
 
         adapter_con_state_ptr->adapter_state_ptr->functions_ptr->DestroyConnection(adapter_con_state_ptr);
+
+        if (adapter_con_state_ptr->tx_header_buffer_allocated_ptr) {
+            if (adapter_con_state_ptr->tx_header_buffer_is_hugepages) {
+                CdiOsMemFreeHugePage(adapter_con_state_ptr->tx_header_buffer_allocated_ptr,
+                                     adapter_con_state_ptr->tx_header_buffer_allocated_size);
+                adapter_con_state_ptr->tx_header_buffer_is_hugepages = false;
+            } else {
+                CdiOsMemFree(adapter_con_state_ptr->tx_header_buffer_allocated_ptr);
+            }
+            adapter_con_state_ptr->tx_header_buffer_allocated_ptr = NULL;
+        }
 
         CdiOsCritSectionRelease(adapter_con_state_ptr->adapter_state_ptr->adapter_lock);
 

@@ -59,6 +59,7 @@ real_build_goals := $(strip $(filter-out clean% docs% headers help,$(if $(MAKECM
 
 # header directories used by both library and test program
 include_dir.sdk := $(top.sdk)/include
+include_dir.sdk += $(top.src)/libfabric_api
 include_dir.common := $(top.common)/include
 
 ## optional sanitizer settings
@@ -102,9 +103,12 @@ build_dir.image := $(build_dir)/image
 build_dir.packages := $(build_dir)/packages
 build_dir.libaws := $(build_dir)/libaws
 
-# Setup path to libfabric.
+# Setup path to libfabric 1.9 and libfabric_new
 ifneq ($(wildcard $(top)/libfabric),)
     top.libfabric := $(top)/libfabric
+endif
+ifneq ($(wildcard $(top)/libfabric_new),)
+    top.libfabric_new := $(top)/libfabric_new
 endif
 
 # Users can add their own variables to this makefile by creating a makefile in this directory called
@@ -114,10 +118,16 @@ endif
 ifeq ($(top.libfabric),)
     $(error libfabric source tree not found)
 endif
+ifeq ($(top.libfabric_new),)
+    $(error libfabric_new source tree not found)
+endif
+
 # Build artifacts for libfabric go into a debug or release directory under top.libfabric
 build_dir.libfabric := $(top.libfabric)/build/$(config_libfabric)
+build_dir.libfabric_new := $(top.libfabric_new)/build/$(config_libfabric)
 
 libfabric_config_h := $(build_dir.libfabric)/config.h
+libfabric_new_config_h := $(build_dir.libfabric_new)/config.h
 
 ## library build definitions
 # "top level" subtrees
@@ -126,6 +136,7 @@ top.cdi := $(top.src)/cdi
 # all of the directories with C source files in them
 src_dir.cdi := $(top.cdi)
 src_dir.common := $(top.common)/src
+src_dir.libfabric_api := $(top.src)/libfabric_api
 src_dir.test := $(top.src)/test
 src_dir.test_common := $(top.test_common)/src
 src_dir.test_minimal := $(top.test_minimal)
@@ -141,20 +152,35 @@ endif
 include_dir.cdi := $(top.cdi)
 include_dirs.cdi := $(foreach dir,sdk cdi common,$(include_dir.$(dir)))
 include_dirs.libfabric := $(top.libfabric)/include $(build_dir.libfabric)
+include_dirs.libfabric_new := $(top.libfabric_new)/include $(build_dir.libfabric_new)
 
 # generate various lists for building SDK library
 srcs.cdi := $(foreach ext,$(src_extensions),$(wildcard $(src_dir.cdi)/*.$(ext)))
 srcs.cdi += queue.c fifo.c list.c logger.c os_linux.c pool.c
 objs.cdi := $(addprefix $(build_dir.obj)/,$(patsubst %.cpp,%.o,$(patsubst %.c,%.o,$(notdir $(srcs.cdi)))))
 headers.cdi := $(foreach dir,$(include_dirs.cdi),$(wildcard $(dir)/*.h))
-include_opts.cdi := $(foreach proj,cdi libfabric,$(addprefix -I,$(include_dirs.$(proj))))
+include_opts.cdi := $(foreach proj,cdi,$(addprefix -I,$(include_dirs.$(proj))))
+include_opts.libfabric := $(foreach proj,libfabric,$(addprefix -I,$(include_dirs.$(proj))))
+include_opts.libfabric_new := $(foreach proj,libfabric_new,$(addprefix -I,$(include_dirs.$(proj))))
 depends.cdi := $(patsubst %.o,%.d,$(objs.cdi))
 
 # the end goal of building the SDK library
 libsdk := $(build_dir.lib)/libcdisdk.so.$(product_version).$(product_major_version)
 
-# the end goal of building the libfabric shared library
+# the end goal of building the CDI libfabric API libraries
+libfabric_api := $(build_dir.lib)/libcdi_libfabric_api.so.1
+libfabric_api_new := $(build_dir.lib)/libcdi_libfabric_api_new.so.1
+
+# generate various lists for building libfabric API libraries
+srcs.libfabric_api := $(src_dir.libfabric_api)/libfabric_api.c
+objs.libfabric_api := $(addprefix $(build_dir.obj)/,$(patsubst %.cpp,%.o,$(patsubst %.c,%.o,$(notdir $(srcs.libfabric_api)))))
+objs.libfabric_api_new := $(build_dir.obj)/libfabric_api_new.o
+headers.libfabric_api := $(foreach dir,$(include_dirs.libfabric_api),$(wildcard $(dir)/*.h))
+depends.libfabric_api := $(patsubst %.o,%.d,$(objs.libfabric_api))
+
+# the end goal of building the libfabric shared libraries
 libfabric := $(build_dir.lib)/libfabric.so.1
+libfabric_new := $(build_dir.lib)/libfabric_new.so.1
 
 ## test program definitions
 # test specific source files are all in one directory
@@ -235,8 +261,8 @@ CXXFLAGS += $(COMMON_COMPILER_FLAG_ADDITIONS) --std=c++11
 # The only libraries needed here are those that present new dependencies beyond what libcdisdk.so already requires.
 # An rpath is specified so cdi_test can find libcdisdk.so.x in the same directory as cdi_test or in a sibling directory
 # named lib.
-CDI_LDFLAGS = $(LDFLAGS) -L$(build_dir.lib) -lcdisdk -lfabric $(EXTRA_LD_LIBS) -lm $(aws_sdk_library_flags)
-CDI_TEST_LDFLAGS = -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib -lncurses -ltinfo
+CDI_LDFLAGS = $(LDFLAGS) -L$(build_dir.lib) -lcdisdk $(EXTRA_LD_LIBS) -lm $(aws_sdk_library_flags)
+CDI_TEST_LDFLAGS = -lncurses -ltinfo -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib
 
 # docs go into the build directory but are not specific to release/debug
 build_dir.doc := $(top.build)/documentation
@@ -265,11 +291,11 @@ endif
 
 # default build target
 .PHONY : all
-all : libfabric libsdk test docs docs_api $(EXTRA_ALL_TARGETS)
+all : libfabric libfabric_new libsdk libfabric_api libfabric_api_new test docs docs_api $(EXTRA_ALL_TARGETS)
 
 # Build only the libraries
 .PHONY : lib
-lib : libfabric libsdk
+lib : libfabric libfabric_new libsdk libfabric_api libfabric_api_new
 
 # Ensure that the location of the AWS SDK source code tree was specified unless explicitly opted out. Define and augment
 # some variables needed for building and linking to the AWS SDK.
@@ -330,7 +356,7 @@ vpath %.cpp $(src_dir.cdi)
 endif
 
 # rule to create the various build output directories
-$(foreach d,obj lib bin doc packages libfabric results image libaws,$(build_dir.$(d))) :
+$(foreach d,obj lib bin doc packages libfabric libfabric_new results image libaws,$(build_dir.$(d))) :
 	$(Q)mkdir -p $@
 
 # Setup flags for libfabric depending on debug/release build target.
@@ -343,6 +369,17 @@ ifeq ($(config), debug)
     LIBFABRIC_OPTS += --enable-debug
 endif
 
+# Allows rdma-core path to be defined outside of this Makefile.
+RDMA_CORE_PATH := yes
+LIBFABRIC_NEW_OPTS := --prefix=$(build_dir.libfabric_new) \
+	--enable-efa=$(RDMA_CORE_PATH) \
+	--srcdir=$(top.libfabric_new) \
+	--disable-verbs \
+	--disable-rxd
+ifeq ($(config), debug)
+    LIBFABRIC_NEW_OPTS += --enable-debug
+endif
+
 $(libfabric_config_h) : | $(build_dir.libfabric)
 	@echo "Configuring libfabric. Creating $(libfabric_config_h)"
 	$(Q)cd $(top.libfabric)       && \
@@ -350,7 +387,14 @@ $(libfabric_config_h) : | $(build_dir.libfabric)
 	    cd $(build_dir.libfabric) && \
 	    $(top.libfabric)/configure $(LIBFABRIC_OPTS)
 
-# rule to create the libfabric library files. We currently only use the static library called libfabric.a
+$(libfabric_new_config_h) : | $(build_dir.libfabric_new)
+	@echo "Configuring libfabric_new. Creating $(libfabric_new_config_h)"
+	$(Q)cd $(top.libfabric_new)       && \
+	    ./autogen.sh                       && \
+	    cd $(build_dir.libfabric_new) && \
+	    $(top.libfabric_new)/configure $(LIBFABRIC_NEW_OPTS)
+
+# rule to create the libfabric library files.
 # NOTE: The build steps used here were created from the libfabric docs.
 # Implementation note: Specifying both "all" and "install" in the same make command fails if -j is also specified. The
 # libfabric Makefile has some kind of issue that requires these to be two distinct invocations.
@@ -364,21 +408,64 @@ $(libfabric) : $(libfabric_config_h) | $(build_dir.lib)
 	$(Q)ln -fs $@ $(basename $@)
 	$(Q)ln -fs $@ $(basename $(basename $@))
 
+# rule to create the libfabric_new library files.
+# NOTE: The build steps used here were created from the libfabric docs.
+# Implementation note: Specifying both "all" and "install" in the same make command fails if -j is also specified. The
+# libfabric Makefile has some kind of issue that requires these to be two distinct invocations.
+.PHONY : libfabric_new
+libfabric_new : $(libfabric_new)
+$(libfabric_new) : $(libfabric_new_config_h) | $(build_dir.lib)
+	@echo "Building libfabric_new. Creating output files in $(build_dir.libfabric_new)"
+	$(Q)$(MAKE) -C $(build_dir.libfabric_new) -j$$(nproc) all
+	$(Q)$(MAKE) -C $(build_dir.libfabric_new) install
+	$(Q)cp $(build_dir.libfabric_new)/lib/$(notdir $(libfabric)) $(libfabric_new)
+	$(Q)ln -fs $@ $(basename $@)
+	$(Q)ln -fs $@ $(basename $(basename $@))
+
 # rule to create the SDK library file
 .PHONY : libsdk
 libsdk : $(libsdk)
 ifeq ($(require_aws_sdk),yes)
-$(libsdk) : $(libfabric_config_h) $(objs.cdi) $(libfabric) $(libaws) | $(build_dir.lib)
+$(libsdk) : $(libfabric_config_h) $(objs.cdi) $(libfabric_api) $(libfabric_api_new) $(libaws) | $(build_dir.lib)
 else
-$(libsdk) : $(libfabric_config_h) $(objs.cdi) $(libfabric) | $(build_dir.lib)
+$(libsdk) : $(libfabric_config_h) $(objs.cdi) $(libfabric_api) $(libfabric_api_new) | $(build_dir.lib)
 endif
 	@echo "GCC version is" $(GCCVERSION)
 	$(Q)$(CC) -shared -o $@ -Wl,-z,defs,-soname=$(basename $(notdir $@)),--version-script,libcdisdk.vers \
 		$(objs.cdi) -L$(build_dir.lib) $(aws_sdk_library_flags) \
-		-lfabric -ldl -lrt $(EXTRA_CC_LIBS) -lm $(EXTRA_LD_LIBS) -lpthread -lc \
-		$(ASAN_LIBS) -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib
+		-lcdi_libfabric_api -lcdi_libfabric_api_new -ldl -lrt $(EXTRA_CC_LIBS) -lm $(EXTRA_LD_LIBS) -lpthread -lc \
+		$(ASAN_LIBS) -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/lib
 	$(Q)ln -fs $@ $(basename $@)
 	$(Q)ln -fs $@ $(basename $(basename $@))
+
+# rule to create libfabric 1.9 API library file
+.PHONY : libfabric_api
+libfabric_api : $(libfabric_api)
+$(libfabric_api) : $(libfabric_config_h) $(objs.libfabric_api) $(libfabric) | $(build_dir.lib)
+	$(Q)$(CC) -shared -o $@ -Wl,-z,defs,-soname=$(basename $(notdir $@)) \
+		$(objs.libfabric_api) -L$(build_dir.lib) \
+		-ldl -lrt $(EXTRA_CC_LIBS) -lm $(EXTRA_LD_LIBS) -lpthread -lc \
+		$(ASAN_LIBS)
+	$(Q)ln -fs $@ $(basename $@)
+	$(Q)ln -fs $@ $(basename $(basename $@))
+
+# rule to create libfabric new API library file
+.PHONY : libfabric_api_new
+libfabric_api_new : $(libfabric_api_new)
+$(libfabric_api_new) : $(libfabric_new_config_h) $(objs.libfabric_api_new) $(libfabric_new) | $(build_dir.lib)
+	$(Q)$(CC) -shared -o $@ -Wl,-z,defs,-soname=$(basename $(notdir $@)) \
+		$(objs.libfabric_api_new) -L$(build_dir.lib) \
+		-ldl -lrt $(EXTRA_CC_LIBS) -lm $(EXTRA_LD_LIBS) -lpthread -lc \
+		$(ASAN_LIBS)
+	$(Q)ln -fs $@ $(basename $@)
+	$(Q)ln -fs $@ $(basename $(basename $@))
+
+# rule to build libfabric_1_9_api.o and libfabric_new_api.o from libfabric_1_9_api.c
+$(objs.libfabric_api) $(objs.libfabric_api_new) : $(srcs.libfabric_api) | $(build_dir.obj)
+	@echo "Compiling libfabric_api.c using libfabric 1.9."
+	$(Q)$(CC) $(include_opts.libfabric) $(CFLAGS) -c -o $(objs.libfabric_api) $<
+	@echo "Compiling libfabric_api.c using libfabric new."
+	$(Q)$(CC) -DLIBFABRIC_NEW $(include_opts.libfabric_new) $(CFLAGS) -c -o $(objs.libfabric_api_new) $<
 
 # rule to create symlink to CDI monitoring service client source code
 ifneq ($(cdi_sdk_src),)
@@ -402,11 +489,11 @@ endif
 
 # rule to build a .d file from a .c file; relies on vpath to find the source file
 $(build_dir.obj)/%.d : %.c | $(build_dir.obj)
-	$(Q)$(CC) $(CFLAGS) -MM -MF $@ -MT $(patsubst %.d,%.o,$@) $<
+	$(Q)$(CC) $(include_opts.libfabric) $(CFLAGS) -MM -MF $@ -MT $(patsubst %.d,%.o,$@) $<
 
 # rule to build a .o file from a .c file; relies on vpath to find the source file
 $(build_dir.obj)/%.o : %.c | $(build_dir.obj)
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+	$(Q)$(CC) $(include_opts.libfabric) $(CFLAGS) -c -o $@ $<
 
 ifeq ($(require_aws_sdk),yes)
 # Define a dependency to cause the AWS SDK to get built prior to trying to compile cw_metrics.cpp.
@@ -480,7 +567,7 @@ docs_api : $(docs_top_index) | $(build_dir.packages)
 headers : $(headers.cdi)
 	$(Q)for i in $^; do \
 	       echo "compiling $$(basename $$i)"; \
-	       $(CC) $(CFLAGS) $$i; \
+	       $(CC) $(include_opts.libfabric) $(CFLAGS) $$i; \
 	       $(CXX) $(CXXFLAGS) $$i; \
 	    done
 	$(Q)$(RM) $(addsuffix .gch,$+)
@@ -493,8 +580,9 @@ clean ::
 
 cleanall :: clean
 	$(Q)$(RM) -r $(top.libfabric)/build/* $(libfabric_config_h)
+	$(Q)$(RM) -r $(top.libfabric_new)/build/* $(libfabric_new_config_h)
 
-$(depends.cdi) : $(libfabric_config_h) $(aws_h)
+$(depends.cdi) : $(libfabric_config_h) $(libfabric_new_config_h) $(aws_h)
 
 # include dependency rules from generated files; this is conditional so .d files are only created if needed.
 ifneq ($(real_build_goals),)

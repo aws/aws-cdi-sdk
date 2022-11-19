@@ -25,10 +25,53 @@
 #include "private.h"
 
 #include "rdma/fabric.h"
+#include "rdma/fi_cm.h"
+#include "rdma/fi_endpoint.h"
 
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
+
+/**
+ * @brief V-table interface to the libfabric API. This allows multiple versions of libfabric to be used within this SDK.
+ *
+ */
+typedef struct {
+    uint32_t version_major; ///< Statically compiled libfabric major version number.
+    uint32_t version_minor; ///< Statically compiled libfabric minor version number.
+    uint32_t (*fi_version)(void); ///< Pointer to function.
+    struct fi_info* (*fi_allocinfo)(void); ///< Pointer to function.
+    int (*fi_av_insert)(struct fid_av *av, const void *addr, size_t count,
+	                    fi_addr_t *fi_addr, uint64_t flags, void *context); ///< Pointer to function.
+
+    int (*fi_av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
+	                  struct fid_av **av, void *context); ///< Pointer to function.
+    int (*fi_av_remove)(struct fid_av *av, fi_addr_t *fi_addr, size_t count, uint64_t flags); ///< Pointer to function.
+    int (*fi_close)(struct fid *fid); ///< Pointer to function.
+    int (*fi_cq_open)(struct fid_domain *domain, struct fi_cq_attr *attr,
+	                  struct fid_cq **cq, void *context); ///< Pointer to function.
+    ssize_t (*fi_cq_read)(struct fid_cq *cq, void *buf, size_t count); ///< Pointer to function.
+    ssize_t (*fi_cq_readerr)(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags); ///< Pointer to function.
+    int (*fi_domain)(struct fid_fabric *fabric, struct fi_info *info,
+	                 struct fid_domain **domain, void *context); ///< Pointer to function.
+    int (*fi_enable)(struct fid_ep *ep); ///< Pointer to function.
+    int (*fi_endpoint)(struct fid_domain *domain, struct fi_info *info,
+	                   struct fid_ep **ep, void *context); ///< Pointer to function.
+    int (*fi_ep_bind)(struct fid_ep *ep, struct fid *bfid, uint64_t flags); ///< Pointer to function.
+    int (*fi_fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric, void *context); ///< Pointer to function.
+    void (*fi_freeinfo)(struct fi_info *info); ///< Pointer to function.
+    int (*fi_getinfo)(uint32_t version, const char *node, const char *service,
+	                  uint64_t flags, const struct fi_info *hints,
+	                  struct fi_info **info); ///< Pointer to function.
+    int (*fi_getname)(fid_t fid, void *addr, size_t *addrlen); ///< Pointer to function.
+    int (*fi_mr_reg)(struct fid_domain *domain, const void *buf, size_t len,
+	                 uint64_t access, uint64_t offset, uint64_t requested_key,
+	                 uint64_t flags, struct fid_mr **mr, void *context); ///< Pointer to function.
+    void* (*fi_mr_desc)(struct fid_mr *mr); ///< Pointer to function.
+    ssize_t (*fi_recvmsg)(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags); ///< Pointer to function.
+    ssize_t (*fi_sendmsg)(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags); ///< Pointer to function.
+    const char* (*fi_strerror)(int errnum); ///< Pointer to function.
+} LibfabricApi;
 
 /**
  * @brief This defines a structure that contains all of the state information that is specific to the Tx side of a
@@ -36,7 +79,8 @@
  */
 typedef struct {
     CdiSignalType tx_start_signal;           ///< Signal used to wakeup the thread to do work.
-    struct fid_mr* memory_region_ptr;        ///< Pointer to Tx memory region
+    struct fid_mr* tx_user_payload_memory_region_ptr; ///< Pointer to Tx user payload data memory region.
+    struct fid_mr* tx_internal_memory_region_ptr;  ///< Pointer to Tx internal packet header data memory region.
     uint16_t tx_packets_sent_since_flush;    ///< Number of Tx packets that have been sent since last flush.
     /// Number of Tx packets that are in process (sent but haven't received ACK/error response). This member must be
     /// only written in the context of PollThread.
@@ -84,10 +128,16 @@ typedef struct {
     fi_addr_t remote_fi_addr;                 ///< Remote memory address (we don't use so it is always FI_ADDR_UNSPEC)
     volatile bool fabric_initialized;         ///< True of libfabric has been initialized
 
+    /// @brief Key used for memory registration. Must be unique for each fi_mr_reg(). Only used if FI_MR_PROV_KEY for the
+    /// domain is not enabled. Currently, this value is only used by the socket provider.
+    uint64_t mr_key;
+
     uint8_t local_ipv6_gid_array[MAX_IPV6_GID_LENGTH]; ///< Pointer to local device GID for this endpoint.
     uint8_t remote_ipv6_gid_array[MAX_IPV6_GID_LENGTH]; ///< Pointer to remote device GID related to this endpoint.
     int dest_control_port;                    ///< Destination control port. For socket-based we use the next higher
                                               /// port number for the data port.
+    LibfabricApi* libfabric_api_next_ptr;     ///< Pointer to next version of libfabric API V-table to use.
+    LibfabricApi* libfabric_api_ptr;          ///< Pointer to current libfabric API V-table.
 } EfaEndpointState;
 
 /**
@@ -186,8 +236,19 @@ CdiReturnStatus EfaRxPacketPoolCreate(EfaEndpointState* endpoint_state_ptr);
 /**
  * Frees the previously allocated receive packet buffer pool for the endpoint.
  *
- * @param endpoint_ptr Pointer to endpoint state data.
+ * @param endpoint_ptr Pointer to EFA endpoint state data.
  */
 void EfaRxPacketPoolFree(EfaEndpointState* endpoint_ptr);
+
+/**
+ * @brief Set the protocol version for the specified endpoint. The protocol version actually used is negotiated using
+ * the specified remote version and the current version of the CDI-SDK.
+ *
+ * @param endpoint_ptr Pointer to endpoint.
+ * @param remote_version_ptr Pointer to remote protocol version data.
+ *
+ * @return True if successful, otherwise false is returned.
+ */
+bool EfaAdapterEndpointProtocolVersionSet(EfaEndpointState* endpoint_ptr, const CdiProtocolVersionNumber* remote_version_ptr);
 
 #endif // ADAPTER_EFA_H__

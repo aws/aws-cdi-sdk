@@ -70,8 +70,10 @@ bool PayloadInit(CdiConnectionState* con_state_ptr, const CdiSgList* source_sgl_
     CdiPayloadPacketState* packet_state_ptr = &payload_state_ptr->payload_packet_state;
 
     packet_state_ptr->payload_type = kPayloadTypeData;
-    packet_state_ptr->maximum_packet_byte_size = con_state_ptr->adapter_state_ptr->maximum_payload_bytes;
-    packet_state_ptr->maximum_tx_sgl_entries = con_state_ptr->adapter_state_ptr->maximum_tx_sgl_entries;
+    packet_state_ptr->maximum_packet_byte_size =
+        payload_state_ptr->cdi_endpoint_handle->adapter_endpoint_ptr->maximum_payload_bytes;
+    packet_state_ptr->maximum_tx_sgl_entries =
+        payload_state_ptr->cdi_endpoint_handle->adapter_endpoint_ptr->maximum_tx_sgl_entries;
     packet_state_ptr->payload_num = 0;
     packet_state_ptr->packet_sequence_num = 0;
     // NOTE: source_entry_ptr is set below to point to the head of the copy of the SGL.
@@ -129,7 +131,7 @@ void PayloadPacketizerDestroy(CdiPacketizerStateHandle packetizer_state_handle)
 }
 
 bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizerStateHandle packetizer_state_handle,
-                                char* header_ptr, CdiPoolHandle packet_sgl_entry_pool_handle,
+                                char* header_ptr, int header_buffer_size, CdiPoolHandle packet_sgl_entry_pool_handle,
                                 TxPayloadState* payload_state_ptr, CdiSgList* packet_sgl_ptr,
                                 bool* ret_is_last_packet_ptr)
 {
@@ -163,14 +165,13 @@ bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizer
             packetizer_state_ptr->packet_entry_hdr_ptr->internal_data_ptr = NULL;
 
             // Include message prefix buffer space in header part.
-            int msg_prefix_size = payload_state_ptr->cdi_endpoint_handle->adapter_endpoint_ptr->adapter_con_state_ptr->\
-                                  adapter_state_ptr->msg_prefix_size;
+            int msg_prefix_size = payload_state_ptr->cdi_endpoint_handle->adapter_endpoint_ptr->msg_prefix_size;
             packetizer_state_ptr->header_size = msg_prefix_size;
 
             // Initialize the protocol specific packet header data.
             payload_state_ptr->payload_packet_state.packet_id = payload_state_ptr->cdi_endpoint_handle->tx_state.packet_id;
             packetizer_state_ptr->header_size += ProtocolPayloadHeaderInit(protocol_handle,
-                (CdiRawPacketHeader*)(header_ptr + msg_prefix_size), payload_state_ptr);
+                header_ptr + msg_prefix_size, header_buffer_size, payload_state_ptr);
 
             // Setup SGL entry for our header and add it to the packet SGL.
             packetizer_state_ptr->packet_entry_hdr_ptr->address_ptr = header_ptr;

@@ -61,8 +61,10 @@ static bool EfaEnqueueSendProbePacket(ProbeEndpointState* probe_ptr)
 
     // For a EFA probe packet, create a work request and add it to a packet list. The list will be sent to the adapter's
     // endpoint.
+    CdiAdapterState* adapter_state_ptr =
+        (CdiAdapterState*)probe_ptr->app_adapter_endpoint_handle->adapter_con_state_ptr->adapter_state_ptr;
     ProbePacketWorkRequest* work_request_ptr =
-        ProbeControlWorkRequestGet(probe_ptr->efa_work_request_pool_handle);
+        ProbeControlWorkRequestGet(adapter_state_ptr->probe_work_request_pool_handle);
     if (NULL == work_request_ptr) {
         ret = false;
     } else {
@@ -79,8 +81,8 @@ static bool EfaEnqueueSendProbePacket(ProbeEndpointState* probe_ptr)
         work_request_ptr->sgl_entry.address_ptr = packet_ptr->efa_data;
 
         // Set the CDI common header.
-        int msg_prefix_size = probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle->adapter_endpoint_ptr-> \
-                                adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
+        int msg_prefix_size =
+            probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle->adapter_endpoint_ptr->msg_prefix_size;
         CdiRawPacketHeader* header_ptr = (CdiRawPacketHeader*)((char*)packet_ptr->efa_data + msg_prefix_size);
         payload_state.payload_packet_state.payload_type = kPayloadTypeProbe;
         payload_state.payload_packet_state.payload_num = 0;
@@ -88,7 +90,7 @@ static bool EfaEnqueueSendProbePacket(ProbeEndpointState* probe_ptr)
         payload_state.payload_packet_state.packet_id = packet_ptr->packet_sequence_num;
 
         payload_state.source_sgl.total_data_size = EFA_PROBE_PACKET_DATA_SIZE;
-        ProtocolPayloadHeaderInit(protocol_handle, header_ptr, &payload_state);
+        ProtocolPayloadHeaderInit(protocol_handle, header_ptr, sizeof(*header_ptr), &payload_state);
 
         // Set flag to true if last packet of the payload. This is used to decrement tx_in_flight_ref_count when
         // the last packet of a payload is ACKed.
@@ -102,13 +104,13 @@ static bool EfaEnqueueSendProbePacket(ProbeEndpointState* probe_ptr)
     }
 
     // Now that all the work requests have been created, put the list in the adapter's endpoint packet queue.
-    if (kCdiStatusOk != CdiAdapterEnqueueSendPackets(probe_ptr->app_adapter_endpoint_handle, &packet_list)) {
+    if (ret && kCdiStatusOk != CdiAdapterEnqueueSendPackets(probe_ptr->app_adapter_endpoint_handle, &packet_list)) {
         // Put back all the probe control work requests into the pool.
         for (void* item_ptr = CdiSinglyLinkedListPopHead(&packet_list) ; NULL != item_ptr ;
             item_ptr = CdiSinglyLinkedListPopHead(&packet_list)) {
             Packet* packet_ptr = CONTAINER_OF(item_ptr, Packet, list_entry);
             ProbePacketWorkRequest* work_request_ptr = (ProbePacketWorkRequest*)packet_ptr->sg_list.internal_data_ptr;
-            CdiPoolPut(probe_ptr->efa_work_request_pool_handle, work_request_ptr);
+            CdiPoolPut(adapter_state_ptr->probe_work_request_pool_handle, work_request_ptr);
         }
         ret = false;
     }
@@ -180,7 +182,9 @@ void ProbeTxEfaMessageFromEndpoint(void* param_ptr, Packet* packet_ptr, Endpoint
     }
 
     // Put back work request into the pool.
-    CdiPoolPut(probe_ptr->efa_work_request_pool_handle, work_request_ptr);
+    CdiAdapterState* adapter_state_ptr =
+        (CdiAdapterState*)probe_ptr->app_adapter_endpoint_handle->adapter_con_state_ptr->adapter_state_ptr;
+    CdiPoolPut(adapter_state_ptr->probe_work_request_pool_handle, work_request_ptr);
 
     probe_ptr->tx_probe_state.packets_acked_count++;
 
@@ -209,7 +213,6 @@ bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecoded
 {
     bool ret_new_state = false;
     EfaEndpointState* efa_endpoint_state_ptr = (EfaEndpointState*)probe_ptr->app_adapter_endpoint_handle->type_specific_ptr;
-    CdiEndpointHandle cdi_endpoint_handle = probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle;
 
     switch (probe_hdr_ptr->command) {
         case kProbeCommandReset:
@@ -225,7 +228,9 @@ bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecoded
 
             if (NULL == probe_ptr->app_adapter_endpoint_handle->protocol_handle) {
                 // Negotiated protocol version has not been set yet, so do so now.
-                EndpointManagerProtocolVersionSet(cdi_endpoint_handle, &probe_hdr_ptr->senders_version);
+                if (!EfaAdapterEndpointProtocolVersionSet(efa_endpoint_state_ptr, &probe_hdr_ptr->senders_version)) {
+                    break;
+                }
             }
 
             probe_ptr->tx_probe_state.tx_state = kProbeStateResetting;
@@ -282,10 +287,11 @@ bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecoded
                         if (probe_hdr_ptr->senders_version.probe_version_num < 3) {
                             // Remote is using probe version before 3. It does not support the version command. So,
                             // queue endpoint start and advance state to wait for it to complete.
-                            EndpointManagerProtocolVersionSet(cdi_endpoint_handle, &probe_hdr_ptr->senders_version);
-                            EndpointManagerQueueEndpointStart(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle);
-                            probe_ptr->tx_probe_state.tx_state = kProbeStateWaitForStart;
-                            *wait_timeout_ms_ptr = ENDPOINT_MANAGER_COMPLETION_TIMEOUT_MSEC;
+                            if (EfaAdapterEndpointProtocolVersionSet(efa_endpoint_state_ptr, &probe_hdr_ptr->senders_version)) {
+                                EndpointManagerQueueEndpointStart(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle);
+                                probe_ptr->tx_probe_state.tx_state = kProbeStateWaitForStart;
+                                *wait_timeout_ms_ptr = ENDPOINT_MANAGER_COMPLETION_TIMEOUT_MSEC;
+                            }
                         } else {
                             // Remote supports probe later than version 2, so send it our protocol/probe version using a
                             // command that is only supported by probe versions later than 2.
@@ -296,12 +302,13 @@ bool ProbeTxControlProcessPacket(ProbeEndpointState* probe_ptr, const CdiDecoded
                         ret_new_state = true;
                     } else if (kProbeCommandProtocolVersion == packet_ack_ptr->ack_command) {
                         // Got an ACK for a protocol version command. Set protocol version.
-                        EndpointManagerProtocolVersionSet(cdi_endpoint_handle, &probe_hdr_ptr->senders_version);
-                        // Queue endpoint start and advance state to wait for it to complete.
-                        EndpointManagerQueueEndpointStart(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle);
-                        probe_ptr->tx_probe_state.tx_state = kProbeStateWaitForStart;
-                        *wait_timeout_ms_ptr = ENDPOINT_MANAGER_COMPLETION_TIMEOUT_MSEC;
-                        ret_new_state = true;
+                        if (EfaAdapterEndpointProtocolVersionSet(efa_endpoint_state_ptr, &probe_hdr_ptr->senders_version)) {
+                            // Queue endpoint start and advance state to wait for it to complete.
+                            EndpointManagerQueueEndpointStart(probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle);
+                            probe_ptr->tx_probe_state.tx_state = kProbeStateWaitForStart;
+                            *wait_timeout_ms_ptr = ENDPOINT_MANAGER_COMPLETION_TIMEOUT_MSEC;
+                            ret_new_state = true;
+                        }
                     } else if (kProbeCommandPing == packet_ack_ptr->ack_command) {
                         // Got an ACK for a ping command. Drop back to the EFA connected state, which will repeat the
                         // ping process. Setup wait period for next ping based on ping frequency.
@@ -424,12 +431,18 @@ uint64_t ProbeTxControlProcessProbeState(ProbeEndpointState* probe_ptr)
             CDI_LOG_THREAD_COMPONENT(kLogDebug, kLogComponentProbe,
                                      "Probe Tx remote IP[%s:%d] starting the SRD probe process",
                                      remote_ip_str, remote_dest_port);
-            ProbeControlEfaConnectionStart(probe_ptr);
-            probe_ptr->tx_probe_state.packets_enqueued_count = 0; // Initialize counter to start.
-            EfaEnqueueSendProbePacket(probe_ptr);
-            probe_ptr->tx_probe_state.tx_state = kProbeStateEfaProbe;
-            // If the EFA probe does not complete by this timeout, we return back to connection reset state.
-            wait_timeout_ms = EFA_PROBE_MONITOR_TIMEOUT_MSEC;
+
+            if (!ProbeControlEfaConnectionStart(probe_ptr)) {
+                CDI_LOG_THREAD(kLogError, "Starting EFA connection failed during probe. Resetting connection.");
+                probe_ptr->tx_probe_state.tx_state = kProbeStateEfaReset; // Advance to resetting state.
+                wait_timeout_ms = SEND_RESET_COMMAND_FREQUENCY_MSEC;
+            } else {
+                probe_ptr->tx_probe_state.packets_enqueued_count = 0; // Initialize counter to start.
+                EfaEnqueueSendProbePacket(probe_ptr);
+                probe_ptr->tx_probe_state.tx_state = kProbeStateEfaProbe;
+                // If the EFA probe does not complete by this timeout, we return back to connection reset state.
+                wait_timeout_ms = EFA_PROBE_MONITOR_TIMEOUT_MSEC;
+            }
             break;
         case kProbeStateEfaProbe:
             // Got timeout before EFA probe completed. Go to connection reset state.

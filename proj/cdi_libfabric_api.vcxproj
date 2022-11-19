@@ -5,6 +5,10 @@
       <Configuration>Debug_DLL</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug_Unit|x64">
+      <Configuration>Debug_Unit</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
@@ -18,30 +22,49 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\libfabric_api\libfabric_api.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\libfabric_api\libfabric_api.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\libfabric\libfabric.vcxproj">
+      <Project>{6b3a874f-b14c-4f16-b7c3-31e94859ae3e}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
-    <ProjectGuid>{9F3C8A59-CFD1-49AD-BA45-3A128C3250B7}</ProjectGuid>
+    <ProjectGuid>{69F1B479-39AE-449D-99CC-4CB3D3CA5734}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>NotSet</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Unit|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>NotSet</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>NotSet</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
@@ -51,6 +74,9 @@
   <ImportGroup Label="Shared">
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Unit|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'" Label="PropertySheets">
@@ -66,115 +92,90 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Unit|x64'">
+    <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+    <TargetName>$(ProjectName)_unit</TargetName>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'">
     <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+    <LibraryPath>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+    <LibraryPath>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL|x64'">
     <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+    <LibraryPath>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\src\test_common\include;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;..\src\libfabric_api;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Lib>
-      <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <Lib>
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
-    <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
-    <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\src\test_common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Lib>
-      <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <Lib>
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
-    <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Debug\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"</Command>
+      <Command>copy /y $(OutputPath)..\Debug\libfabric.* $(OutputPath)</Command>
     </PostBuildEvent>
+    <Link>
+      <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\src\test_common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;..\src\libfabric_api;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Lib>
-      <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <Lib>
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
-    <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Release\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
-    <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Release\*.dll" "$(OutDir)"</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\src\test_common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\cdi;..\src\cdi\platform;..\src\cdi\platform\include;..\src\common\include;..\..\libfabric\include;..\..\libfabric\include\windows;C:\Program Files %28x86%29\aws-cpp-sdk-all\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Lib>
-      <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntdll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <Lib>
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Release\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Release\*.dll" "$(OutDir)"</Command>
+      <Command>copy /y $(OutputPath)..\Release\libfabric.* $(OutputPath)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClInclude Include="..\include\cdi_test_unit_api.h" />
-    <ClInclude Include="..\src\test_common\include\test_common.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\libfabric\libfabric.vcxproj">
-      <Project>{6b3a874f-b14c-4f16-b7c3-31e94859ae3e}</Project>
-    </ProjectReference>
-    <ProjectReference Include="cdi_sdk.vcxproj">
-      <Project>{41b2b832-0419-4aa6-98cf-5312e8608fa0}</Project>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\src\test_common\src\test_common.c" />
-    <ClCompile Include="..\src\test_unit\test_unit.c" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

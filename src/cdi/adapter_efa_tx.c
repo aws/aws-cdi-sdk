@@ -22,9 +22,6 @@
 #include "private.h"
 #include "cdi_os_api.h"
 
-#include "rdma/fabric.h"
-#include "rdma/fi_endpoint.h"
-
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
@@ -62,15 +59,31 @@ static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec 
         endpoint_state_ptr->tx_state.tx_packets_sent_since_flush = 0; // Reset counter.
     }
 
-    assert(NULL != endpoint_state_ptr->tx_state.memory_region_ptr);
-    void* descs[MAX_TX_SGL_PACKET_ENTRIES];
-    void *desc = fi_mr_desc(endpoint_state_ptr->tx_state.memory_region_ptr);
-    for (int i = 0; i < iov_count; ++i) {
-        descs[i] = desc;
+    assert(NULL != endpoint_state_ptr->tx_state.tx_user_payload_memory_region_ptr);
+    assert(NULL != endpoint_state_ptr->tx_state.tx_internal_memory_region_ptr);
+    void* desc_ptr_array[MAX_TX_SGL_PACKET_ENTRIES];
+    void* hdr_desc_ptr = endpoint_state_ptr->libfabric_api_ptr->fi_mr_desc(
+                            endpoint_state_ptr->tx_state.tx_internal_memory_region_ptr);
+    void* payload_desc_ptr = endpoint_state_ptr->libfabric_api_ptr->fi_mr_desc(
+                                endpoint_state_ptr->tx_state.tx_user_payload_memory_region_ptr);
+
+    // There are two types of adapter packets: user and probe. Probe packets do not use any headers and only use a
+    // single SGL entry for the probe payload data. User packets always contain at least two SGL entries. The first
+    // entry is generated internally by the CDI-SDK and contains a CDI header. The remaining entries are for user
+    // payload data.
+    if (1 == iov_count) {
+        // Only one entry, so probe packet (only contains probe payload data).
+        desc_ptr_array[0] = payload_desc_ptr;
+    } else {
+        // Contains multiple SGL entries, so user packet (contains CDI header and user payload data).
+        for (int i = 0; i < iov_count; ++i) {
+            // First packet uses header memory, rest use payload memory.
+            desc_ptr_array[i] = (0 == i) ? hdr_desc_ptr : payload_desc_ptr;
+        }
     }
     struct fi_msg msg = {
         .msg_iov = msg_iov_ptr,
-        .desc = descs,
+        .desc = desc_ptr_array,
         .iov_count = iov_count,
         .addr = 0,
         .context = (void*)context_ptr,  // cast needed to override constness
@@ -81,7 +94,7 @@ static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec 
     int num_tries = 0;
     ssize_t fi_ret = 0;
     do {
-        fi_ret = fi_sendmsg(endpoint_ptr, &msg, flags);
+        fi_ret = endpoint_state_ptr->libfabric_api_ptr->fi_sendmsg(endpoint_ptr, &msg, flags);
         if (0 == fi_ret || -FI_EAGAIN != fi_ret) {
             break;
         }
@@ -89,7 +102,7 @@ static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec 
 
     if (0 != fi_ret) {
         CDI_LOG_THREAD(kLogError, "Got [%ld (%s)] from fi_sendmsg(), tried [%d] times.",
-            fi_ret, fi_strerror(-fi_ret), num_tries);
+            fi_ret, endpoint_state_ptr->libfabric_api_ptr->fi_strerror(-fi_ret), num_tries);
     }
     return 0 == fi_ret;
 }
@@ -97,6 +110,7 @@ static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec 
 /**
  * Poll libfabric for completion queue events.
  *
+ * @param libfabric_api_ptr Pointer to libfabric V-table API.
  * @param completion_queue_ptr Pointer to libfabric completion queue to poll.
  * @param comp_array Pointer to an array of completion queue data entries which will be filled in for any completion or
  *                   error events read for the endpoint.
@@ -106,12 +120,12 @@ static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec 
  *
  * @return true if zero or more completion events were read, false if an error event was read.
  */
-static bool GetCompletions(struct fid_cq* completion_queue_ptr, struct fi_cq_data_entry* comp_array,
-                           int* packet_ack_count_ptr)
+static bool GetCompletions(LibfabricApi* libfabric_api_ptr, struct fid_cq* completion_queue_ptr,
+                           struct fi_cq_data_entry* comp_array, int* packet_ack_count_ptr)
 {
     bool ret = true;
     const int comp_array_size = *packet_ack_count_ptr;
-    int fi_ret = fi_cq_read(completion_queue_ptr, comp_array, *packet_ack_count_ptr);
+    int fi_ret = libfabric_api_ptr->fi_cq_read(completion_queue_ptr, comp_array, *packet_ack_count_ptr);
     // If the returned value is greater than zero, then the value is the number of completion queue messages that were
     // returned in comp_array. Otherwise a negative value represents an error or -FI_EAGAIN which means no completions
     // were ready.
@@ -122,17 +136,18 @@ static bool GetCompletions(struct fid_cq* completion_queue_ptr, struct fi_cq_dat
         if (fi_ret < 0 && fi_ret != -FI_EAGAIN) {
             // Got one or more errors.
             ret = false;
+            CDI_LOG_THREAD_WHEN(kLogError, true, 1000, "Failed to get completion event. fi_cq_read() failed[%d]", fi_ret);
             if (-FI_EAVAIL == fi_ret) {
                 // Read out completion errors.
                 int i = 0;
                 struct fi_cq_err_entry cq_err = { 0 };
-                while (1 == fi_cq_readerr(completion_queue_ptr, &cq_err, 0)) {
+                while (1 == libfabric_api_ptr->fi_cq_readerr(completion_queue_ptr, &cq_err, 0)) {
                     assert(0 != cq_err.err);
-                    char buf[1024] = { 0 };
+                    //char buf[1024] = { 0 };
                     CDI_LOG_THREAD(kLogError,
-                        "Completion error: [%s][%s]. Ensure outbound security group is properly configured.",
-                        fi_strerror(cq_err.err),
-                        fi_cq_strerror(completion_queue_ptr, cq_err.prov_errno, cq_err.err_data, buf, sizeof(buf)));
+                        "Completion error: [%s]. Ensure outbound security group is properly configured.",
+                        libfabric_api_ptr->fi_strerror(cq_err.err));
+                        //libfabric_api_ptr->fi_cq_strerror(completion_queue_ptr, cq_err.prov_errno, cq_err.err_data, buf, sizeof(buf)));
                     if (NULL != cq_err.op_context) {
                         comp_array[i].op_context = cq_err.op_context;
                         comp_array[i].flags = cq_err.flags;
@@ -149,7 +164,7 @@ static bool GetCompletions(struct fid_cq* completion_queue_ptr, struct fi_cq_dat
                 *packet_ack_count_ptr = i;
             } else {
                 CDI_LOG_THREAD_WHEN(kLogError, true, 1000, "Failed to get completion event. fi_cq_read() failed[%d (%s)]",
-                    fi_ret, fi_strerror(-fi_ret));
+                    fi_ret, libfabric_api_ptr->fi_strerror(-fi_ret));
             }
         }
     }
@@ -171,12 +186,13 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
 
     struct fi_cq_data_entry comp_array[MAX_TX_BULK_COMPLETION_QUEUE_MESSAGES];
     int packet_ack_count = CDI_ARRAY_ELEMENT_COUNT(comp_array);
-    bool status = GetCompletions(efa_endpoint_ptr->completion_queue_ptr, comp_array, &packet_ack_count);
+    bool status = GetCompletions(efa_endpoint_ptr->libfabric_api_ptr, efa_endpoint_ptr->completion_queue_ptr,
+                                 comp_array, &packet_ack_count);
 
     // Capture whether any useful work was done this time.
     ret = packet_ack_count > 0;
 
-    // Account for the packets acknowleged.
+    // Account for the packets acknowledged.
     efa_endpoint_ptr->tx_state.tx_packets_in_process -= packet_ack_count;
 
     // Process any completions that were received.
@@ -310,13 +326,13 @@ CdiReturnStatus EfaTxEndpointStart(EfaEndpointState* endpoint_state_ptr)
     int count = 1;
     uint64_t flags = 0;
     void* context_ptr = NULL;
-    int fi_ret = fi_av_insert(endpoint_state_ptr->address_vector_ptr,
-                              (void*)endpoint_state_ptr->remote_ipv6_gid_array, count,
-                              &endpoint_state_ptr->remote_fi_addr, flags, context_ptr);
+    int fi_ret = endpoint_state_ptr->libfabric_api_ptr->fi_av_insert(endpoint_state_ptr->address_vector_ptr,
+                        (void*)endpoint_state_ptr->remote_ipv6_gid_array, count,
+                        &endpoint_state_ptr->remote_fi_addr, flags, context_ptr);
     if (count != fi_ret) {
         // This is a fatal error.
         CDI_LOG_THREAD(kLogError, "Failed to start Tx connection. fi_av_insert() failed[%d (%s)]",
-            fi_ret, fi_strerror(-fi_ret));
+            fi_ret, endpoint_state_ptr->libfabric_api_ptr->fi_strerror(-fi_ret));
         rs = kCdiStatusFatal;
     }
 
@@ -331,7 +347,8 @@ void EfaTxEndpointStop(EfaEndpointState* endpoint_state_ptr)
     if (endpoint_state_ptr->address_vector_ptr && FI_ADDR_UNSPEC != endpoint_state_ptr->remote_fi_addr) {
         int count = 1;
         uint64_t flags = 0;
-        int ret = fi_av_remove(endpoint_state_ptr->address_vector_ptr, &endpoint_state_ptr->remote_fi_addr, count, flags);
+        int ret = endpoint_state_ptr->libfabric_api_ptr->fi_av_remove(endpoint_state_ptr->address_vector_ptr,
+                        &endpoint_state_ptr->remote_fi_addr, count, flags);
         if (0 != ret) {
             CDI_LOG_THREAD(kLogWarning, "Unexpected return [%d] from fi_av_remove.", ret);
         }

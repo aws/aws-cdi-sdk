@@ -232,6 +232,11 @@ static CdiReturnStatus SocketEndpointOpen(AdapterEndpointHandle endpoint_handle,
 {
     CdiReturnStatus ret = kCdiStatusOk;
 
+    // Provide the number of bytes usable by the connection layer to the connection.
+    endpoint_handle->maximum_payload_bytes = kSocketMtu;
+    endpoint_handle->maximum_tx_sgl_entries = MAX_TX_SGL_PACKET_ENTRIES;
+    endpoint_handle->msg_prefix_size = 0;
+
     // Create an Internet socket which will be used for writing or reading.
     CdiSocket new_socket;
     if (CdiOsSocketOpen(remote_address_str, port_number, bind_address_str, &new_socket)) {
@@ -518,16 +523,6 @@ CdiReturnStatus SocketNetworkAdapterInitialize(CdiAdapterState* adapter_state_pt
     if (kCdiStatusOk == rs) {
         // Set up the virtual function pointer table for this adapter type.
         adapter_state_ptr->functions_ptr = &socket_endpoint_functions;
-        // Provide the number of bytes usable by the connection layer to the connection.
-        adapter_state_ptr->maximum_payload_bytes = kSocketMtu;
-        adapter_state_ptr->maximum_tx_sgl_entries = MAX_TX_SGL_PACKET_ENTRIES;
-        adapter_state_ptr->msg_prefix_size = 0;
-    } else {
-        // Something bad happened--free any resources that were allocated in this function.
-        if (adapter_state_ptr->adapter_data.ret_tx_buffer_ptr) {
-            CdiOsMemFree(adapter_state_ptr->adapter_data.ret_tx_buffer_ptr);
-            adapter_state_ptr->adapter_data.ret_tx_buffer_ptr = NULL;
-        }
     }
 
     return rs;

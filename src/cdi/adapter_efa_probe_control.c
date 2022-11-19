@@ -407,10 +407,15 @@ CDI_THREAD ProbeControlThread(void* ptr)
                     remote_ip_str, remote_port, InternalUtilityKeyEnumToString(kKeyProbeState, control_cmd.probe_state));
                 if (kProbeStateEfaConnected == control_cmd.probe_state) {
                     CdiProtocolHandle protocol_handle = endpoint_ptr->protocol_handle;
-                    CDI_LOG_THREAD(kLogInfo, "Connection established using protocol version[%d.%d.%d].",
+                    EfaEndpointState* efa_endpoint_state_ptr =
+                            (EfaEndpointState*)probe_ptr->app_adapter_endpoint_handle->type_specific_ptr;
+                    uint32_t version = (efa_endpoint_state_ptr->libfabric_api_ptr->fi_version)();
+                    CDI_LOG_THREAD(kLogInfo,
+                            "Connection established using protocol version[%d.%d.%d]. Libfabric[%d.%d]",
                             protocol_handle->negotiated_version.version_num,
                             protocol_handle->negotiated_version.major_version_num,
-                            protocol_handle->negotiated_version.probe_version_num);
+                            protocol_handle->negotiated_version.probe_version_num,
+                            FI_MAJOR(version), FI_MINOR(version));
                 }
 
                 // Set probe state, depending on endpoint direction type.

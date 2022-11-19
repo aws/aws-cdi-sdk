@@ -147,7 +147,7 @@
     </Lib>
     <Link>
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Debug\libfabric.lib;$(OutDir)..\Debug\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Debug\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"</Command>

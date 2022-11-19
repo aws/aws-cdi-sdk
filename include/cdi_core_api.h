@@ -65,19 +65,19 @@
 // scripts to extract version information.
 
 /// @brief CDI version.
-#define CDI_SDK_VERSION             2
+#define CDI_SDK_VERSION             3
 
 /// @brief CDI major version.
-#define CDI_SDK_MAJOR_VERSION       4
+#define CDI_SDK_MAJOR_VERSION       0
 
 /// @brief CDI minor version.
 #define CDI_SDK_MINOR_VERSION       1
 
-/// @brief CDI protcol version.
+/// @brief CDI protocol version.
 #define CDI_PROTOCOL_VERSION             2
 
 /// @brief CDI protocol major version.
-#define CDI_PROTOCOL_MAJOR_VERSION       2
+#define CDI_PROTOCOL_MAJOR_VERSION       3
 
 /// @brief CDI probe command version. Possible value are:
 /// For Protocol version 2.0 (CDI_PROTOCOL_VERSION.CDI_PROTOCOL_MAJOR_VERSION):
@@ -309,6 +309,15 @@ typedef enum {
 
     /// A received payload cannot be read because of format errors.
     kCdiStatusInvalidPayload        = 38,
+
+    /// Failed to dynamically load a shared library.
+    kCdiStatusLibraryLoadFailed     = 39,
+
+    /// Failed to find symbol in dynamically loaded library.
+    kCdiStatusLibrarySymbolNotFound = 40,
+
+    /// Wrong version of dynamically loaded library.
+    kCdiStatusLibraryWrongVersion   = 41,
 } CdiReturnStatus;
 
 /// @brief A structure for holding a PTP timestamp defined in seconds and nanoseconds. This PTP time as defined by

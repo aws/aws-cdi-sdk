@@ -21,9 +21,6 @@
 #include "private.h"
 #include "cdi_os_api.h"
 
-#include "rdma/fi_domain.h"
-#include "rdma/fi_endpoint.h"
-
 //*********************************************************************************************************************
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
@@ -54,7 +51,7 @@ static const int packet_buffer_alignment = 8;
  */
 static bool PostRxBuffer(EfaEndpointState* endpoint_state_ptr, const struct iovec* msg_iov_ptr, bool more_to_post)
 {
-    void *desc = fi_mr_desc(endpoint_state_ptr->rx_state.memory_region_ptr);
+    void *desc = endpoint_state_ptr->libfabric_api_ptr->fi_mr_desc(endpoint_state_ptr->rx_state.memory_region_ptr);
     struct fi_msg msg = {
         .desc = &desc,
         .msg_iov = msg_iov_ptr,
@@ -69,7 +66,7 @@ static bool PostRxBuffer(EfaEndpointState* endpoint_state_ptr, const struct iove
     int num_tries = 0;
     ssize_t fi_ret = 0;
     do {
-        fi_ret = fi_recvmsg(endpoint_state_ptr->endpoint_ptr, &msg, flags);
+        fi_ret = endpoint_state_ptr->libfabric_api_ptr->fi_recvmsg(endpoint_state_ptr->endpoint_ptr, &msg, flags);
         if (0 == fi_ret || -FI_EAGAIN != fi_ret) {
             break;
         }
@@ -77,7 +74,7 @@ static bool PostRxBuffer(EfaEndpointState* endpoint_state_ptr, const struct iove
 
     if (0 != fi_ret) {
         CDI_LOG_THREAD(kLogError, "Got [%ld (%s)] from fi_recvmsg(), tried [%d] times.",
-            fi_ret, fi_strerror(-fi_ret), num_tries);
+            fi_ret, endpoint_state_ptr->libfabric_api_ptr->fi_strerror(-fi_ret), num_tries);
     }
 
     return 0 == fi_ret;
@@ -93,14 +90,14 @@ static bool PostRxBuffer(EfaEndpointState* endpoint_state_ptr, const struct iove
 static bool Poll(EfaEndpointState* efa_endpoint_ptr)
 {
     AdapterEndpointState* aep_ptr = efa_endpoint_ptr->adapter_endpoint_ptr;
-    const size_t msg_prefix_size = aep_ptr->adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
+    const size_t msg_prefix_size = aep_ptr->msg_prefix_size;
 
     struct fi_cq_data_entry comp_array[MAX_RX_BULK_COMPLETION_QUEUE_MESSAGES];
     if (!efa_endpoint_ptr->fabric_initialized) {
         return false; // Libfabric has not been initialized yet, so don't do anything here.
     }
 
-    int fi_ret = fi_cq_read(efa_endpoint_ptr->completion_queue_ptr, &comp_array,
+    int fi_ret = efa_endpoint_ptr->libfabric_api_ptr->fi_cq_read(efa_endpoint_ptr->completion_queue_ptr, &comp_array,
                             MAX_RX_BULK_COMPLETION_QUEUE_MESSAGES);
     // If the returned value is greater than zero, then the value is the number of completion queue messages that
     // were returned in comp_array. If zero is returned, completion queue was empty. Otherwise a negative value
@@ -152,7 +149,8 @@ static bool Poll(EfaEndpointState* efa_endpoint_ptr)
             // EfaRxEndpointOpen().
         }
     } else if (fi_ret < 0 && fi_ret != -FI_EAGAIN) {
-        CDI_LOG_THREAD(kLogError, "Got[%d (%s)] from fi_cq_read().", fi_ret, fi_strerror(-fi_ret));
+        CDI_LOG_THREAD(kLogError, "Got[%d (%s)] from fi_cq_read().", fi_ret,
+                efa_endpoint_ptr->libfabric_api_ptr->fi_strerror(-fi_ret));
     }
     return fi_ret > 0;
 }
@@ -207,9 +205,9 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
                                       & ~(packet_buffer_alignment - 1));
 
         // Register the newly allocated and aligned region with libfabric.
-        int fi_ret = fi_mr_reg(endpoint_state_ptr->domain_ptr, mem_ptr, aligned_packet_size * packet_count,
-                           FI_RECV, 0, 0, 0,
-                           &endpoint_state_ptr->rx_state.memory_region_ptr, NULL);
+        int fi_ret = endpoint_state_ptr->libfabric_api_ptr->fi_mr_reg(endpoint_state_ptr->domain_ptr, mem_ptr,
+                        aligned_packet_size * packet_count, FI_RECV, 0, 0, 0,
+                        &endpoint_state_ptr->rx_state.memory_region_ptr, NULL);
         if (0 == fi_ret) {
             // Give fragments of allocated memory to libfabric for receiving packet data into.
             struct iovec msg_iov = {
@@ -222,11 +220,12 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
                 if (!PostRxBuffer(endpoint_state_ptr, &msg_iov, (i + 1 != packet_count))) {
                     ret = false;
                 }
-                mem_ptr += aligned_packet_size;
+                mem_ptr = mem_ptr + aligned_packet_size;
             }
         } else {
             CDI_LOG_THREAD(kLogError, "Libfabric failed to register allocated aligned memory [%d (%s)]. This could be "
-                           "caused by insufficient ulimit locked memory.", fi_ret, fi_strerror(-fi_ret));
+                           "caused by insufficient ulimit locked memory.", fi_ret,
+                           endpoint_state_ptr->libfabric_api_ptr->fi_strerror(-fi_ret));
         }
     }
 
@@ -255,9 +254,10 @@ static void FreePacketPool(EfaEndpointState* endpoint_state_ptr)
 {
     if (NULL != endpoint_state_ptr->rx_state.allocated_buffer_ptr) {
         // Unregister the region from libfabric.
-        int rs = fi_close(&endpoint_state_ptr->rx_state.memory_region_ptr->fid);
+        int rs = endpoint_state_ptr->libfabric_api_ptr->fi_close(&endpoint_state_ptr->rx_state.memory_region_ptr->fid);
         if (0 != rs) {
-            CDI_LOG_THREAD(kLogError, "Got[%d (%s)] from fi_flose().", rs, fi_strerror(-rs));
+            CDI_LOG_THREAD(kLogError, "Got[%d (%s)] from fi_flose().", rs,
+                endpoint_state_ptr->libfabric_api_ptr->fi_strerror(-rs));
         }
 
         if (endpoint_state_ptr->rx_state.allocated_buffer_was_from_heap) {
@@ -346,10 +346,9 @@ CdiReturnStatus EfaRxEndpointRxBuffersFree(const AdapterEndpointHandle handle, c
     EfaEndpointState* endpoint_state_ptr = (EfaEndpointState*)adapter_endpoint_ptr->type_specific_ptr;
     CdiReturnStatus rs = kCdiStatusOk;
 
-    const size_t msg_prefix_size = adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
+    const size_t msg_prefix_size = adapter_endpoint_ptr->msg_prefix_size;
     struct iovec msg_iov = {
-        .iov_len = adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->maximum_payload_bytes +
-                   msg_prefix_size
+        .iov_len = adapter_endpoint_ptr->maximum_payload_bytes + msg_prefix_size
     };
 
     // Free SGL data buffers and SGL entries.
@@ -382,10 +381,8 @@ CdiReturnStatus EfaRxPacketPoolCreate(EfaEndpointState* endpoint_state_ptr)
 
     int reserve_packets =
         endpoint_state_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->rx_state.reserve_packet_buffers;
-    int max_payload_size =
-        endpoint_state_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->maximum_payload_bytes;
-    size_t msg_prefix_size =
-        endpoint_state_ptr->adapter_endpoint_ptr->adapter_con_state_ptr->adapter_state_ptr->msg_prefix_size;
+    int max_payload_size = endpoint_state_ptr->adapter_endpoint_ptr->maximum_payload_bytes;
+    size_t msg_prefix_size = endpoint_state_ptr->adapter_endpoint_ptr->msg_prefix_size;
     if (!CreatePacketPool(endpoint_state_ptr, max_payload_size + msg_prefix_size, reserve_packets)) {
         rs = kCdiStatusNotEnoughMemory;
     }

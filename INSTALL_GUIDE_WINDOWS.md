@@ -6,6 +6,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
 ---
 
 - [Windows Installation Guide](#windows-installation-guide)
+- [Upgrading from previous releases](#upgrading-from-previous-releases)
 - [Create an EFA enabled instance](#create-an-efa-enabled-instance)
 - [Connecting to Windows and activating](#connecting-to-windows-and-activating)
 - [Install the Windows EFA driver](#install-the-windows-efa-driver)
@@ -28,6 +29,13 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
 
 ---
 
+# Upgrading from previous releases
+
+**Upgrading from CDI SDK 2.3 or earlier**
+
+* Must download and install a second version of libfabric. This includes renaming the new libfabric's Visual Studio project files. See steps in the libfabric section of [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
+
+---
 # Create an EFA enabled instance
 
 Follow the steps in [create an EFA-enabled instance](README.md#create-an-efa-enabled-instance).
@@ -187,28 +195,32 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
 
 **Note**: **Windows PowerShell** and [git for windows](https://git-scm.com/download/win) may be used to acquire source repositories while following the steps outlined in the Linux installation guide, or the code may be downloaded directly from zip archives.
 
-1. Clone (or download) the **libfabric** repo as described in [linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk)
+1. Clone (or download) the **libfabric** repos as described in [linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk)
 
-1. Place the **libfabric** folder is at the same directory level as the **aws-cdi-sdk** folder.
-
-1. Clone (or download) the PDCurses GitHub repo linked at [PDCurses](https://pdcurses.org/).
+   - Place the **libfabric** and **libfabric_new** folders at the same directory level as the **aws-cdi-sdk** folder.
+   - In the **libfabric_new** folder, rename the **libfabric.vcxproj**, **libfabric_new.vcxproj.filters** and **libfabric_new.vcxproj.user** files to use **libfabric_new** instead of **libfabric**. This is done for several reasons. The AWS CDI SDK solution file uses them as a project source and linking to the generated libraries. It also provides a clear identification of the libfabric versions while using the AWS CDI SDK solution in Visual Studio.
+2. Follow the Windows instructions to install [Network Direct SPI](https://github.com/ofiwg/libfabric#windows-instructions). Extract the header files from the downloaded NetworkDirect_DDK.zip and copy them from **NetDirect\include** to **libfabric_new\prov\netdir\NetDirect**.
+3. Clone the Windows RDMA repo linked at [Windows RDMA - TODO](https://TODO/). Place the **rdmawin** folder at the same directory level as the **aws-cdi-sdk** folder.
+4. Clone (or download) the PDCurses GitHub repo linked at [PDCurses](https://pdcurses.org/).
 
     **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
 
-1. Place the **PDCurses** folder at the same level as the **aws-cdi-sdk** and **libfabric** folders.
+5. Place the **PDCurses** folder at the same level as the **aws-cdi-sdk** and **libfabric** folders.
 
 The **<install_dir>** should now contain the folder hierarchy as shown below:
 
    ```
    <install_dir>\aws-cdi-sdk
    <install_dir>\libfabric
+   <install_dir>\libfabric_new
    <install_dir>\PDCurses
+   <install_dir>\rdmawin
    ```
 
 
 The **proj** directory contains the Visual Studio project solution for Windows development.
 
-- The solution file builds the AWS CDI SDK static library, ```cdi_sdk.lib```, and the test applications ```cdi_test.exe```, ```cdi_test_min_tx.exe``` and ```cdi_test_min_rx.exe```.
+- The solution file builds the AWS CDI SDK library, ```cdi_sdk.lib``` or ```cdi_sdk.dll```, including its dependencies, ```libfabric.dll```, ```libfabric_new.dll```, ```cdi_libfabric_api.lib```, ```cdi_libfabric_new_api.lib```, and the test applications ```cdi_test.exe```, ```cdi_test_min_tx.exe``` and ```cdi_test_min_rx.exe```.
 - For detailed folder descriptions, refer to the descriptions in the [Linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk).
 
 ---
@@ -239,7 +251,9 @@ The **proj** directory contains the Visual Studio project solution for Windows d
    <install_dir>\aws-cdi-sdk
    <install_dir>\aws-sdk-cpp
    <install_dir>\libfabric
+   <install_dir>\libfabric_new
    <install_dir>\PDCurses
+   <install_dir>\windrma
    ```
 
 1. Copy the AWS CDI SDK files required by ```AWS SDK for C++``` to the proper location.
@@ -277,9 +291,9 @@ The extracted AWS CDI SDK solution, cdi_proj.sln, contains three test applicatio
 This procedure builds the entire AWS CDI SDK solution in a Debug configuration.
 
 1. Use Microsoft Visual Studio 2019 and open the *cdi_proj.sln* solution file found at ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
-1. Choose a configuration. For this example, choose **Debug**.
-1. Clean the solution each time a configuration is changed by selecting: **Build** > **Clean Solution**.
-1. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications. NOTE: The test applications are only configured to use static libraries, so must use **Debug** or **Release** configurations when building them.
+1. Choose a configuration. For this example, choose **Debug**. **Note**: To use a DLL configuration, the equivalent **Debug** or **Release** configuration must be build first.
+1. When switching between debug and release configurations, clean the solution by selecting: **Build** > **Clean Solution**.
+1. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications. **Note**: The test applications are only configured to use static libraries, so must use **Debug** or **Release** configurations when building them.
 1. Choose the application to run. By default, the *cdi_test* application runs. To select another application, right-click on the target application and choose **Set as Startup Project** for the application you want to run.
 
 ## (Optional) Disable the display of performance metrics to your Amazon CloudWatch account

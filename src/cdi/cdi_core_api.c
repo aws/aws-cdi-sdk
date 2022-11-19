@@ -222,6 +222,9 @@ const char* CdiCoreStatusToString(CdiReturnStatus status)
         { kCdiStatusRxPayloadBackPressure, "Rx back pressure"               },
         { kCdiStatusDuplicateBaselineVersion, "baseline version already registered"},
         { kCdiStatusInvalidPayload,        "payload not readable"           },
+        { kCdiStatusLibraryLoadFailed,     "Library load failed"            },
+        { kCdiStatusLibrarySymbolNotFound, "Library symbol not found"       },
+        { kCdiStatusLibraryWrongVersion,   "Wrong library version"          },
         { CDI_INVALID_ENUM_VALUE,          "<invalid>"                      },
     };
 

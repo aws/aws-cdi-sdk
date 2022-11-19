@@ -49,7 +49,7 @@
  *
  * 4. Once the transmitter has received the ACK for a reset request, for non-legacy probe protocols the receiver's probe
  *    protocol version is evaluated as described below:
-*
+ *
  *      If the probe protocol version is 3 or greater, then the state advances to #kProbeStateSendProtocolVersion and
  *      the #kProbeCommandProtocolVersion command is sent to the receiver. After the transmitter receives the ACK for
  *      #kProbeCommandProtocolVersion, it sets its negotiated CDI-SDK and probe protocol version. Otherwise, the
@@ -160,16 +160,6 @@ CdiReturnStatus ProbeEndpointCreate(AdapterEndpointHandle app_adapter_endpoint_h
     }
 
     if (kCdiStatusOk == rs) {
-        // ProbePacketWorkRequests are used for sending the probe packets which go through the EFA.
-        if (!CdiPoolCreate("Send EFA ProbePacketWorkRequest Pool", EFA_PROBE_PACKET_COUNT,
-                           NO_GROW_SIZE, NO_GROW_COUNT,
-                           sizeof(ProbePacketWorkRequest), true, // true= Make thread-safe
-                           &probe_ptr->efa_work_request_pool_handle)) {
-            rs = kCdiStatusAllocationFailed;
-        }
-    }
-
-    if (kCdiStatusOk == rs) {
         // Start the thread which will service items from the queue.
         if (!CdiOsThreadCreate(ProbeControlThread, &probe_ptr->probe_thread_id, "EfaProbe", probe_ptr,
                                app_adapter_endpoint_handle->start_signal)) {
@@ -247,7 +237,7 @@ CdiReturnStatus ProbeEndpointStart(ProbeEndpointHandle handle)
 void ProbeEndpointReset(ProbeEndpointHandle handle)
 {
     ProbeEndpointState* probe_ptr = (ProbeEndpointState*)handle;
-    CdiPoolPutAll(probe_ptr->efa_work_request_pool_handle);
+    (void)probe_ptr;
 }
 
 void ProbeEndpointStop(ProbeEndpointHandle handle)
@@ -281,12 +271,6 @@ void ProbeEndpointDestroy(ProbeEndpointHandle handle)
 
         CdiOsCritSectionDelete(probe_ptr->ack_lock);
         probe_ptr->ack_lock = NULL;
-
-        // NOTE: The SGL entries in this pool are stored within the pool buffer, so no additional resource freeing needs
-        // to be done here.
-        CdiPoolPutAll(probe_ptr->efa_work_request_pool_handle);
-        CdiPoolDestroy(probe_ptr->efa_work_request_pool_handle);
-        probe_ptr->efa_work_request_pool_handle = NULL;
 
         ProtocolVersionDestroy(probe_ptr->protocol_handle_sdk);
         probe_ptr->protocol_handle_sdk = NULL;
