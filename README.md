@@ -339,6 +339,9 @@ Also, ensure that the traffic is not being blocked by network ACLs. The network 
 
 ## CDI enabled application only works when run as root
 
+**Note**
+> This issue is now handled automatically by `efa-config v1.12` or newer package within the `efa-installer v1.21` or newer installer. A file is now created here: `/etc/systemd/system.conf.d/01-efa.conf` containing these limits. Ensure you reboot to take effect.
+
 The ```efa-config``` package which is part of the ```efa-installer```, automates the deployment of required ulimits to ```/etc/security/limits.d/01_efa.comf```. However these system-wide ulimits are ignored if the CDI-SDK integrated application is invoked within a GUI (instead of SSH/daemon) on Linux, as the DM (DisplayManager) is owned by ```systemd``` which has its own ulimits at system and user level. The solution is to apply the identical ulimits at the ```systemd``` **system** level only. The ```efa-config``` package may automate this fix in the future. In the example below, we apply the required ulimits at the ```systemd``` **system** level for all users.
 
 ```bash
