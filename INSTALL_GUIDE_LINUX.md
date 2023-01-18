@@ -63,15 +63,23 @@ Installation of dependent packages is required before building the AWS CDI SDK:
 
     ```bash
     sudo yum update -y
-    sudo yum -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel unzip
+    sudo yum -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel unzip git
     ```
+
+- Rocky Linux 8:
+
+  ```bash
+  sudo dnf update -y
+  sudo dnf config-manager --set-enabled powertools
+  sudo dnf -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel unzip git
+  ```
 
 - Ubuntu:
 
     ```bash
     sudo apt update
     sudo apt-get upgrade -y
-    sudo apt-get -y install build-essential libncurses-dev autoconf automake libtool cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev unzip
+    sudo apt-get -y install build-essential libncurses-dev autoconf automake libtool cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev unzip git
     ```
 
 # Install AWS CDI SDK

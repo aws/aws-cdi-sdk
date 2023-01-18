@@ -117,12 +117,13 @@
 /// NOTE: This value must be a power of two because it is used to mask the MSBs of array indices. @see RxPacketReceive
 #define CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION  (32)
 
-/// @brief Define to limit the max number of payloads that can arrive out of order and be put back in order. Value must
-/// be a power of 2.
-#define CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER          (4096)
+/// @brief Define the size of the Rx payload buffer used to hold out of order payloads. Value must be a power of 2.
+/// Sized to allow receive of 4K RGB 4:4:4 12 bit.
+#define CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER          (8192)
 
 /// @brief Define to limit the max number packets of that can arrive out of order and be put back in order.
-#define CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW           (4000)
+/// Sized to allow receive of 4K RGB 4:4:4 12 bit.
+#define CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW           (5000)
 
 /// @brief Maximum connection name string length.
 #define CDI_MAX_CONNECTION_NAME_STRING_LENGTH           (128)

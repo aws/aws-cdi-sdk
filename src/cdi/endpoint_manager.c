@@ -1253,25 +1253,20 @@ bool EndpointManagerPoll(CdiEndpointHandle* handle_ptr)
     CdiEndpointHandle handle = *handle_ptr;
     EndpointManagerState* mgr_ptr = handle->connection_state_ptr->endpoint_manager_handle;
 
-    // Don't destroy endpoints while waiting for commands to be done
-    // executing, as we may never poll out of that state otherwise if the
-    // endpoint we destroyed was the one processing the command.
-    if (!mgr_ptr->poll_thread_waiting) {
-        // If any endpoints need to be destroyed, do so now.
-	bool destroyed = false;
-	CdiEndpointHandle destroy_endpoint_handle = NULL;
-	while (CdiQueuePop(mgr_ptr->destroy_endpoint_queue_handle, &destroy_endpoint_handle)) {
-	    // Destroy the endpoint.
-	    if (handle == destroy_endpoint_handle) {
-	        do_poll = false; // Endpoint is being destroyed, so don't use it anymore.
-	        get_first = true;
-	    }
-	    DestroyEndpoint(destroy_endpoint_handle);
-	    destroyed = true;
-	}
-	if (destroyed) {
-	    CdiOsSignalSet(mgr_ptr->endpoints_destroyed_signal);
-	}
+    // If any endpoints need to be destroyed, do so now.
+    bool destroyed = false;
+    CdiEndpointHandle destroy_endpoint_handle = NULL;
+    while (CdiQueuePop(mgr_ptr->destroy_endpoint_queue_handle, &destroy_endpoint_handle)) {
+        // Destroy the endpoint.
+        if (handle == destroy_endpoint_handle) {
+            do_poll = false; // Endpoint is being destroyed, so don't use it anymore.
+            get_first = true;
+        }
+        DestroyEndpoint(destroy_endpoint_handle);
+        destroyed = true;
+    }
+    if (destroyed) {
+        CdiOsSignalSet(mgr_ptr->endpoints_destroyed_signal);
     }
 
     if (do_poll && mgr_ptr->thread_done) {

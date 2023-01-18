@@ -4,7 +4,7 @@ This file is part of the AWS CDI-SDK, licensed under the BSD 2-Clause "Simplifie
 License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
-CDI (Cloud Digital Interface) SDK Version 3.0.0 - TBD
+CDI (Cloud Digital Interface) SDK Version 3.0.0 - 01/18/2023
 
 What's New
 ------------
@@ -35,8 +35,7 @@ Bug Fixes
 ------------
 * Fixed issues causing false disconnects related to the out-of-band Tx/Rx ping (keep-alive) mechanism that ensures a
   Tx/Rx connection remains valid.
-* Fixed bug in CdiQueuePushWaitMultiple(). See changes in queue.c and cdi_queue_api.h. Details in GitHub Issue #76 at
-  https://github.com/aws/aws-cdi-sdk/issues/76
+* Fixed bug in CdiQueuePushWaitMultiple(). See changes in queue.c and cdi_queue_api.h. Details in GitHub Issue #76.
 * Fixed problems with the test application that were identified in GitHub Issue #82.
 
 ---------------------------------------------------------------------------
