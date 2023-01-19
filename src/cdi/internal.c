@@ -257,14 +257,14 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
 
     if (cdi_global_context.sdk_initialized) {
         SDK_LOG_GLOBAL(kLogError, "SDK Already initialized.");
-        rs = kCdiStatusNonFatal;
+        CdiOsStaticMutexUnlock(global_context_mutex_lock);
+        return kCdiStatusNonFatal; // Since we are at the top of this function, go ahead and cleanly exit here.
     }
 
-    if (kCdiStatusOk == rs) {
-        // Create a critical section used to protect access to connection_list.
-        if (!CdiOsCritSectionCreate(&cdi_global_context.adapter_handle_list_lock)) {
+    // Create a critical section used to protect access to connection_list.
+    if (kCdiStatusOk == rs &&
+        !CdiOsCritSectionCreate(&cdi_global_context.adapter_handle_list_lock)) {
             rs = kCdiStatusNotEnoughMemory;
-        }
     }
 
     if (kCdiStatusOk == rs) {
@@ -272,21 +272,19 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
     }
 
     // Ensure the logger has been initialized.
-    if (!CdiLoggerInitialize()) {
+    if (kCdiStatusOk == rs && !CdiLoggerInitialize()) {
         rs = kCdiStatusFatal;
     }
 
-    if (kCdiStatusOk == rs) {
-        if (!CdiLoggerCreate(core_config_ptr->default_log_level, &cdi_global_context.logger_handle)) {
-            rs = kCdiStatusFatal;
-        }
+    if (kCdiStatusOk == rs &&
+        !CdiLoggerCreate(core_config_ptr->default_log_level, &cdi_global_context.logger_handle)) {
+        rs = kCdiStatusFatal;
     }
 
-    if (kCdiStatusOk == rs) {
-        if (!CdiLoggerCreateLog(cdi_global_context.logger_handle, NULL, core_config_ptr->global_log_method_data_ptr,
-                                &cdi_global_context.global_log_handle)) {
-            rs = kCdiStatusCreateLogFailed;
-        }
+    if (kCdiStatusOk == rs &&
+        !CdiLoggerCreateLog(cdi_global_context.logger_handle, NULL, core_config_ptr->global_log_method_data_ptr,
+                            &cdi_global_context.global_log_handle)) {
+        rs = kCdiStatusCreateLogFailed;
     }
 
     // If CloudWatch pointer exists, set pointer to point to a copy of the settings and then save a copy of the
@@ -340,20 +338,19 @@ CdiReturnStatus CdiGlobalInitialization(const CdiCoreConfigData* core_config_ptr
     }
 #endif  // METRICS_GATHERING_SERVICE_ENABLED
 
-    if (kCdiStatusOk == rs) {
-        // Create signal for shutting down global threads.
-        if (!CdiOsSignalCreate(&cdi_global_context.shutdown_signal)) {
-            rs = kCdiStatusNotEnoughMemory;
-        }
+    // Create signal for shutting down global threads.
+    if (kCdiStatusOk == rs && !CdiOsSignalCreate(&cdi_global_context.shutdown_signal)) {
+        rs = kCdiStatusNotEnoughMemory;
     }
 
     // Start the system monitor thread.
-    if (!CdiOsThreadCreate(SystemMonitorThread, &cdi_global_context.system_monitor_thread_id, "SystemMonitor",
+    if (kCdiStatusOk == rs &&
+        !CdiOsThreadCreate(SystemMonitorThread, &cdi_global_context.system_monitor_thread_id,
+                           "SystemMonitor",
                            NULL,
                            NULL)) { // NULL= Start thread immediately.
         rs = kCdiStatusNotEnoughMemory;
     }
-
 
     if (kCdiStatusOk == rs) {
         cdi_global_context.sdk_initialized = true;
