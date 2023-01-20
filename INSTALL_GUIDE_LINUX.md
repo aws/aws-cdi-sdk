@@ -181,6 +181,7 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
         - Put in a **Group name** for the new group and select the policies for the group.
             - Select the policy that was made in the step above for CloudWatch access.
             - Select **CloudWatchAgentServerPolicy** to provide CloudWatch access.
+            - In order for the AWS CDI SDK to be able to connect to the performance metrics service, you must also add mediaconnect:PutMetricGroups permission. Note: This may result in a warning, which can be ignored.
             - Select **Create group**
                 - Select **Next:Tags** the select **Next:Review**.
                 - Select **Create user**
