@@ -4,7 +4,7 @@ This file is part of the AWS CDI-SDK, licensed under the BSD 2-Clause "Simplifie
 License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
-CDI (Cloud Digital Interface) SDK Version 3.0.0 - 01/18/2023
+CDI (Cloud Digital Interface) SDK Version 3.0.0 - 01/20/2023
 
 What's New
 ------------
@@ -12,7 +12,7 @@ What's New
 * NOTE: Additional third-party library source code for libfabric (ie. libfabric_new) and the latest version of the EFA
   driver MUST be downloaded and installed in order to use this version of the SDK. Refer to the install guides for
   details.
-* Added use of latest version of libfabric, which eliminates a memory copy of each adapter packet from the adapter
+* Added use of post 1.9.x version of libfabric, which eliminates a memory copy of each adapter packet from the adapter
   packet buffer into the application buffer. Backwards compatiblity with previous versions of the CDI SDK is maintained
   by allowing the CDI SDK to access either libfabric 1.9 or the new version. This decision is made as part of the
   existing protocol negotiation process between a transmitter and receiver.
