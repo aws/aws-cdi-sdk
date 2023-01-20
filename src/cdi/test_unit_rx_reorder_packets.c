@@ -131,7 +131,8 @@ CdiReturnStatus TestUnitRxReorderPackets(void)
                     k++;
                 }
             }
-            total_header_size += ProtocolPayloadHeaderInit(protocol_handle, &common_hdr_pool[i], &payload_state);
+            total_header_size += ProtocolPayloadHeaderInit(protocol_handle, &common_hdr_pool[i],
+                                                           sizeof(common_hdr_pool[i]), &payload_state);
         }
 
         int packet_data_size = 1; // Packets must have a least 1 byte of payload data to be considered valid.
@@ -166,7 +167,8 @@ CdiReturnStatus TestUnitRxReorderPackets(void)
 
                 payload_state.payload_packet_state.packet_sequence_num = 0;
                 payload_state.source_sgl.total_data_size = total_payload_size;
-                int header_size = ProtocolPayloadHeaderInit(protocol_handle, &header_zero, &payload_state);
+                int header_size = ProtocolPayloadHeaderInit(protocol_handle, &header_zero, sizeof(header_zero),
+                                                            &payload_state);
 
                 sgl_entry_ptr->address_ptr = &header_zero;
                 sgl_entry_ptr->size_in_bytes = header_size+packet_data_size;

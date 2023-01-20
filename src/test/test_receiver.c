@@ -434,7 +434,7 @@ static void TestRxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr,
         // into local variables.
         int rx_connection = (int)(core_cb_data_ptr->core_extra_data.payload_user_data & 0xFF);
         int rx_payload_counter_8bit = (int)(core_cb_data_ptr->core_extra_data.payload_user_data >> 8) & 0xFF;
-        int rx_stream_id = (int16_t)((core_cb_data_ptr->core_extra_data.payload_user_data >> 16) & 0xFFFF);
+        int rx_stream_id = (int)(int16_t)((core_cb_data_ptr->core_extra_data.payload_user_data >> 16) & 0xFFFF);
         int rx_ptp_rate_num = (int)(core_cb_data_ptr->core_extra_data.payload_user_data >> 32);
         (void)rx_connection;
 
@@ -1107,7 +1107,6 @@ CDI_THREAD TestRxCreateThread(void* arg_ptr)
     connection_info_ptr->config_data.rx.stats_cb_ptr = TestStatisticsCallback;
     connection_info_ptr->config_data.rx.stats_user_cb_param = connection_info_ptr;
 
-    // Create a FIFO instance for the callback routine to pass SGL pointers to the checking thread.
     // Create a FIFO instance for the callback routine to pass SGL pointers to the checking thread.
     if (!got_error) {
         got_error = !CdiFifoCreate("TestRxPayloadState FIFO", CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION*10,

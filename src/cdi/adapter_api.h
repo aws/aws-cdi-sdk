@@ -145,6 +145,20 @@ struct AdapterEndpointState {
     /// packets of a payload have been ACKed.
     uint32_t tx_in_flight_ref_count;
 
+    /// @brief The maximum number of bytes that can be sent in a packet through this connection. The number is computed
+    /// by subtracting the number of bytes required for transmitting a packet through the medium supported by the
+    /// connection from the maximum number of bytes in a packet on the medium. In other words, this is the maximum
+    /// number of bytes that the scatter-gather list provided to CdiAdapterSendPacket() can contain.
+    int maximum_payload_bytes;
+
+    /// @brief The maximum number of SGL entries that can be used to represent a single Tx packet of data.
+    int maximum_tx_sgl_entries;
+
+    /// @brief The size of any required message prefix buffer space that an application must provide in front of all
+    /// message send and receive buffers for use by the provider. The contents of the prefix space should
+    /// be treated as opaque. This will be zero for providers that don't support prefix mode.
+    int msg_prefix_size;
+
     void* type_specific_ptr; ///< Adapter specific endpoint data.
 };
 
@@ -281,6 +295,22 @@ struct AdapterConnectionState {
 
     CdiSignalType shutdown_signal; ///< Signal used to shutdown adapter connection threads.
 
+    /// @brief If true, tx_header_buffer_allocated_ptr is using hugepages, otherwise it is using heap memory.
+    bool tx_header_buffer_is_hugepages;
+
+    /// @brief Size in bytes of Tx payload buffer allocated. Pointer to allocated buffer is in tx_buffer_allocated_ptr.
+    uint64_t tx_header_buffer_allocated_size;
+
+    /// @brief Pointer to start of the allocated transmit buffers used by Tx probe packets, Tx headers and Tx extra
+    /// headers. Total allocated size is in tx_buffer_allocated_size.
+    void* tx_header_buffer_allocated_ptr;
+
+    /// Valid if direction supports transmit. Memory pool of Tx headers for packets (TxPacketHeader).
+    CdiPoolHandle tx_header_pool_handle;
+
+    /// Valid if direction supports transmit. Memory pool of Tx extra headers for packets (TxExtraPacketHeader).
+    CdiPoolHandle tx_extra_header_pool_handle;
+
     ControlInterfaceHandle control_interface_handle; ///< Handle of control interface for the connection.
 
     CdiCsID endpoint_lock; ///< Lock used to protect access to endpoint resources.
@@ -384,26 +414,24 @@ struct CdiAdapterState {
     /// @brief Data specific to the type of underlying adapter.
     void* type_specific_ptr;
 
-    /// @brief The maximum number of bytes that can be sent in a packet through this adapter. The number is computed by
-    /// subtracting the number of bytes required for transmitting a packet through the medium supported by the adapter
-    /// from the maximum number of bytes in a packet on the medium. In other words, this is the maximum number of bytes
-    /// that the scatter-gather list provided to CdiAdapterSendPacket() can contain.
-    int maximum_payload_bytes;
+    /// @brief If true, tx_payload_buffer_allocated_ptr is using hugepages, otherwise it is using heap memory.
+    bool tx_payload_buffer_is_hugepages;
 
-    /// @brief The maximum number of SGL entries that can be used to represent a single Tx packet of data.
-    int maximum_tx_sgl_entries;
+    /// @brief User configured size in bytes of a memory region for holding payload data to transmit. Actual allocated
+    /// size is in tx_buffer_allocated_size.
+    uint64_t tx_payload_buffer_size_bytes;
 
-    /// @brief The size of any required message prefix buffer space that an application must provide in front of all
-    /// message send and receive buffers for use by the provider. The contents of the prefix space should
-    /// be treated as opaque. This will be zero for providers that don't support prefix mode.
-    int msg_prefix_size;
+    /// @brief Size in bytes of Tx payload buffer allocated. Pointer to allocated buffer is in
+    /// tx_payload_buffer_allocated_ptr. NOTE: The allocation may be larger than requested, due to rounding.
+    uint64_t tx_payload_buffer_allocated_size;
 
-    /// @brief If true, tx_buffer_ptr is using hugepages, otherwise it is using heap memory.
-    bool tx_buffer_is_hugepages;
+    /// @brief Pointer to start of the allocated transmit buffer. The buffer is available for the application. As part
+    /// of adapter initialization, this value is returned in CdiAdapterData.ret_tx_buffer_ptr. Total allocated size is
+    /// in tx_buffer_allocated_size.
+    void* tx_payload_buffer_allocated_ptr;
 
-    /// @brief Size in bytes of Tx payload buffer allocated. Pointer to buffer is in CdiAdapterData.ret_tx_buffer_ptr.
-    /// NOTE: The allocation may be larger than requested, due to rounding.
-    uint64_t tx_buffer_allocated_size;
+    /// Memory pool of Tx EFA probe packet work requests (ProbePacketWorkRequest).
+    CdiPoolHandle probe_work_request_pool_handle;
 };
 
 /**

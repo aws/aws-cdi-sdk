@@ -42,7 +42,7 @@ typedef struct {
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
 
-/// @brief Array of baseline profiles, with version and v-tables for each one. Indexed by profile type.
+/// @brief Array of baseline profiles, with version and V-tables for each one. Indexed by profile type.
 static BaselineProfileData baseline_profile_array[CDI_BASELINE_AVM_PAYLOAD_TYPE_ENUM_COUNT][PROFILES_MAX] = {0};
 
 /// @brief Array of number of profiles for each profile type.

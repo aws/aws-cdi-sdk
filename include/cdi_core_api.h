@@ -65,19 +65,19 @@
 // scripts to extract version information.
 
 /// @brief CDI version.
-#define CDI_SDK_VERSION             2
+#define CDI_SDK_VERSION             3
 
 /// @brief CDI major version.
-#define CDI_SDK_MAJOR_VERSION       4
+#define CDI_SDK_MAJOR_VERSION       0
 
 /// @brief CDI minor version.
 #define CDI_SDK_MINOR_VERSION       1
 
-/// @brief CDI protcol version.
+/// @brief CDI protocol version.
 #define CDI_PROTOCOL_VERSION             2
 
 /// @brief CDI protocol major version.
-#define CDI_PROTOCOL_MAJOR_VERSION       2
+#define CDI_PROTOCOL_MAJOR_VERSION       3
 
 /// @brief CDI probe command version. Possible value are:
 /// For Protocol version 2.0 (CDI_PROTOCOL_VERSION.CDI_PROTOCOL_MAJOR_VERSION):
@@ -117,11 +117,12 @@
 /// NOTE: This value must be a power of two because it is used to mask the MSBs of array indices. @see RxPacketReceive
 #define CDI_MAX_SIMULTANEOUS_RX_PAYLOADS_PER_CONNECTION  (32)
 
-/// @brief Define to limit the max number of payloads that can arrive out of order and be put back in order. Value must
-/// be a power of 2.
+/// @brief Define the size of the Rx payload buffer used to hold out of order payloads. Value must be a power of 2.
+/// Sized to allow receive of 4K RGB 4:4:4 12 bit.
 #define CDI_MAX_RX_PAYLOAD_OUT_OF_ORDER_BUFFER          (8192)
 
 /// @brief Define to limit the max number packets of that can arrive out of order and be put back in order.
+/// Sized to allow receive of 4K RGB 4:4:4 12 bit.
 #define CDI_MAX_RX_PACKET_OUT_OF_ORDER_WINDOW           (5000)
 
 /// @brief Maximum connection name string length.
@@ -309,6 +310,15 @@ typedef enum {
 
     /// A received payload cannot be read because of format errors.
     kCdiStatusInvalidPayload        = 38,
+
+    /// Failed to dynamically load a shared library.
+    kCdiStatusLibraryLoadFailed     = 39,
+
+    /// Failed to find symbol in dynamically loaded library.
+    kCdiStatusLibrarySymbolNotFound = 40,
+
+    /// Wrong version of dynamically loaded library.
+    kCdiStatusLibraryWrongVersion   = 41,
 } CdiReturnStatus;
 
 /// @brief A structure for holding a PTP timestamp defined in seconds and nanoseconds. This PTP time as defined by

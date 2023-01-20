@@ -170,7 +170,7 @@ CDI_STATIC_ASSERT(CDI_RAW_PROBE_HEADER_SIZE_V1 == sizeof(ProbePacketUnion), "The
 /// Forward declaration of function.
 static void HeaderDecode(const void* encoded_data_ptr, int encoded_data_size, CdiDecodedPacketHeader* dest_header_ptr);
 /// Forward declaration of function.
-static int HeaderInit(CdiRawPacketHeader* header_ptr, const TxPayloadState* payload_state_ptr);
+static int HeaderInit(void* header_ptr, int header_buffer_size, const TxPayloadState* payload_state_ptr);
 /// Forward declaration of function.
 static void PacketRxReorderInfo(const CdiRawPacketHeader* header_ptr, CdiPacketRxReorderInfo* ret_info_ptr);
 /// Forward declaration of function.
@@ -233,13 +233,15 @@ static void HeaderDecode(const void* encoded_data_ptr, int encoded_data_size, Cd
 }
 
 // See documentation for CdiPayloadHeaderInit().
-static int HeaderInit(CdiRawPacketHeader* header_ptr, const TxPayloadState* payload_state_ptr)
+static int HeaderInit(void* header_ptr, int header_buffer_size, const TxPayloadState* payload_state_ptr)
 {
+    (void)header_buffer_size; // Not used in release build, so suppress warning.
     int header_size = 0;
     const CdiPayloadPacketState* packet_state_ptr = &payload_state_ptr->payload_packet_state;
 
     // All packets contain a common CDI header, so initialize it here.
     PacketCommonHeader* hdr_ptr = (PacketCommonHeader*)header_ptr;
+    assert(header_buffer_size >= (int)sizeof(*hdr_ptr));
     hdr_ptr->payload_type = packet_state_ptr->payload_type;
     hdr_ptr->packet_sequence_num = packet_state_ptr->packet_sequence_num;
     hdr_ptr->payload_num = packet_state_ptr->payload_num;
@@ -248,6 +250,7 @@ static int HeaderInit(CdiRawPacketHeader* header_ptr, const TxPayloadState* payl
         // Process first packet of the payload (packet #0).
         PacketNum0Header* hdr0_ptr = (PacketNum0Header*)header_ptr;
         header_size = sizeof(PacketNum0Header);
+        assert(header_buffer_size >= header_size);
 
         // Initialize additional CDI packet #0 header data;
         hdr0_ptr->total_payload_size = payload_state_ptr->source_sgl.total_data_size;
@@ -257,7 +260,8 @@ static int HeaderInit(CdiRawPacketHeader* header_ptr, const TxPayloadState* payl
         hdr0_ptr->payload_user_data = payload_state_ptr->app_payload_cb_data.core_extra_data.payload_user_data;
 
         hdr0_ptr->extra_data_size = payload_state_ptr->app_payload_cb_data.extra_data_size;
-        if (payload_state_ptr->app_payload_cb_data.extra_data_size) {
+        if (hdr0_ptr->extra_data_size) {
+            assert(header_buffer_size >= (header_size + hdr0_ptr->extra_data_size));
             memcpy((uint8_t*)hdr0_ptr + header_size,
                     payload_state_ptr->app_payload_cb_data.extra_data_array,
                     payload_state_ptr->app_payload_cb_data.extra_data_size);
@@ -269,6 +273,7 @@ static int HeaderInit(CdiRawPacketHeader* header_ptr, const TxPayloadState* payl
             header_size = sizeof(PacketDataOffsetHeader);
             // Initialize additional CDI data offset header.
             PacketDataOffsetHeader* ptr = (PacketDataOffsetHeader*)header_ptr;
+            assert(header_buffer_size >= header_size);
             ptr->payload_data_offset = packet_state_ptr->payload_data_offset;
         } else {
             // Packet is just using the common header, so no additional initialization is required.

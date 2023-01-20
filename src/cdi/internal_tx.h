@@ -23,6 +23,22 @@
 //*********************************************************************************************************************
 
 /**
+ * @brief Structure used to hold Tx packet headers. Must reside in the DMA Tx memory region, since it is used directly
+ * by the adapter. It includes space for message prefix.
+ */
+typedef struct {
+    uint8_t header[MAX_MSG_PREFIX_SIZE + sizeof(CdiRawPacketHeader)]; ///< Tx packet header data.
+} TxPacketHeader;
+
+/**
+ * @brief Structure used to hold Tx packet headers that contain extra data. Must reside in the DMA Tx memory region,
+ * since it is used directly by the adapter. It includes space for message prefix.
+ */
+typedef struct {
+    uint8_t header[MAX_MSG_PREFIX_SIZE + sizeof(CdiRawExtraPacketHeader)]; ///< Tx packet header with extra data.
+} TxExtraPacketHeader;
+
+/**
  * @brief Structure used to hold a transmit packet work request. The lifespan of a work request starts when a packet is
  * queued to be sent and ends when a message is received that it has either been successfully sent or a failure has
  * occurred.
@@ -32,12 +48,24 @@ typedef struct {
     uint16_t payload_num;              ///< Packet payload number.
     uint16_t packet_payload_size;      ///< Size of payload, not including the packet header.
     Packet packet;                     ///< The top level packet structure for the data in this work request.
-    /// @brief The data for the packet header, entry zero in packet_sgl. Includes space for message prefix.
-    char header[MAX_MSG_PREFIX_SIZE + sizeof(CdiRawPacketHeader)];
+
+    /// @brief Handle of pool associated with header pointer in structure below. If non-null then header pointer is
+    /// valid. If payload_state_ptr->app_payload_cb_data.extra_data_size is non-zero, then extra_header_ptr is used,
+    /// otherwise header_ptr is used.
+    CdiPoolHandle header_pool_handle;
+    union {
+        void* union_ptr; ///< Generic pointer used as pool item parameter when using the Pool API.
+        /// @brief Pointer to data for the packet header. It uses entry zero in the packet SGL. NOTE: Must point to a
+        /// buffer in the DMA TX memory region that is allocated during adapter initialization.
+        TxPacketHeader* header_ptr;
+        /// @brief Pointer to data for the packet header that contains extra data. It uses entry zero in the packet SGL.
+        /// NOTE: Must point to a buffer in the DMA TX memory region that is allocated during adapter initialization.
+        TxExtraPacketHeader* extra_header_ptr;
+    };
 } TxPacketWorkRequest;
 
 //*********************************************************************************************************************
-//******************************************* START OF PUBLIC FUNCTIONS ***********************************************
+//******************************************* STARTFui OF PUBLIC FUNCTIONS ***********************************************
 //*********************************************************************************************************************
 
 /// @see CdiRawTxCreate

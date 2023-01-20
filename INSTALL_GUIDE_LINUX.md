@@ -6,6 +6,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 ---
 
 - [Linux Installation Guide](#linux-installation-guide)
+- [Upgrading from previous releases](#upgrading-from-previous-releases)
 - [Create an EFA enabled instance](#create-an-efa-enabled-instance)
 - [Install EFA driver](#install-efa-driver)
 - [Install Package Dependencies](#install-package-dependencies)
@@ -27,6 +28,14 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
     - [Launching Docker Containers](#launching-docker-containers)
 
 ---
+# Upgrading from previous releases
+
+**Upgrading from CDI SDK 2.4 or earlier**
+
+* Must [install](#install-efa-driver) the latest EFA driver and **REBOOT** the system.
+* Must download and install a second version of **libfabric**, which requires **rdma-core-devel**. See steps in the libfabric section of [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
+
+---
 
 # Create an EFA enabled instance
 
@@ -39,7 +48,7 @@ For Linux installations, follow step 3 in [launch an Elastic Fabric Adapter (EFA
  - During **Connect to the instance you launched**, once your instance has booted, you can find the public IP you requested earlier by clicking on the instance and looking for “IPv4 Public IP” in the pane below your instance list. Use that IP address to SSH to your new instance.
     - If you cannot connect (connection times out), you may have forgotten to add an SSH rule to your security group, or you may need to set up an internet gateway for your Virtual Private Cloud (VPC) and add a route to your subnet. You can find more information about setting up SSH access and connecting to the instance at [accessing Linux instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AccessingInstancesLinux.html).
     - The default user name for Amazon Linux 2 instances is ```ec2-user```, on CentOS it’s ```centos```, and on Ubuntu, it’s ```ubuntu```.
-- During **Install the EFA software.**, install the minimum version of the EFA software using the command shown below. This will not install libfabric; the AWS CDI SDK tar file has its own packaged version.
+- During **Install the EFA software.**, install the minimum version of the EFA software using the command shown below. This will not install libfabric; the AWS CDI SDK uses its own versions.
 
     ```sudo ./efa_installer.sh -y --minimal```
 
@@ -62,7 +71,7 @@ Installation of dependent packages is required before building the AWS CDI SDK:
   ```bash
   sudo dnf update -y
   sudo dnf config-manager --set-enabled powertools
-  sudo dnf -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel unzip
+  sudo dnf -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel unzip git
   ```
 
 - Ubuntu:
@@ -70,7 +79,7 @@ Installation of dependent packages is required before building the AWS CDI SDK:
     ```bash
     sudo apt update
     sudo apt-get upgrade -y
-    sudo apt-get -y install build-essential libncurses-dev autoconf automake libtool cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev unzip
+    sudo apt-get -y install build-essential libncurses-dev autoconf automake libtool cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev unzip git
     ```
 
 # Install AWS CDI SDK
@@ -87,10 +96,21 @@ Installation of dependent packages is required before building the AWS CDI SDK:
     git clone https://github.com/aws/aws-cdi-sdk
     ```
 
-1. Install libfabric.
+1. Install libfabric versions. The folder ```libfabric``` is used for libfabric v1.9, which is required to support CDI-SDK versions prior to 3.x.x. The folder ```libfabric_new``` is used for libfabric versions v1.13.x and later, which is required to support CDI-SDK versions 3.x.x.
 
     ```bash
-    git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric
+    git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric libfabric
+    git clone --single-branch --branch v1.14.0 https://github.com/ofiwg/libfabric libfabric_new
+    ```
+
+    libfabric_new also requires the development version of rdma-core v27 or later. You can either install the version for your OS using:
+    ```
+    sudo yum install rdma-core-devel
+    ```
+
+    Or using source to build the latest version. After built, the library files **libefa-rdmv??.so**, **libefa.so** and **libibverbs.so** will need to be copied from **<install path>/rdma-core/build/lib** to the same folder where the CDI-SDK library is generated.     To build rdma-core, see the [REAMDME file](https://github.com/linux-rdma/rdma-core/blob/master/README.md). Source code can be obtained using:
+    ```
+    git clone https://github.com/linux-rdma/rdma-core
     ```
 
 The **<install_dir>** should now contain the folder hierarchy as shown below:
@@ -98,8 +118,10 @@ The **<install_dir>** should now contain the folder hierarchy as shown below:
 ```
   <install_dir>/aws-cdi-sdk
   <install_dir>/libfabric
+  <install_dir>/libfabric_new
 ```
-- **libfabric** is a customized version of the open-source libfabric project.
+- **libfabric** is a customized version of the open-source libfabric project based on libfabric v1.9.x.
+- **libfabric_new** is a mainline version of the open-source libfabric project.
 - **aws-cdi-sdk** is the directory that contains the source code for the AWS CDI SDK and its test application. The contents of the AWS CDI SDK include the following directories: **doc**, **include**, **src**, and **proj**.
   - The root folder contains an overall Makefile that builds libfabric, the AWS CDI SDK, the test applications, and the Doxygen-generated HTML documentation. The build of libfabric and the AWS CDI SDK produce shared libraries, ```libfabric.so.x``` and ```libcdisdk.so.x.x```, along with the test applications: ```cdi_test```, ```cdi_test_min_rx```, ```cdi_test_min_tx```, and ```cdi_test_unit```.
     - The **doc** folder contains Doxygen source files used to generate the AWS CDI SDK HTML documentation.
@@ -159,6 +181,7 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
         - Put in a **Group name** for the new group and select the policies for the group.
             - Select the policy that was made in the step above for CloudWatch access.
             - Select **CloudWatchAgentServerPolicy** to provide CloudWatch access.
+            - In order for the AWS CDI SDK to be able to connect to the performance metrics service, you must also add mediaconnect:PutMetricGroups permission. Note: This may result in a warning, which can be ignored.
             - Select **Create group**
                 - Select **Next:Tags** the select **Next:Review**.
                 - Select **Create user**
@@ -198,42 +221,48 @@ AWS SDK C++ will be compiled during the build process of AWS CDI SDK, so it is o
    <install_dir>/aws-cdi-sdk
    <install_dir>/aws-sdk-cpp
    <install_dir>/libfabric
+   <install_dir>/libfabric_new
    ```
 
 ---
 
 # Build CDI libraries and test applications
 
-1. Run the Makefile in aws-cdi-sdk to build the static libraries and test application in debug mode. This step also automatically builds the necessary shared library files from AWS SDK C++ and links them to AWS CDI SDK, as well as generates the HTML documentation. You should run the debug build for ALL initial development as it will catch many problems (i.e. asserts). However, performance testing should always be done with the release build, which can be built without the DEBUG=y Make option.
+Run the Makefile in aws-cdi-sdk to build the static libraries and test application in debug mode. This step also automatically builds the necessary shared library files from AWS SDK C++ and links them to AWS CDI SDK, as well as generates the HTML documentation. You should run the debug build for ALL initial development as it will catch many problems (i.e. asserts). However, performance testing should always be done with the release build, which can be built without the DEBUG=y Make option.
 
-    **Note**: You need to specify the location of AWS SDK C++ when building AWS CDI SDK through the value of the ```AWS_SDK``` make variable.
+**Note**: You need to specify the location of AWS SDK C++ when building AWS CDI SDK through the value of the ```AWS_SDK``` make variable.
 
-    The following commands build the DEBUG variety of the SDK:
+The following commands build the DEBUG variety of the SDK:
 
-    ```bash
-    cd aws-cdi-sdk/
-    make DEBUG=y AWS_SDK=<path to AWS SDK C++>
-    ```
+```
+bash
+cd aws-cdi-sdk/
+make DEBUG=y AWS_SDK=<path to AWS SDK C++> RDMA_CORE_PATH=<path to rdma-core/build>
+```
 
-    **Note**: A trailing ```/``` may be required on the path given in <path to AWS SDK C++> above. For example:
+**Note**: A trailing ```/``` may be required on the path given in <path to AWS SDK C++> above. For example:
 
     ```bash
     cd aws-cdi-sdk/
     make DEBUG=y AWS_SDK=../aws-sdk-cpp/
     ```
-    
+
     **Note**: Pipe the StdOut/Err to a log file for future review/debug:
-    
+
     ```bash
     cd aws-cdi-sdk/
     make DEBUG=y AWS_SDK=../aws-sdk-cpp/ 2>&1 | tee build.log
     ```
 
-   **Note**: After a successful compile, the locations for the results are at:
-    - Test application: ```cdi_test``` is placed at ```aws-cdi-sdk/build/debug/bin```
-    - Minimal test applications: ```cdi_test_min_tx``` and ```cdi_test_min_rx``` are placed at ```aws-cdi-sdk/build/debug/bin```
-    - AWS CDI SDK and libfabric shared libraries ```libcdisdk.so.x.x``` and ```libfabric.so.x``` are placed at ```aws-cdi-sdk/build/debug/lib.```
-    - HTML documentation can be found at ```aws-cdi-sdk/build/documentation```
+**Note**: RDMA_CORE_PATH does not have to specified if you installed the OS package version of rdma-core-devel.
+
+**Note**: If you experience **library not found errors** during linking, you may have to change the **rpath** in the **Makefile** from using **$$ORIGIN** to using an absolute path that points to the CDI-SDK lib folder (ie. ```<install path>/build/debug/lib```).
+
+After a successful compile, the locations for the results are at:
+- Test application: ```cdi_test``` is placed at ```aws-cdi-sdk/build/debug/bin```
+- Minimal test applications: ```cdi_test_min_tx``` and ```cdi_test_min_rx``` are placed at ```aws-cdi-sdk/build/debug/bin```
+- AWS CDI SDK, libcdi_libfabric_api and libfabric shared libraries ```libcdisdk.so.x.x```, ```libfabric.so.x``` and ```libfabric_new.so.x``` are placed at ```aws-cdi-sdk/build/debug/lib.```
+- HTML documentation can be found at ```aws-cdi-sdk/build/documentation```
 
 ## (Optional) Disable the display of performance metrics to your Amazon CloudWatch account
 
@@ -303,6 +332,8 @@ bytes   #sent   #ack     total       time     MB/sec    usec/xfer   Mxfers/sec
 ```
 
 If you get an error, please review these [Troubleshooting](README.md#troubleshooting) steps and check this issue: https://github.com/aws/aws-cdi-sdk/issues/48
+
+**Note**: Although not required, the same test can be performed using the libfabric version located at ```libfabric_new```.
 
 ---
 

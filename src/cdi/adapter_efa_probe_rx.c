@@ -247,7 +247,6 @@ bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr,
 {
     bool ret_new_state = false;
     EfaEndpointState* efa_endpoint_ptr = (EfaEndpointState*)probe_ptr->app_adapter_endpoint_handle->type_specific_ptr;
-    CdiEndpointHandle cdi_endpoint_handle = probe_ptr->app_adapter_endpoint_handle->cdi_endpoint_handle;
 
     bool dest_port_changed = (efa_endpoint_ptr->tx_control_dest_port != probe_hdr_ptr->senders_control_dest_port);
 
@@ -278,7 +277,9 @@ bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr,
             // Check if we received a reset command that only supports protocol versions before 3.
             if (probe_hdr_ptr->senders_version.probe_version_num < 3) {
                 // Remote supports protocol version 1, so set it.
-                EndpointManagerProtocolVersionSet(cdi_endpoint_handle, &probe_hdr_ptr->senders_version);
+                if (!EfaAdapterEndpointProtocolVersionSet(efa_endpoint_ptr, &probe_hdr_ptr->senders_version)) {
+                    break;
+                }
             }
 
             // Save command and ACK packet number so after the reset completes, we can respond by sending the ACK.
@@ -288,7 +289,9 @@ bool ProbeRxControlProcessPacket(ProbeEndpointState* probe_ptr,
             break;
         case kProbeCommandProtocolVersion:
             // Set negotiated protocol version.
-            EndpointManagerProtocolVersionSet(cdi_endpoint_handle, &probe_hdr_ptr->senders_version);
+            if (!EfaAdapterEndpointProtocolVersionSet(efa_endpoint_ptr, &probe_hdr_ptr->senders_version)) {
+                break;
+            }
 
             // The endpoint has not been started yet, so queue to start it now. Will send the ACK back to remote after
             // the endpoint has been started. This will ensure it is ready before remote Tx starts sending EFA probe

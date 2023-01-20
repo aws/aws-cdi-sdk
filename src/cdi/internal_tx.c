@@ -97,6 +97,25 @@ static void DebugTxPacketSglEntries(CdiProtocolHandle protocol_handle, TxPacketW
 #endif
 
 /**
+ * @brief Return work request to pool.
+ *
+ * @param con_state_ptr Pointer to connection state structure.
+ * @param work_request_ptr Pointer to work request structure.
+ */
+static void PutWorkRequestInPool(CdiConnectionState* con_state_ptr, TxPacketWorkRequest* work_request_ptr)
+{
+    if (work_request_ptr->union_ptr) {
+        // NOTE: This pool is not thread-safe, so must ensure that only one thread is accessing it at a time.
+        CdiPoolPut(work_request_ptr->header_pool_handle, work_request_ptr->union_ptr);
+        work_request_ptr->header_pool_handle = NULL;
+        work_request_ptr->union_ptr = NULL;
+    }
+
+    // NOTE: This pool is not thread-safe, so must ensure that only one thread is accessing it at a time.
+    CdiPoolPut(con_state_ptr->tx_state.work_request_pool_handle, work_request_ptr);
+}
+
+/**
  * Pop all items in the work request completion queue freeing resources associated with each one.
  *
  * @param con_state_ptr Pointer to connection state data.
@@ -123,8 +142,8 @@ static void ProcessWorkRequestCompletionQueue(CdiConnectionState* con_state_ptr)
 #endif
 
             // Put back work request into the pool.
-            // NOTE: This pool is not thread-safe, so must ensure that only one thread is accessing it at a time.
-            CdiPoolPut(con_state_ptr->tx_state.work_request_pool_handle, work_request_ptr);
+            PutWorkRequestInPool(con_state_ptr, work_request_ptr);
+            work_request_ptr = NULL; // Pointer is no longer valid, so clear it.
         }
     }
 }
@@ -292,6 +311,19 @@ static CDI_THREAD TxPayloadThread(void* ptr)
                 if (!CdiPoolGet(con_state_ptr->tx_state.work_request_pool_handle, (void**)&work_request_ptr)) {
                     keep_going = false;
                 } else {
+                    // If first packet of a payload and uses extra data, use the extra data pool.
+                    if (0 == payload_state_ptr->payload_packet_state.packet_sequence_num &&
+                        payload_state_ptr->app_payload_cb_data.extra_data_size) {
+                        work_request_ptr->header_pool_handle =
+                            con_state_ptr->adapter_connection_ptr->tx_extra_header_pool_handle;
+
+                    } else {
+                        work_request_ptr->header_pool_handle =
+                            con_state_ptr->adapter_connection_ptr->tx_header_pool_handle;
+                    }
+                    if (!CdiPoolGet(work_request_ptr->header_pool_handle, (void**)&work_request_ptr->union_ptr)) {
+                        keep_going = false;
+                    }
                     payload_processing_state = kPayloadStatePacketizing;
                 }
             }
@@ -300,7 +332,8 @@ static CDI_THREAD TxPayloadThread(void* ptr)
                 // NOTE: These pools are not thread-safe, so must ensure that only one thread is accessing them at a
                 // time.
                 if (!PayloadPacketizerPacketGet(adapter_endpoint_handle->protocol_handle,
-                                                packetizer_state_handle, (char*)&work_request_ptr->header,
+                                                packetizer_state_handle, (char*)work_request_ptr->union_ptr,
+                                                CdiPoolGetItemSize(work_request_ptr->header_pool_handle),
                                                 con_state_ptr->tx_state.packet_sgl_entry_pool_handle,
                                                 payload_state_ptr, &work_request_ptr->packet.sg_list, &last_packet))
                 {
@@ -367,6 +400,28 @@ static CDI_THREAD TxPayloadThread(void* ptr)
     }
 
     return 0; // Return code not used.
+}
+
+/**
+ * Free function for Tx packet work request pool item.
+ *
+ * @param context_ptr Unused, reserve for future use.
+ * @param item_ptr Pointer to item being initialized.
+ *
+ * @return true always
+ */
+static bool TxPacketWorkRequestPoolItemFree(const void* context_ptr, void* item_ptr)
+{
+    (void)context_ptr; // Not used.
+    TxPacketWorkRequest* work_request_ptr = (TxPacketWorkRequest*)item_ptr;
+
+    if (work_request_ptr->header_ptr) {
+        CdiPoolPut(work_request_ptr->header_pool_handle, work_request_ptr->union_ptr);
+        work_request_ptr->header_pool_handle = NULL;
+        work_request_ptr->union_ptr = NULL;
+    }
+
+    return true;
 }
 
 /**
@@ -502,10 +557,10 @@ static CdiReturnStatus TxCreateConnection(CdiConnectionProtocolType protocol_typ
     // TxPayloadThread() is the only user of the pools, except when restarting/shutting down the connection which is
     // done by EndpointManagerThread() while TxPayloadThread() is blocked.
     if (kCdiStatusOk == rs) {
-        if (!CdiPoolCreate("Connection Tx TxPacketWorkRequest Pool", MAX_TX_PACKET_WORK_REQUESTS_PER_CONNECTION,
-                           MAX_TX_PACKET_WORK_REQUESTS_PER_CONNECTION_GROW, MAX_POOL_GROW_COUNT,
-                           sizeof(TxPacketWorkRequest), false, // false= Not thread-safe (no resource locks)
-                           &con_state_ptr->tx_state.work_request_pool_handle)) {
+        if (!CdiPoolCreate("Connection Tx TxPacketWorkRequest Pool",
+                MAX_TX_PACKET_WORK_REQUESTS_PER_CONNECTION, NO_GROW_COUNT, NO_GROW_COUNT,
+                sizeof(TxPacketWorkRequest), false, // false= Not thread-safe (no resource locks)
+                &con_state_ptr->tx_state.work_request_pool_handle)) {
             rs = kCdiStatusNotEnoughMemory;
         }
     }
@@ -797,7 +852,7 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
         }
 
         // Put back work request into the pool.
-        CdiPoolPut(con_state_ptr->tx_state.work_request_pool_handle, work_request_ptr);
+        PutWorkRequestInPool(con_state_ptr, work_request_ptr);
         work_request_ptr = NULL; // Pointer is no longer valid, so clear it.
     }
 
@@ -811,8 +866,14 @@ void TxPayloadThreadFlushResources(CdiEndpointState* endpoint_ptr)
     // Don't free tx_state.payload_sgl_entry_pool_handle here. AppCallbackPayloadThread() frees them. When a connection
     // is destroyed, the pool is flushed in TxConnectionDestroyInternal().
 
+    // Free Tx header pool entries from each item in the work request pool.
+    CdiPoolForEachItem(con_state_ptr->tx_state.work_request_pool_handle, TxPacketWorkRequestPoolItemFree, NULL);
     CdiPoolPutAll(con_state_ptr->tx_state.work_request_pool_handle);
     CdiQueueFlush(con_state_ptr->tx_state.work_req_comp_queue_handle);
+
+    CdiPoolPutAll(con_state_ptr->tx_state.payload_state_pool_handle);
+    // Don't free tx_state.payload_sgl_entry_pool_handle here. AppCallbackPayloadThread() frees them. When a connection
+    // is destroyed, the pool is flushed in TxConnectionDestroyInternal().
     CdiPoolPutAll(con_state_ptr->tx_state.packet_sgl_entry_pool_handle);
 
     // NOTE: Don't flush app_payload_message_queue_handle here. Entries are popped using AppCallbackPayloadThread().
@@ -866,6 +927,8 @@ void TxConnectionDestroyInternal(CdiConnectionHandle con_handle)
         CdiPoolDestroy(con_state_ptr->tx_state.packet_sgl_entry_pool_handle);
         con_state_ptr->tx_state.packet_sgl_entry_pool_handle = NULL;
 
+        // Free Tx header pool entries from each item in the work request pool.
+        CdiPoolForEachItem(con_state_ptr->tx_state.work_request_pool_handle, TxPacketWorkRequestPoolItemFree, NULL);
         CdiPoolDestroy(con_state_ptr->tx_state.work_request_pool_handle);
         con_state_ptr->tx_state.work_request_pool_handle = NULL;
 

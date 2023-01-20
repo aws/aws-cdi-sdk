@@ -106,12 +106,25 @@ typedef struct {
 #define CDI_RAW_PACKET_HEADER_SIZE_V2   (47)
 
 /**
- * @brief Union of raw CDI packet headers. Use to reserve memory that can be used to hold any type of raw CDI packet
- * header. Each protocol version uses a specific data format and is kept internal. Use PayloadHeaderDecode() to
- * decoded the raw packet header into CdiDecodedPacketHeader, which is protocol independent. Use PayloadHeaderInit()
- * to convert a CdiDecodedPacketHeader into this format.
+ * @brief Union of raw CDI packet headers. Use to reserve memory that can be used to hold raw CDI packet headers that do
+ * not contain extra data. Each protocol version uses a specific data format and is kept internal. Use
+ * PayloadHeaderDecode() to decoded the raw packet header into CdiDecodedPacketHeader, which is protocol independent.
+ * Use PayloadHeaderInit() to convert a CdiDecodedPacketHeader into this format.
  */
 struct CdiRawPacketHeader {
+    union {
+        uint8_t header_v1[CDI_RAW_PACKET_HEADER_SIZE_V1]; ///< For protocol version 1.
+        uint8_t header_v2[CDI_RAW_PACKET_HEADER_SIZE_V2]; ///< For protocol version 2.
+    };
+};
+
+/**
+ * @brief Union of raw CDI extra packet headers. Use to reserve memory that can be used to hold raw CDI packet headers
+ * that contain extra data (ie. AVM configuration data). Each protocol version uses a specific data format and is kept
+ * internal. Use PayloadHeaderDecode() to decoded the raw packet header into CdiDecodedPacketHeader, which is protocol
+ * independent. Use PayloadHeaderInit() to convert a CdiDecodedPacketHeader into this format.
+ */
+struct CdiRawExtraPacketHeader {
     union {
         uint8_t header_v1[CDI_RAW_PACKET_HEADER_SIZE_V1 + MAX_CDI_PACKET_EXTRA_DATA]; ///< For protocol version 1.
         uint8_t header_v2[CDI_RAW_PACKET_HEADER_SIZE_V2 + MAX_CDI_PACKET_EXTRA_DATA]; ///< For protocol version 2.
@@ -237,7 +250,7 @@ typedef struct CdiProtocol* CdiProtocolHandle;
 typedef void (*VtblPayloadHeaderDecode)(const void* encoded_data_ptr, int encoded_data_size,
                                         CdiDecodedPacketHeader* dest_header_ptr);
 /// Prototype of function used for protocol version VTable API.
-typedef int (*VtblPayloadHeaderInit)(CdiRawPacketHeader* header_ptr, const TxPayloadState* payload_state_ptr);
+typedef int (*VtblPayloadHeaderInit)(void* header_ptr, int header_buffer_size, const TxPayloadState* payload_state_ptr);
 /// Prototype of function used for protocol version VTable API.
 typedef void (*VtblPayloadPacketRxReorderInfo)(const CdiRawPacketHeader* header_ptr,
                                                CdiPacketRxReorderInfo* ret_info_ptr);
@@ -303,11 +316,12 @@ void ProtocolPayloadHeaderDecode(CdiProtocolHandle protocol_handle, void* encode
  *
  * @param protocol_handle Handle of protocol version.
  * @param header_ptr Address where to write raw packet header.
+ * @param header_buffer_size Size of header buffer in bytes.
  * @param payload_state_ptr Pointer to TX payload state data.
  *
  * @return Size of payload header in bytes.
  */
-int ProtocolPayloadHeaderInit(CdiProtocolHandle protocol_handle, CdiRawPacketHeader* header_ptr,
+int ProtocolPayloadHeaderInit(CdiProtocolHandle protocol_handle, void* header_ptr, int header_buffer_size,
                               const TxPayloadState* payload_state_ptr);
 
 /**

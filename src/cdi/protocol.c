@@ -127,11 +127,11 @@ void ProtocolVersionDestroy(CdiProtocolHandle protocol_handle)
     }
 }
 
-int ProtocolPayloadHeaderInit(CdiProtocolHandle protocol_handle, CdiRawPacketHeader* header_ptr,
+int ProtocolPayloadHeaderInit(CdiProtocolHandle protocol_handle, void* header_ptr, int header_buffer_size,
                               const TxPayloadState* payload_state_ptr)
 {
     CdiProtocolState* protocol_ptr = (CdiProtocolState*)protocol_handle;
-    return (protocol_ptr->api_ptr->header_init)(header_ptr, payload_state_ptr);
+    return (protocol_ptr->api_ptr->header_init)(header_ptr, header_buffer_size, payload_state_ptr);
 }
 
 void ProtocolPayloadHeaderDecode(CdiProtocolHandle protocol_handle, void* encoded_data_ptr, int encoded_data_size,

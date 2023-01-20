@@ -103,16 +103,13 @@
 /// @brief Maximum number of payloads for a single connection.
 #define MAX_PAYLOADS_PER_CONNECTION        (100)
 
-/// @brief Initial number of work requests tx connection.
+/// @brief Maximum number of Tx packet work requests per connection.
 #define MAX_TX_PACKET_WORK_REQUESTS_PER_CONNECTION     (3000*HD_TO_4K_FACTOR)
-/// @brief Number of work requests the tx connection may be increased by.
-#define MAX_TX_PACKET_WORK_REQUESTS_PER_CONNECTION_GROW (500)
 
-/// @brief Initial number of header entries in a tx payload.
-#define TX_PACKET_HEADER_POOL_SIZE_PER_CONNECTION      (50*HD_TO_4K_FACTOR)
-
-/// @brief Number of entries the tx header list may be increased by.
-#define TX_PACKET_HEADER_POOL_SIZE_PER_CONNECTION_GROW (15)
+/// @brief Number of Tx AVM packet header pool entries available for a Tx connection. The pool is used to hold
+/// user-specified AVM configuration data that is associated with a payload. The memory allocated must be part of the
+/// DMA Tx memory region.
+#define TX_AVM_PACKET_HEADER_POOL_SIZE_PER_CONNECTION   (100)
 
 /// @brief Initial number of SGL entries in a tx payload.
 #define TX_PACKET_SGL_ENTRY_SIZE_PER_CONNECTION        (3000*HD_TO_4K_FACTOR)
@@ -145,7 +142,7 @@
 #define MAX_RX_BULK_COMPLETION_QUEUE_MESSAGES          (50)
 
 /// @brief Initial number of rx packets in a connection.
-#define MAX_RX_PACKETS_PER_CONNECTION                  (3000*HD_TO_4K_FACTOR)
+#define MAX_RX_PACKETS_PER_CONNECTION                  (10000)
 /// @brief Number of entries the rx packet connection list may be increased by.
 #define MAX_RX_PACKETS_PER_CONNECTION_GROW             (500)
 
@@ -227,6 +224,12 @@
 /// reset mode. The value is in milliseconds. This should be long enough to avoid false disconnects due to a few TX ping
 /// packets getting dropped.
 #define RX_PING_MONITOR_TIMEOUT_MSEC            (5000 + (SEND_PING_COMMAND_FREQUENCY_MSEC*3))
+
+/// @brief Defines the number of EFA interface Tx probe packet buffers to allocate in DMA memory. Each probe endpoint
+/// uses one packet buffer, so this value sets the maximum number of endpoints that can simultaneously be probing. The
+/// memory region is reserved as part EFA adapter initialization. It is internally added by the SDK to the size
+/// specified by CdiAdapterData.tx_buffer_size_bytes.
+#define EFA_PROBE_PACKET_BUFFER_COUNT           (CDI_MAX_SIMULTANEOUS_CONNECTIONS*CDI_MAX_ENDPOINTS_PER_CONNECTION)
 
 /// @brief Defines the EFA interface probe packet data size.
 #define EFA_PROBE_PACKET_DATA_SIZE              (1024)

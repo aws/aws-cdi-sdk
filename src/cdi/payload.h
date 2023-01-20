@@ -67,6 +67,8 @@ typedef struct TxPayloadState TxPayloadState;
 /// Forward reference of structure to create pointers later.
 typedef struct CdiRawPacketHeader CdiRawPacketHeader;
 /// Forward reference of structure to create pointers later.
+typedef struct CdiRawExtraPacketHeader CdiRawExtraPacketHeader;
+/// Forward reference of structure to create pointers later.
 typedef struct CdiProtocol CdiProtocol;
 /// Forward reference of structure to create pointers later.
 typedef struct CdiProtocol* CdiProtocolHandle;
@@ -122,6 +124,7 @@ void PayloadPacketizerStateInit(CdiPacketizerStateHandle packetizer_state_handle
  * @param protocol_handle Handle of protocol to use.
  * @param packetizer_state_handle Handle of the packetizer state for this connection.
  * @param header_ptr Pointer to the header data structure to be filled in for the new packet.
+ * @param header_buffer_size Size of header data buffer in bytes.
  * @param packet_sgl_entry_pool_handle CDI packet SGL list entry pool.
  * @param payload_state_ptr Pointer to payload state data.
  * @param packet_sgl_ptr Pointer to returned packet SGL list
@@ -130,7 +133,7 @@ void PayloadPacketizerStateInit(CdiPacketizerStateHandle packetizer_state_handle
  * @return true if packet returned, otherwise a pool was empty so false is returned.
  */
 bool PayloadPacketizerPacketGet(CdiProtocolHandle protocol_handle, CdiPacketizerStateHandle packetizer_state_handle,
-                                char* header_ptr, CdiPoolHandle packet_sgl_entry_pool_handle,
+                                char* header_ptr, int header_buffer_size, CdiPoolHandle packet_sgl_entry_pool_handle,
                                 TxPayloadState* payload_state_ptr, CdiSgList* packet_sgl_ptr,
                                 bool* ret_is_last_packet_ptr);
 

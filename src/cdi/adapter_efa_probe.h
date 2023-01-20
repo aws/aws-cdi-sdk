@@ -135,9 +135,6 @@ struct ProbeEndpointState {
     /// Data for worker thread used for ProbeThread().
     CdiThreadID probe_thread_id;   ///< Thread identifier
 
-    /// Memory pool of send EFA work requests (ProbeEfaPacketWorkRequest).
-    CdiPoolHandle efa_work_request_pool_handle;
-
     /// FIFO of control interface packet CdiSgList structures.
     CdiFifoHandle control_packet_fifo_handle;
 
