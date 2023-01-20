@@ -234,25 +234,24 @@ Run the Makefile in aws-cdi-sdk to build the static libraries and test applicati
 
 The following commands build the DEBUG variety of the SDK:
 
-```
-bash
+```bash
 cd aws-cdi-sdk/
 make DEBUG=y AWS_SDK=<path to AWS SDK C++> RDMA_CORE_PATH=<path to rdma-core/build>
 ```
 
 **Note**: A trailing ```/``` may be required on the path given in <path to AWS SDK C++> above. For example:
 
-    ```bash
-    cd aws-cdi-sdk/
-    make DEBUG=y AWS_SDK=../aws-sdk-cpp/
-    ```
+```bash
+cd aws-cdi-sdk/
+make DEBUG=y AWS_SDK=../aws-sdk-cpp/
+```
 
-    **Note**: Pipe the StdOut/Err to a log file for future review/debug:
+**Note**: Pipe the StdOut/Err to a log file for future review/debug:
 
-    ```bash
-    cd aws-cdi-sdk/
-    make DEBUG=y AWS_SDK=../aws-sdk-cpp/ 2>&1 | tee build.log
-    ```
+```bash
+cd aws-cdi-sdk/
+make DEBUG=y AWS_SDK=../aws-sdk-cpp/ 2>&1 | tee build.log
+```
 
 **Note**: RDMA_CORE_PATH does not have to specified if you installed the OS package version of rdma-core-devel.
 
