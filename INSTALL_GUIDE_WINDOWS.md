@@ -242,7 +242,7 @@ The **proj** directory contains the Visual Studio project solution for Windows d
 
     ```
     cd <install_dir>
-    git clone -b 1.8.46 https://github.com/aws/aws-sdk-cpp.git
+    git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp
     ```
 
     The **<install_dir>** should now contain the folder hierarchy as shown below:
@@ -259,7 +259,7 @@ The **proj** directory contains the Visual Studio project solution for Windows d
 1. Copy the AWS CDI SDK files required by ```AWS SDK for C++``` to the proper location.
 
     ```
-    copy -recurse .\aws-cdi-sdk\aws-cpp-sdk-cdi\ .\aws-sdk-cpp\
+    copy -recurse .\aws-cdi-sdk\aws-cpp-sdk-cdi\ .\aws-sdk-cpp\generated\src\
     ```
 
 ---
