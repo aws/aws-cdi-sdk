@@ -217,7 +217,7 @@ For this test, the IP addresses of the transmit and receive instances must be kn
     [18:56:23] [ProbeRxControlProcessProbeMode:196] Probe Rx mode[SendReset].
     ```
 
-1. Switch to the transmitter EC2 instance and run the following command:
+1. Switch to the transmitter instance and run the following command:
 
     ```bash
     ./build/debug/bin/cdi_test --adapter EFA --local_ip 203.0.113.111 -X --tx RAW --remote_ip 203.0.113.222 --dest_port 2000 --rate 60 --num_transactions 100 -S --payload_size 5184000
@@ -284,13 +284,13 @@ To display audio configuration options:
 
 The following test uses the AVM protocol in the AWS CDI SDK to mimic sending video frames. This specific test sends 100 frames of 1080p60 video across two EC2 instances. The transmitter creates an incrementing data pattern and transports this data to the receiver. The receiver accumulates the data and indicate that all data was successfully received.
 
-Receiver EC2:
+Receiver:
 
 ```bash
 ./build/debug/bin/cdi_test --adapter EFA --local_ip <rx-ipv4> -X --rx AVM --dest_port 2000 --rate 60 --num_transactions 100 -S --id 1 --payload_size 5184000 --pattern INC --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0
 ```
 
-Transmitter EC2:
+Transmitter:
 
 ```bash
 ./build/debug/bin/cdi_test --adapter EFA --local_ip <tx-ipv4> -X --tx AVM --remote_ip <rx-ipv4> --dest_port 2000 --rate 60 --num_transactions 100 -S --id 1 --payload_size 5184000 --pattern INC --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0
@@ -302,13 +302,13 @@ The following test uses the AVM protocol in the AWS CDI SDK to mimic sending vid
 
 **Note**: See the [Example test content](#example-test-content) section for example files that can be used with the --file_read option in place of ```video_in.file```.
 
-Receiver EC2:
+Receiver:
 
 ```bash
 ./build/debug/bin/cdi_test --adapter EFA --local_ip <rx-ipv4> -X --rx AVM --dest_port 2000 --rate 60 --num_transactions 100 -S --id 1 --payload_size 5184000 --pattern NONE --file_write video_in.file --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0
 ```
 
-Transmitter EC2:
+Transmitter:
 
 ```bash
 ./build/debug/bin/cdi_test --adapter EFA --local_ip <tx-ipv4> -X --tx AVM --remote_ip <rx-ipv4> --dest_port 2000 --rate 60 --num_transactions 100 -S --id 1 --payload_size 5184000 --file_read video_out.file --avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0
@@ -471,16 +471,16 @@ When using the `sockets` adapter, it is suggested to use payload sizes less than
 
 Below are example command-line options for `cdi_test` using the `sockets` adapter.
 
-Transmitter:
-
-```bash
-./build/debug/bin/cdi_test --adapter SOCKET --local_ip <tx-ipv4> -X --tx RAW --dest_port 2000 --remote_ip <rx-ipv4> --num_transactions 1000 --rate 30 --keep_alive -S --pattern INC --payload_size 1000
-```
-
 Receiver:
 
 ```bash
 ./build/debug/bin/cdi_test --adapter SOCKET --local_ip <rx-ipv4> -X --rx RAW --dest_port 2000 --num_transactions 1000 --rate 30 --keep_alive -S --pattern INC --payload_size 1000
+```
+
+Transmitter:
+
+```bash
+./build/debug/bin/cdi_test --adapter SOCKET --local_ip <tx-ipv4> -X --tx RAW --dest_port 2000 --remote_ip <rx-ipv4> --num_transactions 1000 --rate 30 --keep_alive -S --pattern INC --payload_size 1000
 ```
 
 ## Testing CDI with the libfabric sockets adapter (preferred)
@@ -490,18 +490,17 @@ The `libfabric sockets` adapter is provided through the SDK and exposed in the `
 
 Below are example command-line options for `cdi_test` using the `libfabric sockets` adapter.
 
-Transmitter:
-
-```bash
-./build/debug/bin/cdi_test --adapter SOCKET_LIBFABRIC --local_ip <tx-ipv4> -X --tx RAW --dest_port 2000 --remote_ip <rx-ipv4> --num_transactions 1000 --rate 30 -name single_raw --keep_alive -S --pattern INC --payload_size 20000
-```
-
 Receiver:
 
 ```bash
 ./build/debug/bin/cdi_test --adapter SOCKET_LIBFABRIC --local_ip <rx-ipv4> -X --rx RAW --dest_port 2000 --num_transactions 1000 --rate 30 --keep_alive -S --pattern INC --payload_size 20000
 ```
 
+Transmitter:
+
+```bash
+./build/debug/bin/cdi_test --adapter SOCKET_LIBFABRIC --local_ip <tx-ipv4> -X --tx RAW --dest_port 2000 --remote_ip <rx-ipv4> --num_transactions 1000 --rate 30 -name single_raw --keep_alive -S --pattern INC --payload_size 20000
+```
 
 ## Using file-based command-line argument insertion
 
@@ -561,6 +560,33 @@ The ```--new_conn``` or ```-X``` option creates a new connection for which subse
 
 The following example uses two EC2 instances. One is a dedicated transmitter with two connections: one sending video and the other sending audio. The other EC2 instance is a dedicated receiver with two connections: one receiving video and the other receiving audio. The transmitter and receiver have separate command files that are invoked by using the method shown in the [file-based command-line](#using-file-based-command-line-argument-insertion) section.
 
+Receiver command file:
+
+```bash
+# adapter
+--adapter EFA --local_ip <rx-ipv4>
+
+# connection 1: video
+-X --rx AVM
+--connection_name my_video_rx_1
+--dest_port 2000
+--rate 60000/1001 --num_transactions 100
+-S --id 1
+--payload_size 5184000
+--pattern INC
+--avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0
+
+# connection 2: audio
+-X --rx AVM
+--connection_name my_audio_rx_2
+--dest_port 2001
+--rate 60 --num_transactions 100
+-S --id 1
+--payload_size 6216
+--pattern INC
+--avm_audio 51 48KHz EN
+```
+
 Transmitter command file:
 
 ```bash
@@ -582,33 +608,6 @@ Transmitter command file:
 -X --tx AVM
 --connection_name my_audio_tx_2
 --remote_ip <rx-ipv4>
---dest_port 2001
---rate 60 --num_transactions 100
--S --id 1
---payload_size 6216
---pattern INC
---avm_audio 51 48KHz EN
-```
-
-Receiver command file:
-
-```bash
-# adapter
---adapter EFA --local_ip <rx-ipv4>
-
-# connection 1: video
--X --rx AVM
---connection_name my_video_rx_1
---dest_port 2000
---rate 60000/1001 --num_transactions 100
--S --id 1
---payload_size 5184000
---pattern INC
---avm_video 1920 1080 YCbCr422 Unused 10bit 60 1 BT2020 true false PQ Narrow 16 9 0 1080 0 0
-
-# connection 2: audio
--X --rx AVM
---connection_name my_audio_rx_2
 --dest_port 2001
 --rate 60 --num_transactions 100
 -S --id 1
@@ -712,13 +711,15 @@ The AWS CloudWatch feature is available to use through the AWS CDI SDK. AWS Clou
 
 AWS CloudWatch is a service that has both free and paid tiers. For more information on pricing, visit the [AWS CloudWatch pricing page](https://aws.amazon.com/cloudwatch/pricing/).
 
-For the AWS CDI SDK, the statistics generated by the AWS CDI SDK can be published to AWS CloudWatch. To use this functionality, the AWS CLI and AWS SDK C++ must be downloaded and installed using these instructions for [Linux](./INSTALL_GUIDE_LINUX.md#installing-cloudwatch-features) or [Windows](./INSTALL_GUIDE_WINDOWS.md#build-cdi-with-aws-cloudwatch-enabled) before continuing.
+For the AWS CDI SDK, the statistics generated by the AWS CDI SDK can be published to AWS CloudWatch. To use this functionality, the AWS CLI and AWS SDK C++ must be downloaded and installed using these instructions for [Linux](./INSTALL_GUIDE_LINUX.md#install-aws-cloudwatch-and-aws-cli) or [Windows](./INSTALL_GUIDE_WINDOWS.md#install-the-aws-sdk-for-c) before continuing.
 
 ### Using AWS CDI SDK with AWS CloudWatch
 
 With the AWS CloudWatch libraries installed, the AWS CDI SDK can publish metrics to AWS CloudWatch. There are dedicated AWS CloudWatch options exposed to the user in the AWS CDI SDK: namespace, dimension domain, and region. Visit [Amazon CloudWatch Concepts](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/cloudwatch_concepts.html) for more information concerning metrics terminology.
 
-**Note**: Instances that publish metrics data to CloudWatch must have an IAM role attached that allows them to publish CloudWatch data.
+**Note**: EC2 instances that publish metrics data to CloudWatch must have an IAM role attached that allows them to publish CloudWatch data. See [Linux](./INSTALL_GUIDE_LINUX.md#install-aws-cli) or [Windows](./INSTALL_GUIDE_WINDOWS.md#create-iam-user-required-by-aws-cloudwatch) for IAM policy guidance.
+
+**Note**: Prefix any ```cdi_test``` commands with ```sudo``` to reveal any IAM permission errors, which might not be displayed when run without elevated privileges.
 
 * The namespace controls the naming of the overall metrics container. This value defaults to ```CloudDigitalInterface``` if AWS CloudWatch is enabled and the namespace is unspecified.
 * The region specifies the location to send the metrics, eg. ```us-west-2```. If this value is unspecified, it defaults to the region in which the SDK is running.
