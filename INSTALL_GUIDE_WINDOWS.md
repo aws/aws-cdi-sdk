@@ -151,7 +151,7 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
 1. Create an IAM User with CloudWatch and performance metrics permissions.
     - Navigate to the [AWS console IAM Policies](https://console.aws.amazon.com/iam/home#/policies)
         - Select **Create policy** and then select **JSON**.
-        - An example policy is below:
+        - The minimum security IAM policy is below:
 
         ```JSON
         {
@@ -159,7 +159,10 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
             "Statement": [
                 {
                     "Effect": "Allow",
-                    "Action": "cloudwatch:*",
+                    "Action": [
+                        "cloudwatch:PutMetricData",
+                        "mediaconnect:PutMetricGroups"
+                    ],
                     "Resource": "*"
                 }
             ]
@@ -171,10 +174,12 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
         - Select **Next: Permissions** and then select **Create group** to create a new user group.
         - Put in a **Group name** for the new group and select the policies for the group.
             - Select the policy that was made in the step above for CloudWatch access.
-            - Select **CloudWatchAgentServerPolicy** to provide CloudWatch access.
+            - In order for the AWS CDI SDK to be able to connect to the performance metrics service, you must also add ```mediaconnect:PutMetricGroups``` permission as per the example policy above. Note: This may result in an IAM warning such as: ```IAM does not recognize one or more actions. The action name might include a typo or might be part of a previewed or custom service```, which can be safely ignored.
             - Select **Create group**
                 - Select **Next:Tags** the select **Next:Review**.
                 - Select **Create user**
+        - Save your **Access Key ID** and **Secret Access Key** from this IAM User creation.
+
 ## Add tools to the System Environment Variable Path
 
 - Add installed tools to the System Environment Variable: **Path**.
