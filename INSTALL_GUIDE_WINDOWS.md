@@ -200,7 +200,7 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
    - Place the **libfabric** and **libfabric_new** folders at the same directory level as the **aws-cdi-sdk** folder.
    - In the **libfabric_new** folder, rename the **libfabric.vcxproj**, **libfabric_new.vcxproj.filters** and **libfabric_new.vcxproj.user** files to use **libfabric_new** instead of **libfabric**. This is done for several reasons. The AWS CDI SDK solution file uses them as a project source and linking to the generated libraries. It also provides a clear identification of the libfabric versions while using the AWS CDI SDK solution in Visual Studio.
 2. Follow the Windows instructions to install [Network Direct SPI](https://github.com/ofiwg/libfabric#windows-instructions). Extract the header files from the downloaded NetworkDirect_DDK.zip and copy them from **NetDirect\include** to **libfabric_new\prov\netdir\NetDirect**.
-3. Clone the Windows RDMA repo linked at [Windows RDMA - TODO](https://TODO/). Place the **rdmawin** folder at the same directory level as the **aws-cdi-sdk** folder.
+3. Clone the Windows EFA repo linked at [EFA Win](https://github.com/aws/efawin/). Place the **efawin** folder at the same directory level as the **aws-cdi-sdk** folder.
 4. Clone (or download) the PDCurses GitHub repo linked at [PDCurses](https://pdcurses.org/).
 
     **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
@@ -214,7 +214,7 @@ The **<install_dir>** should now contain the folder hierarchy as shown below:
    <install_dir>\libfabric
    <install_dir>\libfabric_new
    <install_dir>\PDCurses
-   <install_dir>\rdmawin
+   <install_dir>\efawin
    ```
 
 
