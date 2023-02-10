@@ -222,9 +222,9 @@ When you integrate the AWS CDI SDK into your video applications running on Amazo
 
 ### IAM permissions required by the compute instance
 
-In order for the AWS CDI SDK to be able to connect to the performance metrics service, the instance on which it is running must be assigned an IAM role with at least the mediaconnect:PutMetricGroups permission.
+In order for the AWS CDI SDK to be able to connect to the performance metrics service, the instance on which it is running must be assigned an IAM role with at least the ```mediaconnect:PutMetricGroups``` permission.
 
-**Note**: This may result in a warning, which can be ignored.
+**Note**: This may result in an IAM warning such as: ```IAM does not recognize one or more actions. The action name might include a typo or might be part of a previewed or custom service```, which can be safely ignored.
 
 ### Customer option to disable the collection of performance metrics by the AWS CDI SDK
 
