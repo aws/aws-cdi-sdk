@@ -79,7 +79,7 @@ Installation of dependent packages is required before building the AWS CDI SDK:
     ```bash
     sudo apt update
     sudo apt-get upgrade -y
-    sudo apt-get -y install build-essential libncurses-dev autoconf automake libtool cmake git doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev unzip git
+    sudo apt-get -y install build-essential libncurses-dev autoconf automake libtool cmake doxygen libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev unzip git
     ```
 
 # Install AWS CDI SDK
@@ -160,7 +160,7 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
 1. Create an IAM User with CloudWatch and performance metrics permissions.
     - Navigate to the [AWS console IAM Policies](https://console.aws.amazon.com/iam/home#/policies)
         - Select **Create policy** and then select **JSON**.
-        - An example policy is below:
+        - The minimum security IAM policy is below:
 
         ```JSON
         {
@@ -168,7 +168,10 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
             "Statement": [
                 {
                     "Effect": "Allow",
-                    "Action": "cloudwatch:*",
+                    "Action": [
+                        "cloudwatch:PutMetricData",
+                        "mediaconnect:PutMetricGroups"
+                    ],
                     "Resource": "*"
                 }
             ]
@@ -180,8 +183,7 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
         - Select **Next: Permissions** and then select **Create group** to create a new user group.
         - Put in a **Group name** for the new group and select the policies for the group.
             - Select the policy that was made in the step above for CloudWatch access.
-            - Select **CloudWatchAgentServerPolicy** to provide CloudWatch access.
-            - In order for the AWS CDI SDK to be able to connect to the performance metrics service, you must also add mediaconnect:PutMetricGroups permission. Note: This may result in a warning, which can be ignored.
+            - In order for the AWS CDI SDK to be able to connect to the performance metrics service, you must also add ```mediaconnect:PutMetricGroups``` permission as per the example policy above. Note: This may result in an IAM warning such as: ```IAM does not recognize one or more actions. The action name might include a typo or might be part of a previewed or custom service```, which can be safely ignored.
             - Select **Create group**
                 - Select **Next:Tags** the select **Next:Review**.
                 - Select **Create user**
