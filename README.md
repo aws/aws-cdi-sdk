@@ -36,6 +36,7 @@ The AWS Cloud Digital Interface (CDI) Software Development Kit (SDK) is a set of
     - [Other performance considerations](#other-performance-considerations)
 - [Troubleshooting](#troubleshooting)
   - [Transmitter and receiver failing to communicate](#transmitter-and-receiver-failing-to-communicate)
+  - [CDI enabled application only works when run as root](#cdi-enabled-application-only-works-when-run-as-root)
   - [Communication failure and firewall settings](#communication-failure-and-firewall-settings)
 - [Security](#security)
 - [Licensing](#licensing)

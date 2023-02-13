@@ -200,26 +200,31 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
 
 **Note**: **Windows PowerShell** and [git for windows](https://git-scm.com/download/win) may be used to acquire source repositories while following the steps outlined in the Linux installation guide, or the code may be downloaded directly from zip archives.
 
-1. Clone (or download) the **libfabric** repos as described in [linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk)
+1. Install libfabric versions. The folder ```libfabric``` is used for libfabric v1.9, which is required to support CDI-SDK versions prior to 3.x.x. The folder ```libfabric_new``` is used for libfabric versions v1.15.x and later, which is required to support CDI-SDK versions 3.x.x for Windows.
+
+    ```bash
+    git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric libfabric
+    git clone --single-branch --branch v1.14.0 https://github.com/ofiwg/libfabric libfabric_new
+    ```
 
    - Place the **libfabric** and **libfabric_new** folders at the same directory level as the **aws-cdi-sdk** folder.
    - In the **libfabric_new** folder, rename the **libfabric.vcxproj**, **libfabric_new.vcxproj.filters** and **libfabric_new.vcxproj.user** files to use **libfabric_new** instead of **libfabric**. This is done for several reasons. The AWS CDI SDK solution file uses them as a project source and linking to the generated libraries. It also provides a clear identification of the libfabric versions while using the AWS CDI SDK solution in Visual Studio.
-2. Follow the Windows instructions to install [Network Direct SPI](https://github.com/ofiwg/libfabric#windows-instructions). Extract the header files from the downloaded NetworkDirect_DDK.zip and copy them from **NetDirect\include** to **libfabric_new\prov\netdir\NetDirect**.
-3. Clone the Windows EFA repo linked at [EFA Win](https://github.com/aws/efawin/). Place the **efawin** folder at the same directory level as the **aws-cdi-sdk** folder.
-4. Clone (or download) the PDCurses GitHub repo linked at [PDCurses](https://pdcurses.org/).
+1. Follow the Windows instructions to install [Network Direct SPI](https://github.com/ofiwg/libfabric#windows-instructions). Extract the header files from the downloaded NetworkDirect_DDK.zip and copy them from **NetDirect\include** to **libfabric_new\prov\netdir\NetDirect**.
+1. Clone the Windows EFA repo linked at [EFA Win](https://github.com/aws/efawin/). Place the **efawin** folder at the same directory level as the **aws-cdi-sdk** folder.
+1. Clone (or download) the PDCurses GitHub repo linked at [PDCurses](https://pdcurses.org/).
 
     **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
 
-5. Place the **PDCurses** folder at the same level as the **aws-cdi-sdk** and **libfabric** folders.
+1. Place the **PDCurses** folder at the same level as the **aws-cdi-sdk** and **libfabric** folders.
 
 The **<install_dir>** should now contain the folder hierarchy as shown below:
 
    ```
    <install_dir>\aws-cdi-sdk
+   <install_dir>\efawin
    <install_dir>\libfabric
    <install_dir>\libfabric_new
    <install_dir>\PDCurses
-   <install_dir>\efawin
    ```
 
 
