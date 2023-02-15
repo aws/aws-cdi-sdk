@@ -520,10 +520,6 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         endpoint_ptr->fabric_initialized = true;
     }
 
-    if (kCdiStatusOk == rs) {
-        endpoint_ptr->fabric_initialized = true;
-    }
-
     CdiOsCritSectionRelease(efa_adapter_state_ptr->libfabric_lock);
 
     return rs;
@@ -1020,6 +1016,27 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
         }
     }
 
+    // Set environment variables used by libfabric.
+    if (kCdiStatusOk == rs && !is_socket_based) {
+        // Set values specific to EFA provider.
+        //
+        // Disable the shared memory provider, which we are not using. If it is enabled, it will use
+        // rxr_check_cma_capability(), which does a fork() and causes a double flush of cached write data to any open
+        // files that have not been flushed using fflush(). In case this feature is used, the logic below flushes all
+        // open CdiLogger log files using the call to CdiLoggerFlushAllFileLogs().
+        rs = EnvironmentVariableSet("FI_EFA_ENABLE_SHM_TRANSFER", false);
+        if (kCdiStatusOk == rs) {
+            // Set the number of read completion queue entries. Current libfabric default is 50.
+            rs = EnvironmentVariableSet("FI_EFA_CQ_READ_SIZE", EFA_CQ_READ_SIZE);
+            //EnvironmentVariableSet("FI_EFA_CQ_SIZE", 1024); // default is 1024 (see EFA_DEF_CQ_SIZE)
+        }
+#ifdef LIBFABRIC_LOG_LEVEL
+        if (kCdiStatusOk == rs) {
+            rs = EnvironmentVariableSet("FI_LOG_LEVEL", LIBFABRIC_LOG_LEVEL); // Set the libfabric log level.
+        }
+#endif
+    }
+
     // In order to provide support for legacy versions of the SDK, we must use libfabric v1.9. The protocol changed in
     // libfabric after 1.9 and it is not backwards compatible. So, we dynamically load both libfabric 1.9 and the newer
     // version. Depending on the SDK version used by the remote endpoint, the appropriate version of libfabric can be
@@ -1110,27 +1127,6 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
             // Set returned pointer to start of Tx buffer available to application.
             adapter_state_ptr->adapter_data.ret_tx_buffer_ptr = (uint8_t*)mem_ptr;
         }
-    }
-
-    // Set environment variables used by libfabric.
-    if (kCdiStatusOk == rs && !is_socket_based) {
-        // Set values specific to EFA provider.
-        //
-        // Disable the shared memory provider, which we are not using. If it is enabled, it will use
-        // rxr_check_cma_capability(), which does a fork() and causes a double flush of cached write data to any open
-        // files that have not been flushed using fflush(). In case this feature is used, the logic below flushes all
-        // open CdiLogger log files using the call to CdiLoggerFlushAllFileLogs().
-        rs = EnvironmentVariableSet("FI_EFA_ENABLE_SHM_TRANSFER", false);
-        if (kCdiStatusOk == rs) {
-            // Set the number of read completion queue entries. Current libfabric default is 50.
-            rs = EnvironmentVariableSet("FI_EFA_CQ_READ_SIZE", EFA_CQ_READ_SIZE);
-            //EnvironmentVariableSet("FI_EFA_CQ_SIZE", 1024); // default is 1024 (see EFA_DEF_CQ_SIZE)
-        }
-#ifdef LIBFABRIC_LOG_LEVEL
-        if (kCdiStatusOk == rs) {
-            rs = EnvironmentVariableSet("FI_LOG_LEVEL", LIBFABRIC_LOG_LEVEL); // Set the libfabric log level.
-        }
-#endif
     }
 
     if (kCdiStatusOk == rs) {
