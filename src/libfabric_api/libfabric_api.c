@@ -42,7 +42,7 @@
 #ifdef LIBFABRIC_NEW
     #pragma message("Building libfabric_api.c using libfabric_new.")
     /// @brief The CDI-SDK has been validated using the version of libfabric specified below.
-    CDI_STATIC_ASSERT(FI_MAJOR_VERSION == 1 && FI_MINOR_VERSION == 14, "Incorrect libfabric version.");
+    CDI_STATIC_ASSERT(FI_MAJOR_VERSION == 1 && FI_MINOR_VERSION == 15, "Incorrect libfabric version.");
 #else
     #pragma message("Building libfabric_api.c using libfabric (v1.9).")
     /// @brief To provide backwards compatibility with previous versions of the SDK, libfabric version 1.9.x must be

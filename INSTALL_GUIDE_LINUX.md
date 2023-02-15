@@ -96,11 +96,11 @@ Installation of dependent packages is required before building the AWS CDI SDK:
     git clone https://github.com/aws/aws-cdi-sdk
     ```
 
-1. Install libfabric versions. The folder ```libfabric``` is used for libfabric v1.9, which is required to support CDI-SDK versions prior to 3.x.x. The folder ```libfabric_new``` is used for libfabric versions v1.13.x and later, which is required to support CDI-SDK versions 3.x.x.
+1. Install libfabric versions. The folder ```libfabric``` is used for libfabric v1.9, which is required to support CDI-SDK versions prior to 3.x.x. The folder ```libfabric_new``` is used for libfabric versions after v1.9, which is required to support CDI-SDK versions 3.x.x.
 
     ```bash
     git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric libfabric
-    git clone --single-branch --branch v1.14.0 https://github.com/ofiwg/libfabric libfabric_new
+    git clone --single-branch --branch v1.15.2 https://github.com/ofiwg/libfabric libfabric_new
     ```
 
     libfabric_new also requires the development version of rdma-core v27 or later. You can either install the version for your OS using:

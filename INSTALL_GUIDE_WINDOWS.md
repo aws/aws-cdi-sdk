@@ -9,7 +9,6 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
 - [Upgrading from previous releases](#upgrading-from-previous-releases)
 - [Create an EFA enabled instance](#create-an-efa-enabled-instance)
 - [Connecting to Windows and activating](#connecting-to-windows-and-activating)
-- [Install the Windows EFA driver](#install-the-windows-efa-driver)
 - [Configure the EC2 Instance](#configure-the-ec2-instance)
   - [Create IAM user required by AWS CloudWatch](#create-iam-user-required-by-aws-cloudwatch)
   - [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path)
@@ -31,9 +30,9 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
 
 # Upgrading from previous releases
 
-**Upgrading from CDI SDK 2.3 or earlier**
+**Upgrading from CDI SDK 2.4 or earlier**
 
-* Must download and install a second version of libfabric. This includes renaming the new libfabric's Visual Studio project files. See steps in the libfabric section of [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
+* Must download and install a second version of libfabric. See steps in the libfabric section of [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
 
 ---
 # Create an EFA enabled instance
@@ -45,41 +44,6 @@ Follow the steps in [create an EFA-enabled instance](README.md#create-an-efa-ena
 Connect to your EC2 instance using Remote Desktop.
 Refer to **step 2** in the [AWS Windows Guide](https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/EC2_GetStarted.html).
 If Windows activation fails, see [these instructions](https://aws.amazon.com/premiumsupport/knowledge-center/windows-activation-fails/).
-
----
-
-# Install the Windows EFA driver
-
-To run on Windows, an EFA driver must be installed manually. Obtain the latest copy of the [Windows EFA driver ZIP file](https://ec2-windows-drivers-efa.s3-us-west-2.amazonaws.com/Latest/EFADriver.zip).
-
-1. Unzip the file to a folder called **EFADriver**.
-
-1. Run **install.ps1** from within the **EfaDriver** folder to install the certificate and the driver.
-
-    ```powershell
-    .\install.ps1
-    ```
-
-1. This will prompt the following:
-
-    ```powershell
-    Security warning
-    Run only scripts that you trust. While scripts from the internet can be useful, this script can potentially harm your
-    computer. If you trust this script, use the Unblock-File cmdlet to allow the script to run without this warning
-    message. Do you want to run C:\Users\Administrator\Downloads\EFADriver\install.ps1?
-    [D] Do not run  [R] Run once  [S] Suspend  [?] Help (default is "D"):
-    ```
-
-1. Chose 'Run once' to install.
-
-If the installation is successful, the output will look similar to this:
-
-```powershell
-Installing efa kernel driver: "efa.inf"
-AWS_DEV_DRV_INSTALLER: Device driver successfully installed!
-Completed installation.
-0
-```
 
 ---
 
@@ -200,17 +164,67 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
 
 **Note**: **Windows PowerShell** and [git for windows](https://git-scm.com/download/win) may be used to acquire source repositories while following the steps outlined in the Linux installation guide, or the code may be downloaded directly from zip archives.
 
-1. Install libfabric versions. The folder ```libfabric``` is used for libfabric v1.9, which is required to support CDI-SDK versions prior to 3.x.x. The folder ```libfabric_new``` is used for libfabric versions v1.15.x and later, which is required to support CDI-SDK versions 3.x.x for Windows.
+1. Install libfabric versions. The folder ```libfabric``` is used for libfabric v1.9, which is required to support CDI-SDK versions prior to 3.x.x. The folder ```libfabric_new``` is used for libfabric versions after 1.9, which is required to support CDI-SDK versions 3.x.x or later for Windows.
 
     ```bash
     git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric libfabric
-    git clone --single-branch --branch v1.14.0 https://github.com/ofiwg/libfabric libfabric_new
+    git clone --single-branch --branch v1.15.2 https://github.com/ofiwg/libfabric libfabric_new
     ```
 
    - Place the **libfabric** and **libfabric_new** folders at the same directory level as the **aws-cdi-sdk** folder.
-   - In the **libfabric_new** folder, rename the **libfabric.vcxproj**, **libfabric_new.vcxproj.filters** and **libfabric_new.vcxproj.user** files to use **libfabric_new** instead of **libfabric**. This is done for several reasons. The AWS CDI SDK solution file uses them as a project source and linking to the generated libraries. It also provides a clear identification of the libfabric versions while using the AWS CDI SDK solution in Visual Studio.
-1. Follow the Windows instructions to install [Network Direct SPI](https://github.com/ofiwg/libfabric#windows-instructions). Extract the header files from the downloaded NetworkDirect_DDK.zip and copy them from **NetDirect\include** to **libfabric_new\prov\netdir\NetDirect**.
-1. Clone the Windows EFA repo linked at [EFA Win](https://github.com/aws/efawin/). Place the **efawin** folder at the same directory level as the **aws-cdi-sdk** folder.
+
+1. Run **install.ps1** from within the **aws-cdi-sdk/proj** folder to install the EFADriver required by Windows, **efawin** source-code (required by libfabric_new) and rename libfabric_new Visual Studio solution and project files.
+
+    ```powershell
+    .\install.ps1
+    ```
+
+1. This will prompt the following:
+
+    ```powershell
+    Security warning
+    Run only scripts that you trust. While scripts from the internet can be useful, this script can potentially harm your
+    computer. If you trust this script, use the Unblock-File cmdlet to allow the script to run without this warning
+    message. Do you want to run C:\Users\Administrator\Downloads\EFADriver\install.ps1?
+    [D] Do not run  [R] Run once  [S] Suspend  [?] Help (default is "D"):
+    ```
+
+1. Chose 'Run once' to install.
+   If the installation is successful, the output will look similar to this:
+
+    ```powershell
+    Downloading latest EFADriver files...
+    done
+    Deleting existing folder C:\folder\aws-cdi-sdk\proj\EFADriver
+    Extracting EFADriver files.
+    done
+    Invoking EFADriver installer
+    Installing efa kernel driver: "efa.inf"
+    AWS_DEV_DRV_INSTALLER: Successfully updated Driver
+    AWS_DEV_DRV_INSTALLER: Device driver successfully installed!
+    Completed installation.
+    0
+    done
+    Downloading efawin version 1.0.0 files...
+    done
+    Extracting efawin files.
+    done
+    Deleting existing folder C:\folder\aws-cdi-sdk\proj\..\..\efawin
+    Renaming C:\folder\aws-cdi-sdk\proj\..\..\efawin-1.0.0 to efawin
+    done
+    Renaming libfabric_new solution and project files from libfabric... to libfabric_new...
+    Renaming C:\folder\aws-cdi-sdk\proj\..\..\libfabric_new\libfabric.sln to libfabric_new.sln
+    Renaming C:\folder\aws-cdi-sdk\proj\..\..\libfabric_new\libfabric.vcxproj to libfabric_new.vcxproj
+    Renaming C:\folder\aws-cdi-sdk\proj\..\..\libfabric_new\libfabric.vcxproj.filters to libfabric_new.vcxproj.filters
+    done
+    ```
+
+1. Run **.appveyor.ps1** from within the **libfabric_new** folder to complete installation of additional files within libfabric_new required to support EFA. You will get the same prompt as above, so choose Run once to install. **Note**: If the command has already been executed or the files have already been manually installed, you can safely ignore the "file...already exists" errors.
+
+    ```powershell
+    .\.appveyor.ps1
+    ```
+
 1. Clone (or download) the PDCurses GitHub repo linked at [PDCurses](https://pdcurses.org/).
 
     **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
