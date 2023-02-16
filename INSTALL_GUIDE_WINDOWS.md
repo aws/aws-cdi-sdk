@@ -171,9 +171,9 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
     git clone --single-branch --branch v1.15.2 https://github.com/ofiwg/libfabric libfabric_new
     ```
 
-   - Place the **libfabric** and **libfabric_new** folders at the same directory level as the **aws-cdi-sdk** folder.
+   - Place the ```libfabric``` and ```libfabric_new``` folders at the same directory level as the ```aws-cdi-sdk``` folder.
 
-1. Run **install.ps1** from within the **aws-cdi-sdk/proj** folder to install the EFADriver required by Windows, **efawin** source-code (required by libfabric_new) and rename libfabric_new Visual Studio solution and project files.
+1. Run **install.ps1** from within the ```aws-cdi-sdk/proj``` folder to install the EFADriver required by Windows, **efawin** source-code (required by ```libfabric_new```) and rename ```libfabric_new``` Visual Studio solution and project files.
 
     ```powershell
     .\install.ps1
@@ -219,7 +219,7 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
     done
     ```
 
-1. Run **.appveyor.ps1** from within the **libfabric_new** folder to complete installation of additional files within libfabric_new required to support EFA. You will get the same prompt as above, so choose Run once to install. **Note**: If the command has already been executed or the files have already been manually installed, you can safely ignore the "file...already exists" errors.
+1. Run **.appveyor.ps1** from within the ```libfabric_new``` folder to complete installation of additional files within ```libfabric_new``` required to support EFA. You will get the same prompt as above, so choose Run once to install. **Note**: If the command has already been executed or the files have already been manually installed, you can safely ignore the "file...already exists" errors.
 
     ```powershell
     .\.appveyor.ps1
@@ -229,7 +229,7 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
 
     **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
 
-1. Place the **PDCurses** folder at the same level as the **aws-cdi-sdk** and **libfabric** folders.
+1. Place the **PDCurses** folder at the same level as the ```aws-cdi-sdk``` and ```libfabric``` folders.
 
 The **<install_dir>** should now contain the folder hierarchy as shown below:
 
@@ -274,10 +274,10 @@ The **proj** directory contains the Visual Studio project solution for Windows d
    ```
    <install_dir>\aws-cdi-sdk
    <install_dir>\aws-sdk-cpp
+   <install_dir>\efawin
    <install_dir>\libfabric
    <install_dir>\libfabric_new
    <install_dir>\PDCurses
-   <install_dir>\windrma
    ```
 
 1. Copy the AWS CDI SDK files required by ```AWS SDK for C++``` to the proper location.
