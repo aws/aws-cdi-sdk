@@ -241,6 +241,9 @@ If you do not make these changes, collection of performance metrics remains enab
 
 Separately, customers can also configure the AWS CDI SDK to collect performance metrics to be displayed within their own Amazon CloudWatch account. Instructions to enable and disable the Amazon CloudWatch display are available in the [Linux](./INSTALL_GUIDE_LINUX.md#disabling-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account) and [Windows](./INSTALL_GUIDE_WINDOWS.md#disabling-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account) installation guides.
 
+### CDI Between Shared Instances in Shared Subnets
+CDI can be sent between EC2 instances belonging to different VPCs, but located in the same subnet [shared between the accounts using Resource Access Manager](https://docs.aws.amazon.com/vpc/latest/userguide/example-vpc-share.html).  In this case, in addition to the usual EFA-enabled security group requirements, each EC2 instance security group must also have inbound and outbound rules allowing "all traffic" with source or destination of the EFA-enabled security group of the other VPC, referenced with "account/SG" notation.
+
 ### Learn more
 
 For more information about how AWS protects data privacy, please see [AWS’s Data Privacy FAQs](https://aws.amazon.com/compliance/data-privacy-faq/).
