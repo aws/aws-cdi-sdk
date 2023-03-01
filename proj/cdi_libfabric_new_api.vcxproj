@@ -31,6 +31,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\libfabric_new\libfabric_new.vcxproj">
       <Project>{6b3a874f-b14c-4f16-b7c3-31e94859ae3e}</Project>
+	  <SetConfiguration>Configuration=Debug-Efa-v142</SetConfiguration>
+	  <SetConfiguration>Configuration=Release-Efa-v142</SetConfiguration>
     </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
