@@ -1,7 +1,7 @@
 # Windows Installation Guide
 Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windows instances.
 
-**In addition to filing [bugs/issues](https://github.com/aws/aws-cdi-sdk/issues), please use the CDI-SDK [discussion pages](https://github.com/aws/aws-cdi-sdk/discussions) for Q&A, Ideas, Show and Tell or other General topics so the whole community can benefit.**
+**In addition to filing [bugs/issues](https://github.com/aws/aws-cdi-sdk/issues), please use the AWS CDI SDK [discussion pages](https://github.com/aws/aws-cdi-sdk/discussions) for Q&A, Ideas, Show and Tell or other General topics so the whole community can benefit.**
 
 ---
 
@@ -12,10 +12,9 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
 - [Configure the EC2 Instance](#configure-the-ec2-instance)
   - [Create IAM user required by AWS CloudWatch](#create-iam-user-required-by-aws-cloudwatch)
   - [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path)
-- [Install the AWS CDI SDK](#install-the-aws-cdi-sdk)
-  - [Install the AWS SDK for C++](#install-the-aws-sdk-for-c)
-- [Build CDI libraries and test applications](#build-cdi-libraries-and-test-applications)
-  - [Build the AWS CDI SDK](#build-the-aws-cdi-sdk)
+- [Install and build the AWS CDI SDK](#install-and-build-the-aws-cdi-sdk)
+- [Manually building CDI libraries and test applications](#manually-building-cdi-libraries-and-test-applications)
+  - [Building the AWS CDI SDK with Microsoft Visual Studio IDE](#building-the-aws-cdi-sdk-with-microsoft-visual-studio-ide)
   - [(Optional) Disable the display of performance metrics to your Amazon CloudWatch account](#optional-disable-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
 - [Build the HTML documentation](#build-the-html-documentation)
 - [Creating additional instances](#creating-additional-instances)
@@ -25,6 +24,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
   - [Additional tests](#additional-tests)
   - [Windows specific test differences from Linux](#windows-specific-test-differences-from-linux)
     - [Disabling the SHM transfer error message](#disabling-the-shm-transfer-error-message)
+    - [Using the libfabric socket adapter on instances without an EFA adapter](#using-the-libfabric-socket-adapter-on-instances-without-an-efa-adapter)
 
 ---
 
@@ -32,7 +32,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
 
 **Upgrading from CDI SDK 2.4 or earlier**
 
-* Must download and install a second version of libfabric. See steps in the libfabric section of [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
+* Install in a clean folder. A PowerShell script is used to install the AWS CDI SDK and required components. See steps in [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
 
 ---
 # Create an EFA enabled instance
@@ -75,7 +75,7 @@ If Windows activation fails, see [these instructions](https://aws.amazon.com/pre
     choco install git.install -y
     ```
 
-    **Note**: After installing git, the Powershell window needs to be closed and reopened before the ```git``` command will be recognized.
+    **Note**: After installing git, the PowerShell window needs to be closed and reopened before the ```git``` command will be recognized.
 
 1. Install Doxygen
 
@@ -83,7 +83,7 @@ If Windows activation fails, see [these instructions](https://aws.amazon.com/pre
     choco install doxygen.install -y
     ```
 
-    **Note**: After installing Doxygen, the Powershell window needs to be closed and reopened before the ```doxygen``` command will be recognized.
+    **Note**: After installing Doxygen, the PowerShell window needs to be closed and reopened before the ```doxygen``` command will be recognized.
 
 1. Install Microsoft Visual Studio 2019 and native desktop (C/C++) components with Chocolatey from Powershell:
 
@@ -158,118 +158,29 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
 
 ---
 
-# Install the AWS CDI SDK
+# Install and build the AWS CDI SDK
 
 **Caution**: Do not install a new version of the AWS CDI SDK over an old one.
 
-**Note**: **Windows PowerShell** and [git for windows](https://git-scm.com/download/win) may be used to acquire source repositories while following the steps outlined in the Linux installation guide, or the code may be downloaded directly from zip archives.
+**Note**: **Windows PowerShell** and [git for Windows](https://git-scm.com/download/win) are used to acquire source repositories.
 
-1. Install libfabric versions. The folder ```libfabric``` is used for libfabric v1.9, which is required to support CDI-SDK versions prior to 3.x.x. The folder ```libfabric_new``` is used for libfabric versions after 1.9, which is required to support CDI-SDK versions 3.x.x or later for Windows.
-
-    ```bash
-    git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric libfabric
-    git clone --single-branch --branch v1.15.2 https://github.com/ofiwg/libfabric libfabric_new
-    ```
-
-   - Place the ```libfabric``` and ```libfabric_new``` folders at the same directory level as the ```aws-cdi-sdk``` folder.
-
-1. Run **install.ps1** from within the ```aws-cdi-sdk/proj``` folder to install the EFADriver required by Windows, **efawin** source-code (required by ```libfabric_new```) and rename ```libfabric_new``` Visual Studio solution and project files.
+1. From within a PowerShell in **Administrator mode**, run **install.ps1** from within the ```aws-cdi-sdk/proj``` folder as shown below. It will install the EFADriver required by Windows, the **AWS SDK C++**, two **libfabric** variants, **efawin** and **PDCurses**. After installing the components, it will use Microsoft Visual Studio's MSBuild.exe to build a debug configuration of the AWS CDI SDK.
 
     ```powershell
     .\install.ps1
     ```
 
-1. This will prompt the following:
+1. This will prompt with something like the following:
 
     ```powershell
     Security warning
     Run only scripts that you trust. While scripts from the internet can be useful, this script can potentially harm your
     computer. If you trust this script, use the Unblock-File cmdlet to allow the script to run without this warning
-    message. Do you want to run C:\Users\Administrator\Downloads\EFADriver\install.ps1?
+    message. Do you want to run install.ps1?
     [D] Do not run  [R] Run once  [S] Suspend  [?] Help (default is "D"):
     ```
 
-1. Chose 'Run once' to install.
-   If the installation is successful, the output will look similar to this:
-
-    ```powershell
-    Downloading latest EFADriver files...
-    done
-    Deleting existing folder C:\folder\aws-cdi-sdk\proj\EFADriver
-    Extracting EFADriver files.
-    done
-    Invoking EFADriver installer
-    Installing efa kernel driver: "efa.inf"
-    AWS_DEV_DRV_INSTALLER: Successfully updated Driver
-    AWS_DEV_DRV_INSTALLER: Device driver successfully installed!
-    Completed installation.
-    0
-    done
-    Downloading efawin version 1.0.0 files...
-    done
-    Extracting efawin files.
-    done
-    Deleting existing folder C:\folder\aws-cdi-sdk\proj\..\..\efawin
-    Renaming C:\folder\aws-cdi-sdk\proj\..\..\efawin-1.0.0 to efawin
-    done
-    Renaming libfabric_new solution and project files from libfabric... to libfabric_new...
-    Renaming C:\folder\aws-cdi-sdk\proj\..\..\libfabric_new\libfabric.sln to libfabric_new.sln
-    Renaming C:\folder\aws-cdi-sdk\proj\..\..\libfabric_new\libfabric.vcxproj to libfabric_new.vcxproj
-    Renaming C:\folder\aws-cdi-sdk\proj\..\..\libfabric_new\libfabric.vcxproj.filters to libfabric_new.vcxproj.filters
-    done
-    ```
-
-1. Run **.appveyor.ps1** from within the ```libfabric_new``` folder to complete installation of additional files within ```libfabric_new``` required to support EFA. You will get the same prompt as above, so choose Run once to install. **Note**: If the command has already been executed or the files have already been manually installed, you can safely ignore the "file...already exists" errors.
-
-    ```powershell
-    .\.appveyor.ps1
-    ```
-
-1. Clone (or download) the PDCurses GitHub repo linked at [PDCurses](https://pdcurses.org/).
-
-    **Note**: **PDCurses** is used for the ```cdi_test.exe``` application's multi-window mode for formatted console output. Your download and use of this third party content is at your election and risk, and may be subject to additional terms and conditions. Amazon is not the distributor of content you elect to download from third party sources, and expressly disclaims all liability with respect to such content.
-
-1. Place the **PDCurses** folder at the same level as the ```aws-cdi-sdk``` and ```libfabric``` folders.
-
-The **<install_dir>** should now contain the folder hierarchy as shown below:
-
-   ```
-   <install_dir>\aws-cdi-sdk
-   <install_dir>\efawin
-   <install_dir>\libfabric
-   <install_dir>\libfabric_new
-   <install_dir>\PDCurses
-   ```
-
-
-The **proj** directory contains the Visual Studio project solution for Windows development.
-
-- The solution file builds the AWS CDI SDK library, ```cdi_sdk.lib``` or ```cdi_sdk.dll```, including its dependencies, ```libfabric.dll```, ```libfabric_new.dll```, ```cdi_libfabric_api.lib```, ```cdi_libfabric_new_api.lib```, and the test applications ```cdi_test.exe```, ```cdi_test_min_tx.exe``` and ```cdi_test_min_rx.exe```.
-- For detailed folder descriptions, refer to the descriptions in the [Linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk).
-
----
-
-## Install the AWS SDK for C++
-
-**Note**: The AWS CDI SDK was tested with AWS SDK version 1.8.46.
-
-**Note**: The AWS SDK for C++ is essential for metrics gathering functions of AWS CDI SDK to operate properly. Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
-
-**Note**: It is recommended to first review the [AWS SDK Developer guide](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/setup.html) before proceeding through the next steps.
-
-**Note**: The following instructions will install the AWS SDK for C++ at the same directory level as the AWS CDI SDK. This is not required but is recommended for simplicity of installation.
-
-1. Open Microsoft Visual Studio 2019 by right clicking on it and selecting **Run as Administrator**.
-1. Inside Microsoft Visual Studio 2019 click **Open a project or solution** and navigate to the install directory used in the section [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and open the solution file ```<install_dir>/aws-cdi-sdk/proj/cdi_proj.sln```.
-1. Open a Powershell by selecting **Tools > Command Line > Developer Powershell**.
-1. Inside the shell navigate to the install directory used for [Install the AWS CDI SDK](#install-the-aws-cdi-sdk) and download the AWS SDK for C++.
-
-    ```
-    cd <install_dir>
-    git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp
-    ```
-
-    The **<install_dir>** should now contain the folder hierarchy as shown below:
+1. Chose 'Run once' to install. The **<install_dir>** should now contain the folder hierarchy as shown below:
 
    ```
    <install_dir>\aws-cdi-sdk
@@ -280,42 +191,31 @@ The **proj** directory contains the Visual Studio project solution for Windows d
    <install_dir>\PDCurses
    ```
 
-1. Copy the AWS CDI SDK files required by ```AWS SDK for C++``` to the proper location.
+1. Add the AWS SDK for C++ to the system **PATH**. The installation procedure creates a folder called ```aws-cpp-sdk-all``` in ```C:\Program Files (x86)```. This is the location the of the resulting .dlls and .libs along with the necessary include header files. Add ```C:\Program Files (x86)\aws-cpp-sdk-all\bin``` to the **Path** System Environment Variable using the steps outlined in the section: [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path).
 
-    ```
-    copy -recurse .\aws-cdi-sdk\aws-cpp-sdk-cdi\ .\aws-sdk-cpp\generated\src\
-    ```
+
+The **proj** directory contains the Visual Studio project solution for Windows development.
+
+- The solution file builds the AWS CDI SDK library, ```cdi_sdk.lib``` or ```cdi_sdk.dll```, including its dependencies, ```libfabric.dll```, ```libfabric_new.dll```, ```cdi_libfabric_api.lib```, ```cdi_libfabric_new_api.lib```, and the test applications ```cdi_test.exe```, ```cdi_test_min_tx.exe``` and ```cdi_test_min_rx.exe```.
+- For detailed folder descriptions, refer to the descriptions in the [Linux installation guide](./INSTALL_GUIDE_LINUX.md#install-aws-cdi-sdk).
+
+
+**Note**: The AWS SDK for C++ installed at ```<install_dir>\aws-sdk-cpp``` is essential for metrics gathering functions of AWS CDI SDK to operate properly. Although not recommended, see [these instructions](./README.md#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk) to learn how to optionally disable metrics gathering.
 
 ---
 
-# Build CDI libraries and test applications
+# Manually building CDI libraries and test applications
 
-The extracted AWS CDI SDK solution, cdi_proj.sln, contains three test applications: *cdi_test*, *cdi_test_min_rx*, and *cdi_test_min_tx*. Each project can be built using either the Debug or Release configuration.
+The AWS CDI SDK solution, *cdi_proj.sln*, contains three test applications: *cdi_test*, *cdi_test_min_rx*, and *cdi_test_min_tx*. Each project can be built using either Debug or Release configurations.
 
-1. Build and install AWS SDK for C++ for use with the AWS CDI SDK.
-
-    ```
-    cd .\aws-sdk-cpp
-    cmake . -D CMAKE_BUILD_TYPE=Debug -D BUILD_ONLY="monitoring;cdi"
-    msbuild .\ALL_BUILD.vcxproj
-    msbuild .\INSTALL.vcxproj /p:Configuration=Debug
-    ```
-
-   **Important**: The install commands must be run in a shell in **Administrator mode**.
-
-   **Note**: This step builds and installs the AWS SDK for C++ **Debug** build. The AWS SDK for C++ **Release** build is incompatible with the AWS CDI SDK **Debug** build but the AWS SDK for C++ **Debug** build is compatible with both **Debug** and **Release** variants of AWS CDI SDK.
-
-2. Add the AWS SDK for C++ to the system **PATH**. The installation procedure creates a folder called ```aws-cpp-sdk-all``` in ```C:\Program Files (x86)```. This is the location the of the resulting .dlls and .libs along with the necessary include header files.
-
-    - The folder contains 3 directories: ```bin```, ```include```, and ```lib```.
-    - Add ```C:\Program Files (x86)\aws-cpp-sdk-all\bin``` to the **Path** System Environment Variable using the steps outlined in the section: [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path).
-
-## Build the AWS CDI SDK
+## Building the AWS CDI SDK with Microsoft Visual Studio IDE
 
 This procedure builds the entire AWS CDI SDK solution in a Debug configuration.
 
-1. Use Microsoft Visual Studio 2019 and open the *cdi_proj.sln* solution file found at ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
-1. Choose a configuration. For this example, choose **Debug**. **Note**: To use a DLL configuration, the equivalent **Debug** or **Release** configuration must be build first.
+**Note**: It is recommended to use Microsoft Visual Studio 2019, but Visual Studio 2022 can be used if the optional component **MSVC v142 - VS 2019 C++ x64/x86 build tools** is installed. Please refer to Microsoft's documentation on how to install it.
+
+1. Use Microsoft Visual Studio to open the *cdi_proj.sln* solution file found at ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
+1. Choose a configuration. For this example, choose **Debug**. **Note**: To use a DLL configuration, the equivalent **Debug** or **Release** configuration must be built first.
 1. When switching between debug and release configurations, clean the solution by selecting: **Build** > **Clean Solution**.
 1. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications. **Note**: The test applications are only configured to use static libraries, so must use **Debug** or **Release** configurations when building them.
 1. Choose the application to run. By default, the *cdi_test* application runs. To select another application, right-click on the target application and choose **Set as Startup Project** for the application you want to run.
@@ -336,7 +236,7 @@ To build the AWS CDI SDK documentation, install Doxygen using Chocolatey and con
 
 1. To build the documentation:
     - Open a ```powershell``` or ```cmd``` Window:
-      - To open a Cmd window, press the Windows key or select the search icon in the Windows Start menu, and type ```cmd```.  To open a Powershell window, type ```powershell``` instead.
+      - To open a Cmd window, press the Windows key or select the search icon in the Windows Start menu, and type ```cmd```.  To open a PowerShell window, type ```powershell``` instead.
     - Navigate to Visual Studio project directory in the aws-cdi-sdk repo (i.e. ```aws-cdi-sdk\proj```).
     - Run make_docs.bat to build the documentation.
         - To build the full documentation for the SDK and the test applications, run the following command:
@@ -399,7 +299,7 @@ For more examples of tests, refer to [Running the Full-Featured Test Application
 ## Windows specific test differences from Linux
 While the functionality of the AWS CDI SDK in Windows and Linux is the same, there are some slight differences.
 
-1. Use **ipconfig.exe** in Powershell to retrieve the local IP address.
+1. Use **ipconfig.exe** in PowerShell to retrieve the local IP address.
 1. Command-line insertion can also be entered in Microsoft Visual Studio for any configuration.
     1. Choose **Debug > Properties > Configuration** and  **Properties > Debugging > Command Arguments**
 1. When using logs in Windows, verify that the targeted directory exists. The application will exit if the directory does not exist.
@@ -418,5 +318,9 @@ turn it off, you can suppress this message by setting FI_EFA_ENABLE_SHM_TRANSFER
 This message can be safely ignored, or it can be eliminated by creating a Windows environment variable called ```FI_EFA_ENABLE_SHM_TRANSFER``` and setting it to ```0```.
 
 ---
+
+### Using the libfabric socket adapter on instances without an EFA adapter
+
+When using the [libfabric sockets adapter](USER_GUIDE_TEST_APP.md#testing-cdi-with-the-libfabric-sockets-adapter) on an instance that does not have an EFA adapter, remove the AWS CDI SDK built file **efawin.dll** to prevent problems from occurring during initialization of libfabric. It can be found in the build result folder located at **aws-cdi-sdk/proj/x64/\<configuration\>**.
 
 [[Return to README](README.md)]

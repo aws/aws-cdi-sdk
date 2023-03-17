@@ -8,7 +8,7 @@ This is the usage guide for the example CDI Test applications ```cdi_test```, ``
 - [Test Application User Guide](#test-application-user-guide)
 - [Running the minimal test applications](#running-the-minimal-test-applications)
   - [Minimal test application help](#minimal-test-application-help)
-- [Pinning cdi_test Poll Threads to Specific CPU Cores](#pinning-cdi_test-poll-threads-to-specific-cpu-cores)
+- [Pinning cdi\_test Poll Threads to Specific CPU Cores](#pinning-cdi_test-poll-threads-to-specific-cpu-cores)
   - [EFA test](#efa-test)
 - [Running the full-featured test application](#running-the-full-featured-test-application)
   - [Test application help](#test-application-help)
@@ -501,6 +501,8 @@ Transmitter:
 ```bash
 ./build/debug/bin/cdi_test --adapter SOCKET_LIBFABRIC --local_ip <tx-ipv4> -X --tx RAW --dest_port 2000 --remote_ip <rx-ipv4> --num_transactions 1000 --rate 30 -name single_raw --keep_alive -S --pattern INC --payload_size 20000
 ```
+
+**Note**: If using a Windows instance without an EFA adapter, please see [here](INSTALL_GUIDE_WINDOWS.md#Using-the-libfabric-socket-adapter-on-instances-without-an-EFA-adapter).
 
 ## Using file-based command-line argument insertion
 
