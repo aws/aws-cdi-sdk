@@ -262,7 +262,7 @@ CXXFLAGS += $(COMMON_COMPILER_FLAG_ADDITIONS) --std=c++11
 # An rpath is specified so cdi_test can find libcdisdk.so.x in the same directory as cdi_test or in a sibling directory
 # named lib.
 CDI_LDFLAGS = $(LDFLAGS) -L$(build_dir.lib) -lcdisdk $(EXTRA_LD_LIBS) -lm $(aws_sdk_library_flags)
-CDI_TEST_LDFLAGS = -lncurses -ltinfo -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib
+CDI_TEST_LDFLAGS = -lncurses -ltinfo -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib -Wl,-rpath-link,$(build_dir.lib)
 
 # docs go into the build directory but are not specific to release/debug
 build_dir.doc := $(top.build)/documentation
