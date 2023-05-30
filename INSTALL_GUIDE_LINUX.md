@@ -1,7 +1,7 @@
 # Linux Installation Guide
 Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux instances.
 
-**In addition to filing CDI-SDK [bugs/issues](https://github.com/aws/aws-cdi-sdk/issues), please use the [discussion pages](https://github.com/aws/aws-cdi-sdk/discussions) for Q&A, Ideas, Show and Tell or other General topics so the whole community can benefit.**
+**In addition to filing AWS CDI SDK [bugs/issues](https://github.com/aws/aws-cdi-sdk/issues), please use the [discussion pages](https://github.com/aws/aws-cdi-sdk/discussions) for Q&A, Ideas, Show and Tell or other General topics so the whole community can benefit.**
 
 ---
 
@@ -20,7 +20,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 - [Validate the EFA environment](#validate-the-efa-environment)
 - [Build the HTML documentation](#build-the-html-documentation)
 - [Creating additional instances](#creating-additional-instances)
-- [Pinning CDI-SDK Poll Threads to Specific CPU Cores](#pinning-cdi-sdk-poll-threads-to-specific-cpu-cores)
+- [Pinning AWS CDI SDK Poll Threads to Specific CPU Cores](#pinning-aws-cdi-sdk-poll-threads-to-specific-cpu-cores)
   - [Additional Notes/Commands when using cset](#additional-notescommands-when-using-cset)
     - [Display current cpusets](#display-current-cpusets)
     - [Disable Thread Pinning (stop the shield)](#disable-thread-pinning-stop-the-shield)
@@ -33,7 +33,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 **Upgrading from CDI SDK 2.4 or earlier**
 
 * Must [install](#install-efa-driver) the latest EFA driver and **REBOOT** the system.
-* Must download and install a second version of **libfabric**, which requires **rdma-core-devel**. See steps in the libfabric section of [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
+* Must download and install a second version of **libfabric**, which requires **rdma-core**. See steps in the libfabric section of [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
 
 ---
 
@@ -45,12 +45,17 @@ Follow the steps in [create an EFA-enabled instance](README.md#create-an-efa-ena
 
 For Linux installations, follow step 3 in [launch an Elastic Fabric Adapter (EFA)-capable instance](http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html), with the following additions to the step **Install the EFA software**:
 
+**Note**: EFA installer version v1.22.1 is the last installer version that will support Ubuntu 18.04 LTS (Bionic Beaver) as this distribution reaches the end of 5-year standard support by May 2023. For details, see Ubuntu lifecycle documentation. Future versions of EFA installer will not contain support for Ubuntu 18.04 LTS.
+
  - During **Connect to the instance you launched**, once your instance has booted, you can find the public IP you requested earlier by clicking on the instance and looking for “IPv4 Public IP” in the pane below your instance list. Use that IP address to SSH to your new instance.
     - If you cannot connect (connection times out), you may have forgotten to add an SSH rule to your security group, or you may need to set up an internet gateway for your Virtual Private Cloud (VPC) and add a route to your subnet. You can find more information about setting up SSH access and connecting to the instance at [accessing Linux instances](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AccessingInstancesLinux.html).
     - The default user name for Amazon Linux 2 instances is ```ec2-user```, on CentOS it’s ```centos```, and on Ubuntu, it’s ```ubuntu```.
 - During **Install the EFA software.**, install the minimum version of the EFA software using the command shown below. This will not install libfabric; the AWS CDI SDK uses its own versions.
 
     ```sudo ./efa_installer.sh -y --minimal```
+    **Note**: The SDK may be installed on a system that does not contain an EFA adapter. However, the system can only be used for building EFA enabled applications or testing applications that use the socket adapters. Use this command to skip EFA kernel installation and device verification:
+
+    ```sudo ./efa_installer.sh -y --minimal --skip-kmod --no-verify```
 
 1. During **Confirm that the EFA software components were successfully installed**, note that the ```fi_info``` command does not work when installing the minimum version of EFA software. You will perform this check later after installing the AWS CDI SDK.
 
@@ -70,6 +75,7 @@ Installation of dependent packages is required before building the AWS CDI SDK:
 
   ```bash
   sudo dnf update -y
+  sudo dnf install epel-release -y
   sudo dnf config-manager --set-enabled powertools
   sudo dnf -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel unzip git
   ```
@@ -96,22 +102,14 @@ Installation of dependent packages is required before building the AWS CDI SDK:
     git clone https://github.com/aws/aws-cdi-sdk
     ```
 
-1. Install libfabric versions. The folder ```libfabric``` is used for libfabric v1.9, which is required to support CDI-SDK versions prior to 3.x.x. The folder ```libfabric_new``` is used for libfabric versions v1.13.x and later, which is required to support CDI-SDK versions 3.x.x.
+1. Install libfabric versions. The folder ```libfabric``` is used for libfabric v1.9, which is required to support AWS CDI SDK versions prior to 3.x.x. The folder ```libfabric_new``` is used for libfabric versions after v1.9, which is required to support AWS CDI SDK versions 3.x.x and later.
 
     ```bash
     git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric libfabric
-    git clone --single-branch --branch v1.14.0 https://github.com/ofiwg/libfabric libfabric_new
+    git clone --single-branch --branch v1.15.2 https://github.com/ofiwg/libfabric libfabric_new
     ```
 
-    libfabric_new also requires the development version of rdma-core v27 or later. You can either install the version for your OS using:
-    ```
-    sudo yum install rdma-core-devel
-    ```
-
-    Or using source to build the latest version. After built, the library files **libefa-rdmv??.so**, **libefa.so** and **libibverbs.so** will need to be copied from **<install path>/rdma-core/build/lib** to the same folder where the CDI-SDK library is generated.     To build rdma-core, see the [REAMDME file](https://github.com/linux-rdma/rdma-core/blob/master/README.md). Source code can be obtained using:
-    ```
-    git clone https://github.com/linux-rdma/rdma-core
-    ```
+    **Note**: libfabric_new also requires the development version of rdma-core v27 or later, which is installed as part of the EFA Driver installation described above using ```efa_installer.sh```.
 
 The **<install_dir>** should now contain the folder hierarchy as shown below:
 
@@ -238,7 +236,7 @@ The following commands build the DEBUG variety of the SDK:
 
 ```bash
 cd aws-cdi-sdk/
-make DEBUG=y AWS_SDK=<path to AWS SDK C++> RDMA_CORE_PATH=<path to rdma-core/build>
+make DEBUG=y AWS_SDK=<path to AWS SDK C++>
 ```
 
 **Note**: A trailing ```/``` may be required on the path given in <path to AWS SDK C++> above. For example:
@@ -255,9 +253,7 @@ cd aws-cdi-sdk/
 make DEBUG=y AWS_SDK=../aws-sdk-cpp/ 2>&1 | tee build.log
 ```
 
-**Note**: RDMA_CORE_PATH does not have to specified if you installed the OS package version of rdma-core-devel.
-
-**Note**: If you experience **library not found errors** during linking, you may have to change the **rpath** in the **Makefile** from using **$$ORIGIN** to using an absolute path that points to the CDI-SDK lib folder (ie. ```<install path>/build/debug/lib```).
+**Note**: If you experience **library not found errors** during linking, you may have to change the **rpath** in the **Makefile** from using **$$ORIGIN** to using an absolute path that points to the AWS CDI SDK lib folder (ie. ```<install path>/build/debug/lib```).
 
 After a successful compile, the locations for the results are at:
 - Test application: ```cdi_test``` is placed at ```aws-cdi-sdk/build/debug/bin```
@@ -374,11 +370,11 @@ To create a new instance, create an Amazon Machine Image (AMI) of the existing i
 
 ---
 
-# Pinning CDI-SDK Poll Threads to Specific CPU Cores
+# Pinning AWS CDI SDK Poll Threads to Specific CPU Cores
 
-On Linux, the transmit and recieve poll threads should be pinned to specific CPU cores in order to prevent thread starvation resulting in poor packet transmission performance and other problems.
+On Linux, the transmit and receive poll threads should be pinned to specific CPU cores in order to prevent thread starvation resulting in poor packet transmission performance and other problems.
 
-The CPU used for the poll thread is defined when creating a new CDI connection through the CDI-SDK API using a
+The CPU used for the poll thread is defined when creating a new CDI connection through the AWS CDI SDK API using a
 configuration setting called **thread_core_num**. For transmit connections the value is in the **CdiTxConfigData**
 structure when using the **CdiAvmTxCreate()**, **CdiRawTxCreate()** or **CdiAvmTxStreamEndpointCreate()** APIs. For
 receive connections the value is in the **CdiRxConfigData** structure when using the **CdiAvmRxCreate()** or
@@ -470,8 +466,8 @@ within Docker containers.
    All efforts were unsuccessful.
 * Any time we tried pinning CDI threads to less than three cores we ran into issues, so three is the minimum.
 
-**What worked:** Once the CDI-SDK poll-threads were pinned to specific cores, we pinned all other application threads
-away from those cores using the CDI-SDK API **CdiOsThreadCreatePinned()**.
+**What worked:** Once the AWS CDI SDK poll-threads were pinned to specific cores, we pinned all other application threads
+away from those cores using the AWS CDI SDK API **CdiOsThreadCreatePinned()**.
 
 ### Launching Docker Containers
 

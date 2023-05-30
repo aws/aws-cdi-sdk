@@ -76,9 +76,12 @@ static bool EfaEnqueueSendProbePacket(ProbeEndpointState* probe_ptr)
 
         work_request_ptr->packet.sg_list.total_data_size = EFA_PROBE_PACKET_DATA_SIZE;
         work_request_ptr->packet.sg_list.sgl_head_ptr = &work_request_ptr->sgl_entry;
+        work_request_ptr->packet.sg_list.sgl_tail_ptr = &work_request_ptr->sgl_entry;
 
         work_request_ptr->sgl_entry.size_in_bytes = EFA_PROBE_PACKET_DATA_SIZE;
         work_request_ptr->sgl_entry.address_ptr = packet_ptr->efa_data;
+        work_request_ptr->sgl_entry.next_ptr = NULL;
+        work_request_ptr->sgl_entry.internal_data_ptr = NULL;
 
         // Set the CDI common header.
         int msg_prefix_size =

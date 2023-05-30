@@ -28,11 +28,6 @@
   <ItemGroup>
     <ClCompile Include="..\src\libfabric_api\libfabric_api.c" />
   </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\libfabric_new\libfabric_new.vcxproj">
-      <Project>{6b3a874f-b14c-4f16-b7c3-31e94859ae3e}</Project>
-    </ProjectReference>
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{2B192852-24A8-4A65-9077-FD26D96F3B5C}</ProjectGuid>
@@ -121,6 +116,9 @@
     <Lib>
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
+    <PostBuildEvent>
+      <Command>copy /y $(OutputPath)..\Debug-Efa-v142\libfabric_new.* $(OutputPath)</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'">
     <ClCompile>
@@ -136,7 +134,7 @@
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <PostBuildEvent>
-      <Command>copy /y $(OutputPath)..\Debug\libfabric_new.* $(OutputPath)</Command>
+      <Command>copy /y $(OutputPath)..\Debug-Efa-v142\libfabric_new.* $(OutputPath)</Command>
     </PostBuildEvent>
     <Link>
       <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -155,6 +153,9 @@
     <Lib>
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
+    <PostBuildEvent>
+      <Command>copy /y $(OutputPath)..\Release-Efa-v142\libfabric_new.* $(OutputPath)</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL|x64'">
     <ClCompile>
@@ -173,7 +174,7 @@
       <AdditionalDependencies>ntdll.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>copy /y $(OutputPath)..\Release\libfabric_new.* $(OutputPath)</Command>
+      <Command>copy /y $(OutputPath)..\Release-Efa-v142\libfabric_new.* $(OutputPath)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

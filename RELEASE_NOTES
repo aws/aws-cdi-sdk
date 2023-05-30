@@ -4,6 +4,19 @@ This file is part of the AWS CDI-SDK, licensed under the BSD 2-Clause "Simplifie
 License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
+CDI (Cloud Digital Interface) SDK Version 3.0.1 - 05/30/2023
+
+What's New
+------------
+
+* Updated install guide for Windows, replacing manual steps with an installation script.
+
+Bug Fixes
+------------
+* Fixed build and run-time problems with Windows variant. For the newer version of libfabric, must use v1.15.2 until
+  further notice.
+
+
 CDI (Cloud Digital Interface) SDK Version 3.0.0 - 01/20/2023
 
 What's New

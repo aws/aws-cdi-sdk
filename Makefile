@@ -262,7 +262,7 @@ CXXFLAGS += $(COMMON_COMPILER_FLAG_ADDITIONS) --std=c++11
 # An rpath is specified so cdi_test can find libcdisdk.so.x in the same directory as cdi_test or in a sibling directory
 # named lib.
 CDI_LDFLAGS = $(LDFLAGS) -L$(build_dir.lib) -lcdisdk $(EXTRA_LD_LIBS) -lm $(aws_sdk_library_flags)
-CDI_TEST_LDFLAGS = -lncurses -ltinfo -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib
+CDI_TEST_LDFLAGS = -lncurses -ltinfo -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib -Wl,-rpath-link,$(build_dir.lib)
 
 # docs go into the build directory but are not specific to release/debug
 build_dir.doc := $(top.build)/documentation
@@ -305,7 +305,7 @@ ifeq ($(require_aws_sdk_build),yes)
             $(error AWS_SDK must be specified.)
         else
             AWS_SDK_ABS := $(abspath $(AWS_SDK))
-            ifeq (0,$(shell if [ -d $(AWS_SDK_ABS)/aws-cpp-sdk-core ]; then echo 1; else echo 0; fi))
+            ifeq (0,$(shell if [ -d $(AWS_SDK_ABS)/src/aws-cpp-sdk-core ]; then echo 1; else echo 0; fi))
                 $(error AWS_SDK does not point to the root of the AWS SDK.)
             else
                 libaws := $(foreach component,monitoring core cdi,$(build_dir.lib64)/libaws-cpp-sdk-$(component).so)
@@ -313,7 +313,7 @@ ifeq ($(require_aws_sdk_build),yes)
                 # add necessary flags for compiler and linker
                 CXXFLAGS += -I$(build_dir)/include
                 aws_h := $(build_dir)/include/aws/core/Aws.h
-                cdi_sdk_src := $(AWS_SDK_ABS)/aws-cpp-sdk-cdi
+                cdi_sdk_src := $(AWS_SDK_ABS)/generated/src/aws-cpp-sdk-cdi
             endif
         endif
     endif
