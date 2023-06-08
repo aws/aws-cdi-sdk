@@ -751,6 +751,23 @@ Here is an example of using AWS CDI SDK command-line arguments to publish AWS Cl
 
 Test files for use with the cdi_test application's --file_read option may be downloaded from [cdi.elemental.com](https://cdi.elemental.com/test_content)
 
+## Content generation tools
+
+The ```src/tools/convert_image_to_rgb10.py``` can be used to convert an image in typical formats such as PNG to an uncompressed payload in CDI's 10-bit RGB
+format.
+
+To install the dependencies needed by this script, run the following command:
+
+```bash
+pip3 install Pillow bitstring
+```
+
+To convert an image file to an uncompressed payload, run the script as follows:
+
+```bash
+./src/tools/convert_image_to_rgb10.py <input_image.png> <output_payload.rgb10>
+```
+
 ----
 
 

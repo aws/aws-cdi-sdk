@@ -4,6 +4,15 @@ This file is part of the AWS CDI-SDK, licensed under the BSD 2-Clause "Simplifie
 License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
+CDI (Cloud Digital Interface) SDK Version 3.0.2 - ??/??/????
+
+What's New
+------------
+
+* Added command-line tool 'src/tools/convert_image_to_rgb10.py' to convert an image into
+  the 10-bit RGB payload format supported by the CDI SDK.
+
+
 CDI (Cloud Digital Interface) SDK Version 3.0.1 - 05/30/2023
 
 What's New
