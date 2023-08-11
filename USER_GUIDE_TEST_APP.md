@@ -723,15 +723,17 @@ With the AWS CloudWatch libraries installed, the AWS CDI SDK can publish metrics
 
 **Note**: Prefix any ```cdi_test``` commands with ```sudo``` to reveal any IAM permission errors, which might not be displayed when run without elevated privileges.
 
-* The namespace controls the naming of the overall metrics container. This value defaults to ```CloudDigitalInterface``` if AWS CloudWatch is enabled and the namespace is unspecified.
-* The region specifies the location to send the metrics, eg. ```us-west-2```. If this value is unspecified, it defaults to the region in which the SDK is running.
-* The dimension domain provides a unique name/value pair for the metric. The domain defaults to the connection name.
-
 Run the following option in the ```cdi_test``` application to view AWS CloudWatch usage and statistics:
 
 ```bash
 ./build/debug/bin/cdi_test --help_stats
 ```
+
+The ```cdi_test``` application can be configured to send metrics using the ```--stats_cloudwatch``` option, which has the following three required arguments: namespace, region, and dimension.
+
+* The namespace controls the naming of the overall metrics container. This value defaults to ```CloudDigitalInterface``` if AWS CloudWatch is enabled and the namespace is set to ```NULL```.
+* The region specifies the location to send the metrics, eg. ```us-west-2```. If this value is set to ```NULL```, it defaults to the region in which the SDK is running.
+* The dimension domain provides a unique name/value pair for the metric. The domain defaults to the connection name.
 
 Here is an example of using AWS CDI SDK command-line arguments to publish AWS CloudWatch metrics:
 
