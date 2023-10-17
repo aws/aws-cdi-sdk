@@ -633,7 +633,7 @@ CDI_INTERFACE void* CdiOsMemAlloc(int32_t mem_size);
  *
  * @return Pointer to the allocated memory block. If unable to allocate the memory block, NULL is returned.
  */
-CDI_INTERFACE void* CdiOsMemAllocZero(int32_t mem_size);
+CDI_INTERFACE void* CdiOsMemAllocZero(int64_t mem_size);
 
 /**
  * Releases a previously allocated block of memory.
@@ -650,7 +650,7 @@ CDI_INTERFACE void CdiOsMemFree(void* mem_ptr);
  *
  * @return Pointer to the allocated memory block. If unable to allocate the memory block, NULL is returned.
  */
-CDI_INTERFACE void* CdiOsMemAllocHugePage(int32_t mem_size);
+CDI_INTERFACE void* CdiOsMemAllocHugePage(int64_t mem_size);
 
 /**
  * Releases a previously allocated block of huge page memory.
@@ -658,7 +658,7 @@ CDI_INTERFACE void* CdiOsMemAllocHugePage(int32_t mem_size);
  * @param mem_ptr Pointer to start address of memory block.
  * @param mem_size Number of bytes that were allocated.
  */
-CDI_INTERFACE void CdiOsMemFreeHugePage(void* mem_ptr, int mem_size);
+CDI_INTERFACE void CdiOsMemFreeHugePage(void* mem_ptr, int64_t mem_size);
 
 // -- File --
 

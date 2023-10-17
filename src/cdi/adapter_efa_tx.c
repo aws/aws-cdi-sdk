@@ -43,11 +43,14 @@
  * @param context_ptr   A pointer to a data structure holding packet context information.
  * @param flush_packets True to flush any cached Tx packets, otherwise cache them as libfabric allows.
  *
- * @return True if successful, otherwise false is returned.
+ * @return If kCdiStatusOk, no error. If kCdiStatusRetry, then need to check completions and then retry. Otherwise an
+ *         error has occurred.
+ *
  */
-static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec *msg_iov_ptr,
-                       int iov_count, const void* context_ptr, bool flush_packets)
+static CdiReturnStatus PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec *msg_iov_ptr,
+                                  int iov_count, const void* context_ptr, bool flush_packets)
 {
+    CdiReturnStatus ret = kCdiStatusOk;
     struct fid_ep *endpoint_ptr = endpoint_state_ptr->endpoint_ptr;
 
     // If we have reached our limit of caching sending the Tx packet or we don't have more to immediately send, then
@@ -90,21 +93,20 @@ static bool PostTxData(EfaEndpointState* endpoint_state_ptr, const struct iovec 
         .data = 0
     };
 
-    const int max_num_tries = 5;
-    int num_tries = 0;
     ssize_t fi_ret = 0;
-    do {
-        fi_ret = endpoint_state_ptr->libfabric_api_ptr->fi_sendmsg(endpoint_ptr, &msg, flags);
-        if (0 == fi_ret || -FI_EAGAIN != fi_ret) {
-            break;
-        }
-    } while (++num_tries != max_num_tries);
-
+    fi_ret = endpoint_state_ptr->libfabric_api_ptr->fi_sendmsg(endpoint_ptr, &msg, flags);
     if (0 != fi_ret) {
-        CDI_LOG_THREAD(kLogError, "Got [%ld (%s)] from fi_sendmsg(), tried [%d] times.",
-            fi_ret, endpoint_state_ptr->libfabric_api_ptr->fi_strerror(-fi_ret), num_tries);
+        if (-FI_EAGAIN != fi_ret) {
+            CDI_LOG_THREAD(kLogError, "Got error [%ld (%s)] from fi_sendmsg().",
+                fi_ret, endpoint_state_ptr->libfabric_api_ptr->fi_strerror(-fi_ret));
+                ret = kCdiStatusSendFailed;
+        } else {
+            CDI_LOG_THREAD(kLogInfo, "Got retry [%ld (%s)] from fi_sendmsg().",
+                fi_ret, endpoint_state_ptr->libfabric_api_ptr->fi_strerror(-fi_ret));
+                ret = kCdiStatusRetry;
+        }
     }
-    return 0 == fi_ret;
+    return ret;
 }
 
 /**
@@ -136,7 +138,6 @@ static bool GetCompletions(LibfabricApi* libfabric_api_ptr, struct fid_cq* compl
         if (fi_ret < 0 && fi_ret != -FI_EAGAIN) {
             // Got one or more errors.
             ret = false;
-            CDI_LOG_THREAD_WHEN(kLogError, true, 1000, "Failed to get completion event. fi_cq_read() failed[%d]", fi_ret);
             if (-FI_EAVAIL == fi_ret) {
                 // Read out completion errors.
                 int i = 0;
@@ -300,14 +301,13 @@ CdiReturnStatus EfaTxEndpointSend(const AdapterEndpointHandle handle, const Pack
                    decoded_header.packet_sequence_num);
 #endif
 
-    if (!PostTxData(endpoint_state_ptr, msg_iov_array, iov_count, packet_ptr, flush_packets)) {
-        rs = kCdiStatusSendFailed;
-    } else {
+    rs = PostTxData(endpoint_state_ptr, msg_iov_array, iov_count, packet_ptr, flush_packets);
+    if (kCdiStatusOk == rs) {
         // Increment the Tx packets in progress count.
         endpoint_state_ptr->tx_state.tx_packets_in_process++;
     }
 
-    if (kCdiStatusOk != rs) {
+    if (kCdiStatusOk != rs && kCdiStatusRetry != rs) {
         // For now, we must assume the connection to the receiver has gone down and must reset it. Notify the probe
         // component so it can start the connection reset process.
         ProbeEndpointError(endpoint_state_ptr->probe_endpoint_handle);

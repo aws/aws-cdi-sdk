@@ -805,7 +805,7 @@ void* CdiOsMemAlloc(int32_t mem_size)
     return mem_ptr;
 }
 
-void* CdiOsMemAllocZero(int32_t mem_size)
+void* CdiOsMemAllocZero(int64_t mem_size)
 {
     void* mem_ptr = CdiOsMemAlloc(mem_size);
 
@@ -822,12 +822,12 @@ void CdiOsMemFree(void* mem_ptr)
     _aligned_free(mem_ptr);
 }
 
-void* CdiOsMemAllocHugePage(int32_t mem_size)
+void* CdiOsMemAllocHugePage(int64_t mem_size)
 {
     return NULL; // Not implemented on windows.
 }
 
-void CdiOsMemFreeHugePage(void* mem_ptr, int mem_size)
+void CdiOsMemFreeHugePage(void* mem_ptr, int64_t mem_size)
 {
     // Nothing needed, unless logic in alloc is implemented.
 }

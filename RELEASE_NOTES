@@ -9,9 +9,15 @@ CDI (Cloud Digital Interface) SDK Version 3.0.2 - ??/??/????
 What's New
 ------------
 
-* Added command-line tool 'src/tools/convert_image_to_rgb10.py' to convert an image into
-  the 10-bit RGB payload format supported by the CDI SDK.
+* Added command-line tool 'src/tools/convert_image_to_rgb10.py' to convert an image into the 10-bit RGB payload format
+  supported by the CDI SDK.
+* Set libfabric option called FI_OPT_EFA_RNR_RETRY to ensure EFA hardware retries continuously when remote is not ready
+  to receive new packets. This is same behavior as libfabric 1.9.x.
 
+Bug Fixes
+------------
+* Made a pool thread-safe that was being used to hold packets as part of establishing a connection. This prevents race
+  conditions when multiple connections are trying to be established at the same time.
 
 CDI (Cloud Digital Interface) SDK Version 3.0.1 - 05/30/2023
 

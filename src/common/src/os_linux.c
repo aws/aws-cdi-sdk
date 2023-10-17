@@ -923,7 +923,7 @@ void* CdiOsMemAlloc(int32_t mem_size)
     return mem_ptr;
 }
 
-void* CdiOsMemAllocZero(int32_t mem_size)
+void* CdiOsMemAllocZero(int64_t mem_size)
 {
     void* mem_ptr = CdiOsMemAlloc(mem_size);
 
@@ -941,7 +941,7 @@ void CdiOsMemFree(void* mem_ptr)
 }
 
 
-void* CdiOsMemAllocHugePage(int32_t mem_size)
+void* CdiOsMemAllocHugePage(int64_t mem_size)
 {
     void* mem_ptr = NULL;
 
@@ -958,7 +958,7 @@ void* CdiOsMemAllocHugePage(int32_t mem_size)
     return mem_ptr;
 }
 
-void CdiOsMemFreeHugePage(void* mem_ptr, int mem_size)
+void CdiOsMemFreeHugePage(void* mem_ptr, int64_t mem_size)
 {
     if (-1 == munmap(mem_ptr, mem_size)) {
         ERROR_MESSAGE("munmap failed[%s]", strerror(errno));
