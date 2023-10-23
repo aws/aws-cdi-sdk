@@ -624,7 +624,7 @@ CDI_INTERFACE bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_sig
  *
  * @return Pointer to the allocated memory block. If unable to allocate the memory block, NULL is returned.
  */
-CDI_INTERFACE void* CdiOsMemAlloc(int32_t mem_size);
+CDI_INTERFACE void* CdiOsMemAlloc(int64_t mem_size);
 
 /**
  * Allocates a block of memory, writes zero across its entirety, and returns a pointer to the start of the block.

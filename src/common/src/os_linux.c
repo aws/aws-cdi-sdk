@@ -912,7 +912,7 @@ bool CdiOsSignalsWait(CdiSignalType* signal_array, uint8_t num_signals, bool wai
 }
 
 // -- Memory --
-void* CdiOsMemAlloc(int32_t mem_size)
+void* CdiOsMemAlloc(int64_t mem_size)
 {
     void* mem_ptr = malloc(mem_size);
 
