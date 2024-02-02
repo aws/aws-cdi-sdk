@@ -180,11 +180,11 @@ static bool CreatePacketPool(EfaEndpointState* endpoint_state_ptr, int packet_si
         packet_count = (int)endpoint_state_ptr->fabric_info_ptr->rx_attr->size - 1;
     }
 
-    const int aligned_packet_size = (packet_size + packet_buffer_alignment - 1) & ~(packet_buffer_alignment - 1);
+    const int64_t aligned_packet_size = (packet_size + packet_buffer_alignment - 1) & ~(packet_buffer_alignment - 1);
 
     // Huge pages are not guaranteed to be aligned at all. Add enough padding to be able to shift the starting address
     // to an aligned location.
-    int allocated_size = aligned_packet_size * packet_count + packet_buffer_alignment;
+    int64_t allocated_size = aligned_packet_size * packet_count + packet_buffer_alignment;
 
     // Round up to next even-multiple of hugepages byte size.
     allocated_size = ((allocated_size + CDI_HUGE_PAGES_BYTE_SIZE-1) / CDI_HUGE_PAGES_BYTE_SIZE) * CDI_HUGE_PAGES_BYTE_SIZE;

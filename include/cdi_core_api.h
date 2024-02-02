@@ -71,7 +71,7 @@
 #define CDI_SDK_MAJOR_VERSION       0
 
 /// @brief CDI minor version.
-#define CDI_SDK_MINOR_VERSION       1
+#define CDI_SDK_MINOR_VERSION       2
 
 /// @brief CDI protocol version.
 #define CDI_PROTOCOL_VERSION             2
@@ -319,6 +319,9 @@ typedef enum {
 
     /// Wrong version of dynamically loaded library.
     kCdiStatusLibraryWrongVersion   = 41,
+
+    /// Resource not available. Retry the operation.
+    kCdiStatusRetry                 = 42,
 } CdiReturnStatus;
 
 /// @brief A structure for holding a PTP timestamp defined in seconds and nanoseconds. This PTP time as defined by

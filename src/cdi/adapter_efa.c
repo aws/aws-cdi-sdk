@@ -65,6 +65,9 @@
         } \
     } while (0)
 
+/// @brief The define below is from libfabric_new/prov/psm3/inc/rdma/fi_ext.h
+#define FI_OPT_EFA_RNR_RETRY   -(0xefa << 16)
+
 /// Forward declaration of function.
 static CdiReturnStatus EfaConnectionCreate(AdapterConnectionHandle handle, int port_number,
                                            const char* bind_ip_addr_str);
@@ -96,6 +99,9 @@ typedef struct {
     /// @brief Lock used to protect access to libfabric for endpoint open/close.
     CdiCsID libfabric_lock;
 } EfaAdapterState;
+
+/// @brief Forward declaration
+static CdiReturnStatus LibFabricEndpointClose(EfaEndpointState* endpoint_ptr);
 
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
@@ -428,6 +434,16 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         CHECK_LIBFABRIC_RC(fi_endpoint, ret);
     }
 
+    // Set RNR (Remote Not Ready) retry counter to match libfabric 1.9.x setting, which forced the EFA hardware to
+    // continuously retry to send packets even if the remote is not ready. If this is not done, newer versions of
+    // libfabric will cause FI_EAGAIN to be returned from fi_sendmsg() whenever resources are not available on the
+    // remote to receive new packets.
+    if (kCdiStatusOk == rs && !is_socket_based && is_transmitter && endpoint_ptr->libfabric_api_ptr->version_minor > 9) {
+        size_t rnr_retry = 7; // Force hardware to continuously retry. See EFA_RNR_INFINITE_RETRY.
+        int ret = fi_setopt(&endpoint_ptr->endpoint_ptr->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_RNR_RETRY, &rnr_retry, sizeof(rnr_retry));
+        CHECK_LIBFABRIC_RC(fi_setopt, ret);
+    }
+
     // Bind address vector.
     if (kCdiStatusOk == rs) {
         int ret = endpoint_ptr->libfabric_api_ptr->fi_ep_bind(endpoint_ptr->endpoint_ptr,
@@ -518,6 +534,8 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
 
     if (kCdiStatusOk == rs) {
         endpoint_ptr->fabric_initialized = true;
+    } else {
+        LibFabricEndpointClose(endpoint_ptr);
     }
 
     CdiOsCritSectionRelease(efa_adapter_state_ptr->libfabric_lock);
@@ -1017,7 +1035,7 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
     }
 
     // Set environment variables used by libfabric.
-    if (kCdiStatusOk == rs && !is_socket_based) {
+    if (kCdiStatusOk == rs) {
         // Set values specific to EFA provider.
         //
         // Disable the shared memory provider, which we are not using. If it is enabled, it will use
@@ -1117,8 +1135,10 @@ CdiReturnStatus EfaNetworkAdapterInitialize(CdiAdapterState* adapter_state_ptr, 
 
             if (kCdiStatusOk == rs) {
                 if (!CdiPoolCreateUsingExistingBuffer("Send EFA ProbePacketWorkRequest Pool",
-                        probe_work_request_entries, probe_work_request_size, false, mem_ptr,
-                        probe_packet_buffer_size_needed, NULL, &adapter_state_ptr->probe_work_request_pool_handle)) {
+                        probe_work_request_entries, probe_work_request_size,
+                        true, // Make thread-safe, since each connection contains its own probe thread.
+                        mem_ptr, probe_packet_buffer_size_needed, NULL,
+                        &adapter_state_ptr->probe_work_request_pool_handle)) {
                     rs = kCdiStatusAllocationFailed;
                 }
                 mem_ptr = ((uint8_t*)mem_ptr) + probe_packet_buffer_size_needed;

@@ -273,6 +273,7 @@ static bool DataPoll(AdapterConnectionState* adapter_con_state_ptr)
                                          &adapter_con_state_ptr->load_state);
         }
 
+        Packet* packet_ptr = NULL;
         while (cdi_endpoint_handle) {
             adapter_con_state_ptr->load_state.top_time = CdiOsGetMicroseconds();
             bool idle = true;
@@ -280,16 +281,17 @@ static bool DataPoll(AdapterConnectionState* adapter_con_state_ptr)
             // Get Endpoint Manager notification signal.
             if (EndpointManagerPoll(&cdi_endpoint_handle) && adapter_endpoint_ptr) {
                 if (adapter_con_state_ptr->can_transmit) {
-                    Packet* packet_ptr = NULL;
                     bool last_packet = false;
                     EndpointTransmitQueueLevel queue_level = CdiAdapterGetTransmitQueueLevel(adapter_endpoint_ptr);
-                    bool got_packet = (kEndpointTransmitQueueFull != queue_level) &&
-                        (NULL != (packet_ptr = GetNextPacket(adapter_endpoint_ptr, 0, NULL, &last_packet)));
+                    bool got_packet = packet_ptr || ((kEndpointTransmitQueueFull != queue_level) &&
+                        (NULL != (packet_ptr = GetNextPacket(adapter_endpoint_ptr, 0, NULL, &last_packet))));
                     if (got_packet) {
                         idle = false;
                         // Use the adapter to send the packet.
-                        adapter_con_state_ptr->adapter_state_ptr->functions_ptr->Send(adapter_endpoint_ptr, packet_ptr,
-                                                                                      last_packet);
+                        if (kCdiStatusRetry != adapter_con_state_ptr->adapter_state_ptr->functions_ptr->Send(
+                                adapter_endpoint_ptr, packet_ptr, last_packet)) {
+                            packet_ptr = NULL; // For retry, don't clear the packet pointer. We will resend it again.
+                        }
                         // NOTE: No need to generate any error or warnings here since, the Send() will normally fail if
                         // the receiver is not connected (ie. during probe).
                     }

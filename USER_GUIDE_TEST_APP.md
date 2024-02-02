@@ -723,15 +723,17 @@ With the AWS CloudWatch libraries installed, the AWS CDI SDK can publish metrics
 
 **Note**: Prefix any ```cdi_test``` commands with ```sudo``` to reveal any IAM permission errors, which might not be displayed when run without elevated privileges.
 
-* The namespace controls the naming of the overall metrics container. This value defaults to ```CloudDigitalInterface``` if AWS CloudWatch is enabled and the namespace is unspecified.
-* The region specifies the location to send the metrics, eg. ```us-west-2```. If this value is unspecified, it defaults to the region in which the SDK is running.
-* The dimension domain provides a unique name/value pair for the metric. The domain defaults to the connection name.
-
 Run the following option in the ```cdi_test``` application to view AWS CloudWatch usage and statistics:
 
 ```bash
 ./build/debug/bin/cdi_test --help_stats
 ```
+
+The ```cdi_test``` application can be configured to send metrics using the ```--stats_cloudwatch``` option, which has the following three required arguments: namespace, region, and dimension.
+
+* The namespace controls the naming of the overall metrics container. This value defaults to ```CloudDigitalInterface``` if AWS CloudWatch is enabled and the namespace is set to ```NULL```.
+* The region specifies the location to send the metrics, eg. ```us-west-2```. If this value is set to ```NULL```, it defaults to the region in which the SDK is running.
+* The dimension domain provides a unique name/value pair for the metric. The domain defaults to the connection name.
 
 Here is an example of using AWS CDI SDK command-line arguments to publish AWS CloudWatch metrics:
 
@@ -750,6 +752,23 @@ Here is an example of using AWS CDI SDK command-line arguments to publish AWS Cl
 ## Example test content
 
 Test files for use with the cdi_test application's --file_read option may be downloaded from [cdi.elemental.com](https://cdi.elemental.com/test_content)
+
+## Content generation tools
+
+The ```src/tools/convert_image_to_rgb10.py``` can be used to convert an image in typical formats such as PNG to an uncompressed payload in CDI's 10-bit RGB
+format.
+
+To install the dependencies needed by this script, run the following command:
+
+```bash
+pip3 install Pillow bitstring
+```
+
+To convert an image file to an uncompressed payload, run the script as follows:
+
+```bash
+./src/tools/convert_image_to_rgb10.py <input_image.png> <output_payload.rgb10>
+```
 
 ----
 
