@@ -158,7 +158,8 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
 1. Create an IAM User with CloudWatch and performance metrics permissions.
     - Navigate to the [AWS console IAM Policies](https://console.aws.amazon.com/iam/home#/policies)
         - Select **Create policy** and then select **JSON**.
-        - The minimum security IAM policy is below:
+        - The minimum security IAM policy is below.
+        - Note: You may receive an IAM Policy editor warning such as: ```Errors: Invalid Action``` on the line with ```"mediaconnect:PutMetricGroups"```, which can be safely ignored.
 
         ```JSON
         {
@@ -187,14 +188,14 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
                 - Select **Create user**
         - Save your **Access Key ID** and **Secret Access Key** from this IAM User creation for use in step 5.
 
-1. Next, configure AWS CLI:
+2. Next, configure AWS CLI:
 
     ```bash
     aws configure
     ```
 
-1. When prompted for the **Access Key** and **Secret Access Key**, enter these keys from the IAM role you created in step 3.
-1. If successful, two files are created in the  ```~/.aws/``` directory: ```config``` and ```credentials```. Verify they exist by using:
+3. When prompted for the **Access Key** and **Secret Access Key**, enter these keys from the IAM role you created in step 3.
+4. If successful, two files are created in the  ```~/.aws/``` directory: ```config``` and ```credentials```. Verify they exist by using:
 
     ```bash
     ls ~/.aws
