@@ -188,14 +188,14 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
                 - Select **Create user**
         - Save your **Access Key ID** and **Secret Access Key** from this IAM User creation for use in step 5.
 
-2. Next, configure AWS CLI:
+1. Next, configure AWS CLI:
 
     ```bash
     aws configure
     ```
 
-3. When prompted for the **Access Key** and **Secret Access Key**, enter these keys from the IAM role you created in step 3.
-4. If successful, two files are created in the  ```~/.aws/``` directory: ```config``` and ```credentials```. Verify they exist by using:
+1. When prompted for the **Access Key** and **Secret Access Key**, enter these keys from the IAM role you created in step 3.
+1. If successful, two files are created in the  ```~/.aws/``` directory: ```config``` and ```credentials```. Verify they exist by using:
 
     ```bash
     ls ~/.aws
