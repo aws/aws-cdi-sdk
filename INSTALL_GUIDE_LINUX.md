@@ -159,7 +159,7 @@ AWS CLI is required to setup configuration files for AWS CloudWatch.
     - Navigate to the [AWS console IAM Policies](https://console.aws.amazon.com/iam/home#/policies)
         - Select **Create policy** and then select **JSON**.
         - The minimum security IAM policy is below:
-        - Note: You may receive an IAM Policy editor warning such as: ```Errors: Invalid Action``` on the line with ```"mediaconnect:PutMetricGroups"```, which can be safely ignored.<p></p> 
+
         ```JSON
         {
             "Version": "2012-10-17",
