@@ -4,6 +4,23 @@ This file is part of the AWS CDI-SDK, licensed under the BSD 2-Clause "Simplifie
 License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
+CDI (Cloud Digital Interface) SDK Version x.x.x - ??/??/????
+
+What's New
+------------
+
+* TBD
+
+Bug Fixes
+------------
+
+* Windows EFA driver does not support changing the RNR (Remote Not Ready) configuration, so no need to attempt
+  to change its value to support versions of libfabric later than libfabric 1.9.x. See changes in src/cdi/adapter_efa.c
+* Ensure that WriteLineToLog() does not use invalid handle when writing to stdout. Problem was seen on the Windows
+  variant. See changes in in src/common/src/logger.c.
+* For the windows variant when using the CdiOsSocketReadFrom() API if the socket is not connected, ensure that there
+  are no packet bytes returned to the caller. See changes in src/common/src/os_windows.c
+
 CDI (Cloud Digital Interface) SDK Version 3.0.2 - 02/02/2024
 
 What's New

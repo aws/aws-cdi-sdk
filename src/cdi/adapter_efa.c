@@ -434,6 +434,8 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         CHECK_LIBFABRIC_RC(fi_endpoint, ret);
     }
 
+    // Windows does not support this option. It is configured by default as the previous 1.9.x version of libfabric.
+#ifndef _WIN32
     // Set RNR (Remote Not Ready) retry counter to match libfabric 1.9.x setting, which forced the EFA hardware to
     // continuously retry to send packets even if the remote is not ready. If this is not done, newer versions of
     // libfabric will cause FI_EAGAIN to be returned from fi_sendmsg() whenever resources are not available on the
@@ -443,6 +445,7 @@ static CdiReturnStatus LibFabricEndpointOpen(EfaEndpointState* endpoint_ptr)
         int ret = fi_setopt(&endpoint_ptr->endpoint_ptr->fid, FI_OPT_ENDPOINT, FI_OPT_EFA_RNR_RETRY, &rnr_retry, sizeof(rnr_retry));
         CHECK_LIBFABRIC_RC(fi_setopt, ret);
     }
+#endif
 
     // Bind address vector.
     if (kCdiStatusOk == rs) {
