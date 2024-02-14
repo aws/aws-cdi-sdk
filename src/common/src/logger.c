@@ -621,6 +621,9 @@ static void WriteLineToLog(CdiLogHandle handle, CdiLogLevel log_level, bool mult
         file_handle = CDI_STDOUT;
     } else {
         file_handle = handle->file_data_ptr->file_handle;
+        if (kLogMethodStdout == handle->log_method && NULL == file_handle) {
+            return; // Ensure we don't output to an invalid handle.
+        }
     }
 
     char final_log_str[CDI_MAX_LOG_STRING_LENGTH];

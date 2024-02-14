@@ -1297,6 +1297,7 @@ bool CdiOsSocketReadFrom(CdiSocket socket_handle, void* buffer_ptr, int* byte_co
             // will be returned.
             if (WSAECONNRESET == code) {
                 ret = true;
+                *byte_count_ptr = 0; // Ensure zero bytes read are returned.
             } else {
                 ERROR_MESSAGE("WSARecvFrom failed. Code[%d]", code);
             }
