@@ -355,7 +355,7 @@ static bool MakeBaselineAudioConfiguration(const CdiAvmBaselineConfigCommon* bas
     if ('\0' != audio_config_ptr->language[0]) {
         char language_str[sizeof(audio_config_ptr->language) + 1] = { '\0' };
         memcpy(language_str, audio_config_ptr->language, sizeof(audio_config_ptr->language));
-        int pos = snprintf(language_param_str, sizeof(language_param_str), " language=%s;", audio_config_ptr->language);
+        int pos = snprintf(language_param_str, sizeof(language_param_str), " language=%s;", language_str);
         if ((int)sizeof(language_param_str) <= pos) {
             CDI_LOG_THREAD(kLogError, "audio language parameter could not be formatted");
             ret = false;

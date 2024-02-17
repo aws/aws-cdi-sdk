@@ -1047,9 +1047,11 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
         TestRxProcessCoreCallbackData(&cb_data_ptr->core_cb_data, stream_index);
     }
 
-    // Perform any cleanup operation on this data including writing the data to the destination FIFO and incrementing
-    // the payload count.
-    RxCoreCallbackCleanup(&cb_data_ptr->core_cb_data, &cb_data_ptr->sgl, stream_index);
+    if (-1 != stream_index) {
+        // Perform any cleanup operation on this data including writing the data to the destination FIFO and incrementing
+        // the payload count.
+        RxCoreCallbackCleanup(&cb_data_ptr->core_cb_data, &cb_data_ptr->sgl, stream_index);
+    }
 }
 
 //*********************************************************************************************************************
