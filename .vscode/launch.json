@@ -150,6 +150,66 @@
             ],
             //"preLaunchTask": "gcc build active file",
             "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
+            "name": "Show NDI sources",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/debug/bin/ndi_test",
+            "args": [ "--show_ndi_sources" ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
+            "name": "NDI receiver",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/debug/bin/ndi_test",
+            "args": [ "--local_ip", "10.0.0.212", "--ndi_rx", "--remote_ip", "10.0.0.212", "--dest_port", "5000", "--num_transactions", "0", "--log_timestamps" ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
+            "name": "CDI 2000->NDI",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/debug/bin/ndi_test",
+            "args": [ "--local_ip", "10.0.0.212", "--bind_ip", "10.0.0.212", "--ndi_tx", "--ndi_source_name", "My Test 2000", "--dest_port", "2000" ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "miDebuggerPath": "/usr/bin/gdb"
         }
      ]
 }

@@ -27,12 +27,12 @@
 
 /// @brief The maximum length for a file name string (includes additional name characters added automatically by the
 /// test app.
-#define MAX_LOG_FILENAME_LENGTH            (1024)
+#define MAX_LOG_FILENAME_LENGTH     (1024)
 
 /// @brief The fixed number of SGL entries we will try to use when in SGL mode. If payload is too small to be broken
 /// into this number of SGL entries, then we will use a smaller number of entries that can accommodate the given
 /// payload. Must be greater than 0.
-#define MAX_SGL_ENTRIES_PER_PAYLOAD            (7)
+#define MAX_SGL_ENTRIES_PER_PAYLOAD (7)
 
 extern CdiLoggerHandle test_app_logger_handle;
 
@@ -42,10 +42,13 @@ extern CdiLoggerHandle test_app_logger_handle;
               __VA_ARGS__)
 
 /// @brief The number of bytes in a test pattern word.
-#define BYTES_PER_PATTERN_WORD  (sizeof(uint64_t))
+#define BYTES_PER_PATTERN_WORD      (sizeof(uint64_t))
 
 /// @brief The maximum payload count in the test application, the upper byte is reserved.
-#define MAX_TEST_PAYLOAD_COUNT  (0x00FFFFFF)
+#define MAX_TEST_PAYLOAD_COUNT      (0x00FFFFFF)
+
+/// @brief Number of bytes in CDI audio sample. CDI requests 24-bit int for audio, so needs three bytes.
+#define CDI_BYTES_PER_AUDIO_SAMPLE  (3)
 
 /// Forward reference.
 typedef struct TestConnectionInfo TestConnectionInfo;
@@ -109,6 +112,14 @@ typedef struct {
     /// Start time for the connection. For TX this is the time of the first payload sent. For RX it is the time from the
     /// PTP timestamp of the first payload received.
     CdiPtpTimestamp connection_start_time;
+
+    /// For receiver, the last AVM baseline configuration received. Used to log to output when AVM changes.
+    CdiAvmBaselineConfig last_baseline_config;
+
+    /// Last PTP origination timestamp.
+    CdiPtpTimestamp last_ptp_timestamp;
+
+    uint64_t total_audio_samples; ///< Total number of audio samples processed.
 } TestConnectionStreamInfo;
 
 /**
@@ -326,17 +337,37 @@ bool TestCreateConnectionLogFiles(TestConnectionInfo* connection_info_ptr, CdiLo
 bool IsPayloadNumLessThanTotal(int current_payload_num, int total_payloads);
 
 /**
- * @brief Get the next PTP timestamp to use in the payload ptp_origination_time.
+ * @brief Get the next video PTP timestamp to use in the payload origination_ptp_timestamp.
  *
  * @param connection_info_ptr Pointer to test connection information.
- * @param stream_settings_ptr Pointer to stream settings.
  * @param stream_info_ptr     Pointer to stream info.
  * @param ptp_rate_count      Current PTP rate counter value.
  *
  * @return A PTP timestamp for the next payload to send.
  */
-CdiPtpTimestamp GetPtpTimestamp(const TestConnectionInfo* connection_info_ptr,
-                                const StreamSettings* stream_settings_ptr,
-                                const TestConnectionStreamInfo* stream_info_ptr, int ptp_rate_count);
+CdiPtpTimestamp GetVideoPtpTimestamp(const TestConnectionInfo* connection_info_ptr,
+                                     const TestConnectionStreamInfo* stream_info_ptr, int ptp_rate_count);
+
+/**
+ * @brief Get the next audio PTP timestamp to use in the payload origination_ptp_timestamp.
+ *
+ * @param stream_settings_ptr Pointer to stream settings info.
+ * @param stream_info_ptr     Pointer to stream info.
+ * @param audio_data_size     Size of audio data in bytes.
+ *
+ * @return A PTP timestamp for the next payload to send.
+ */
+CdiPtpTimestamp GetAudioPtpTimestamp(const StreamSettings* stream_settings_ptr,
+                                     TestConnectionStreamInfo* stream_info_ptr, int audio_data_size);
+
+/**
+ * @brief Log timestamp, if enabled.
+ *
+ * @param stream_settings_ptr Pointer to stream settings.
+ * @param stream_info_ptr       Pointer to stream info.
+ * @param current_ptp_timestamp Current PTP timestamp value to log.
+ */
+void LogTimestamps(const StreamSettings* stream_settings_ptr, TestConnectionStreamInfo* stream_info_ptr,
+                   CdiPtpTimestamp current_ptp_timestamp);
 
 #endif // TEST_CONTROL_H__

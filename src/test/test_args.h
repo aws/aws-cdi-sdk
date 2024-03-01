@@ -44,10 +44,6 @@
 /// @brief ST 2110 Specifies a 90kHz sample rate for video and ancillary data.
 #define PCR_VIDEO_SAMPLE_RATE          (90000)
 
-/// @brief An attosecond is 10^-18 seconds. Using this for storing the period value. High precision is needed to prevent
-/// drift in the RTP time generated from different time sources.
-#define ATTOSECONDS_PER_SECOND         (1000000000000000000ULL)
-
 /**
  * Enum for test pattern types. This list kept in sync with patterns_array[].
  */
@@ -72,6 +68,7 @@ typedef enum {
     kTestOptionConnectionName,
     kTestOptionTransmit,
     kTestOptionReceive,
+    kTestOptionAVMAutoRx,
     kTestOptionAVMVideo,
     kTestOptionAVMAudio,
     kTestOptionAVMAncillary,
@@ -102,6 +99,7 @@ typedef enum {
     kTestOptionConnectionTimeout,
     kTestOptionLogLevel,
     kTestOptionLogComponent,
+    kTestOptionLogTimestamps,
     kTestOptionNumLoops,
     kTestOptionStatsConfigPeriod,
 #ifndef CDI_NO_MONITORING
@@ -125,6 +123,8 @@ typedef struct {
     int stream_id;
     /// The payload size in bytes of the test payload.
     int payload_size;
+    /// For receiver, auto-detect incoming AVM data and output to log.
+    bool avm_auto_rx;
     /// If connection protocol is AVM, then this field holds the data type.
     CdiBaselineAvmPayloadType avm_data_type;
     /// Video parameters set by user with --avm_video option.  Unused if not --avm_video payload type.
@@ -133,12 +133,6 @@ typedef struct {
     CdiAvmAudioConfig audio_params;
     /// Ancillary parameters set by user with --avm_anc option.  Unused if not --avm_anc payload type.
     CdiAvmAncillaryDataConfig ancillary_data_params;
-    /// If using audio set this true if either the sample rate, bit depth, or any of the sample groups are unspecified.
-    bool do_not_use_audio_rtp_time;
-    /// Integer value in attoseconds for the audio sample period. Unused if not --avm_audio payload type.
-    uint64_t audio_sample_period_attoseconds;
-    /// Integer value of the sample rate for RTP timestamps. This is 90kHz for video or the audio sample rate value.
-    uint32_t rtp_sample_rate;
     /// The number of payloads to skip before sending the video or audio parameters again.
     int config_skip;
     /// Enum representing the data pattern type.
@@ -196,8 +190,6 @@ typedef struct {
     int rate_numerator;
     /// The denominator for the number of payloads per second to send during the test.
     int rate_denominator;
-    /// The number of PTP counts each payload advances PTP time for video or ancillary data.
-    int video_anc_ptp_periods_per_payload;
     /// The transmit timeout in microseconds for a tx payload.
     int tx_timeout;
     /// The receive buffer delay in milliseconds for a rx payload.
@@ -207,8 +199,6 @@ typedef struct {
     bool arg_error;
     /// The number of microseconds in the selected frame rate.
     uint32_t rate_period_microseconds;
-    /// The number of nanoseconds in the selected frame rate. Used for PTP time with high precision to limit time drift.
-    uint64_t rate_period_nanoseconds;
     /// The identifier of the single poll thread to share with this connection; 0 or -1 creates a unique poll thread
     /// associated only with this connection.
     int shared_thread_id;
@@ -287,6 +277,9 @@ typedef struct {
 
     /// @brief signal used when all connections have been established.
     CdiSignalType all_connected_signal;
+
+    /// @brief Log origination_ptp_timestamp values.
+    bool log_timestamps;
 } GlobalTestSettings;
 
 /**

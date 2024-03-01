@@ -124,6 +124,7 @@ static void InitializeGlobalTestSettings(void)
     global_test_settings.connection_info_array = NULL;
     global_test_settings.num_connections_established = 0;
     global_test_settings.all_connected_signal = NULL;
+    global_test_settings.log_timestamps = false;
 
     for (int i = 0; i < kLogComponentLast; i++) {
         global_test_settings.log_component[i] = i == 0 ? kLogComponentGeneric : CDI_INVALID_ENUM_VALUE;

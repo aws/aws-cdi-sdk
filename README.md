@@ -27,6 +27,7 @@ The AWS Cloud Digital Interface (CDI) Software Development Kit (SDK) is a set of
   - [Performance metrics in the AWS CDI SDK](#performance-metrics-in-the-aws-cdi-sdk)
     - [IAM permissions required by the compute instance](#iam-permissions-required-by-the-compute-instance)
     - [Customer option to disable the collection of performance metrics by the AWS CDI SDK](#customer-option-to-disable-the-collection-of-performance-metrics-by-the-aws-cdi-sdk)
+    - [CDI Between Shared Instances in Shared Subnets](#cdi-between-shared-instances-in-shared-subnets)
     - [Learn more](#learn-more)
 - [Known issues, limitations and performance](#known-issues-limitations-and-performance)
   - [Known issues](#known-issues)
@@ -211,9 +212,10 @@ After the libraries have been built, library locations that are referenced by aw
 
 ## Example test applications
 
-* The source code for the test application, ```cdi_test```, is located at ```aws-cdi-sdk/src/test```.
+* The source code for the CDI test application, ```cdi_test```, is located at ```aws-cdi-sdk/src/test```.
 * The source code used to create the minimal test applications, ```cdi_test_min_tx``` and ```cdi_test_min_rx```, can be used as simplified usage examples. The source code is located at ```aws-cdi-sdk/src/test_minimal```.
 * Example usage of the SDK can be found in the [test applications](USER_GUIDE_TEST_APP.md).
+* The source code for the NDI/CDI test application, ```ndi_test```, is located at ```aws-cdi-sdk/src/ndi_test```. Installation steps and example usage of the application can be found in the [NDI/CDI Test Application User Guide](USER_GUIDE_NDI_TEST_APP.md).
 
 ## Performance metrics in the AWS CDI SDK
 
@@ -233,7 +235,7 @@ Customers control whether to allow the collection of performance metrics by the 
 
 Should you choose to, you can disable performance metric collection by the AWS CDI SDK by making the changes below to sections of the source code.
 
-- In the file ```src/cdi/configuration.h```, comment out ```#define METRICS_GATHERING_SERVICE_ENABLED```.
+- In the file ```src/cdi/configuration.h```, comment out ```#define METRICS_GATHERING_SERVICE_ENABLED```. For Windows, you may optionally add the preprocessor definition ```CDI_NO_MONITORING``` to the ``cdi_sdk```` Visual Studio project.
 
 **Note**: For the change to take effect, the CDI SDK library and related applications must be rebuilt.
 

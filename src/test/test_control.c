@@ -33,9 +33,6 @@
 //***************************************** START OF DEFINITIONS AND TYPES ********************************************
 //*********************************************************************************************************************
 
-/// Number of attoseconds in a nanosecond.
-#define ATTOSECONDS_TO_NANOSECONDS (1000000000UL)
-
 //*********************************************************************************************************************
 //*********************************************** START OF VARIABLES **************************************************
 //*********************************************************************************************************************
@@ -524,31 +521,71 @@ bool IsPayloadNumLessThanTotal(int current_payload_num, int total_payloads)
     return ((0 == total_payloads) || (current_payload_num < total_payloads));
 }
 
-CdiPtpTimestamp GetPtpTimestamp(const TestConnectionInfo* connection_info_ptr,
-                                const StreamSettings* stream_settings_ptr,
-                                const TestConnectionStreamInfo* stream_info_ptr, int ptp_rate_count)
+CdiPtpTimestamp GetVideoPtpTimestamp(const TestConnectionInfo* connection_info_ptr,
+                                     const TestConnectionStreamInfo* stream_info_ptr, int ptp_rate_count)
 {
-    // Calculate length of time based on PTP rate count and rate period, converting to nanoseconds. Using the rate
-    // period as specified on the command line as the base for all PTP calculations.
-    uint64_t duration_ns = ptp_rate_count * connection_info_ptr->test_settings_ptr->rate_period_nanoseconds;
+    // Note: First time here ptp_rate_count is zero, so first returned timestamp uses connection_start_time.
 
-    // For audio, make adjustment to simulate a PTP time that is not split across an audio sample.
-    if (stream_settings_ptr->avm_data_type == kCdiAvmAudio && !stream_settings_ptr->do_not_use_audio_rtp_time) {
-        uint64_t period_adjustment = stream_settings_ptr->audio_sample_period_attoseconds / ATTOSECONDS_TO_NANOSECONDS;
-        // If rounding to closest multiple of period_adjustment use this:
-        duration_ns = ((duration_ns + period_adjustment / 2 + 1) / period_adjustment) * period_adjustment;
-        // Round up to next even multiple of period_adjustment.
-        //duration_ns = ((duration_ns - 1) / period_adjustment + 1) * period_adjustment;
-    }
+    // Calculate length of time based on frames processed and frame rate, converting to nanoseconds. Using the frame rate
+    // period as specified on the command line as the base for all PTP calculations.
+    TestSettings* test_settings_ptr = connection_info_ptr->test_settings_ptr;
+    uint64_t duration_ns = (ptp_rate_count * (uint64_t)CDI_NANOSECONDS_PER_SECOND * test_settings_ptr->rate_denominator)
+                           / test_settings_ptr->rate_numerator;
 
     // Add the existing start time nanoseconds to the duration so the logic below calculates the correct seconds and
     // nanoseconds.
     duration_ns += stream_info_ptr->connection_start_time.nanoseconds;
-
     CdiPtpTimestamp timestamp = {
         .seconds = stream_info_ptr->connection_start_time.seconds + duration_ns / CDI_NANOSECONDS_PER_SECOND,
         .nanoseconds = duration_ns % CDI_NANOSECONDS_PER_SECOND
     };
 
     return timestamp;
+}
+
+CdiPtpTimestamp GetAudioPtpTimestamp(const StreamSettings* stream_settings_ptr,
+                                     TestConnectionStreamInfo* stream_info_ptr, int audio_data_size)
+{
+    // Calculate timestamp before accounting for the size of the audio frame. This ensures the timestamp relates to the
+    // start of the audio frame.
+    uint32_t sample_rate = 0;
+    switch (stream_settings_ptr->audio_params.sample_rate_khz) {
+        case kCdiAvmAudioSampleRate48kHz:
+            sample_rate = 48000;
+        break;
+        case kCdiAvmAudioSampleRate96kHz:
+            sample_rate = 96000;
+    }
+    uint64_t duration_ns = stream_info_ptr->total_audio_samples * CDI_NANOSECONDS_PER_SECOND / sample_rate;
+
+    // Add the existing start time nanoseconds to the duration so the logic below calculates the correct seconds and
+    // nanoseconds.
+    duration_ns += stream_info_ptr->connection_start_time.nanoseconds;
+    CdiPtpTimestamp timestamp = {
+        .seconds = stream_info_ptr->connection_start_time.seconds + duration_ns / CDI_NANOSECONDS_PER_SECOND,
+        .nanoseconds = duration_ns % CDI_NANOSECONDS_PER_SECOND
+    };
+
+    // Now, determine the number of audio samples in this frame and add to the running total.
+    // Convert unit size in bits to number of audio channels. There are 3 bytes per audio sample.
+    int num_audio_channels = stream_settings_ptr->unit_size / (8 * CDI_BYTES_PER_AUDIO_SAMPLE);
+
+    // Get number of audio samples per channel.
+    int num_audio_samples = audio_data_size / CDI_BYTES_PER_AUDIO_SAMPLE / num_audio_channels;
+
+    // Update running total of audio samples.
+    stream_info_ptr->total_audio_samples += num_audio_samples;
+
+    return timestamp;
+}
+
+void LogTimestamps(const StreamSettings* stream_settings_ptr, TestConnectionStreamInfo* stream_info_ptr,
+                   CdiPtpTimestamp current_ptp_timestamp) {
+    if (GetGlobalTestSettings()->log_timestamps) {
+        uint64_t diff = (current_ptp_timestamp.seconds - stream_info_ptr->last_ptp_timestamp.seconds) *
+                        CDI_NANOSECONDS_PER_SECOND;
+        diff = diff + current_ptp_timestamp.nanoseconds - stream_info_ptr->last_ptp_timestamp.nanoseconds;
+        CDI_LOG_THREAD(kLogInfo, "StreamID[%d] Diff[%lu]\n", stream_settings_ptr->stream_id, diff);
+        stream_info_ptr->last_ptp_timestamp = current_ptp_timestamp;
+    }
 }

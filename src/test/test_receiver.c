@@ -29,6 +29,7 @@
 #include "cdi_test.h"
 #include "fifo_api.h"
 #include "riff.h"
+#include "test_common.h"
 #include "test_control.h"
 #include "utilities_api.h"
 
@@ -378,8 +379,9 @@ static bool TestRxVerify(TestConnectionInfo* connection_info_ptr)
  *
  * @param core_cb_data_ptr  Pointer to a CdiCoreCbData callback structure.
  * @param stream_index      The stream index.
+ * @param payload_size      Payload size in bytes.
  */
-static void TestRxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr, int stream_index)
+static void TestRxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr, int stream_index, int payload_size)
 {
     // NOTE: Since the caller is CDI's thread, use TEST_LOG_CONNECTION() to log to the application's connection log.
 
@@ -442,8 +444,12 @@ static void TestRxProcessCoreCallbackData(const CdiCoreCbData* core_cb_data_ptr,
         CdiPtpTimestamp current_ptp_timestamp = core_cb_data_ptr->core_extra_data.origination_ptp_timestamp;
 
         // Verify PTP timestamp.
-        CdiPtpTimestamp expected_timestamp = GetPtpTimestamp(connection_info_ptr, stream_settings_ptr, stream_info_ptr,
-                                                             rx_ptp_rate_num);
+        CdiPtpTimestamp expected_timestamp;
+        if (kCdiAvmAudio == stream_settings_ptr->avm_data_type) {
+            expected_timestamp = GetAudioPtpTimestamp(stream_settings_ptr, stream_info_ptr, payload_size);
+        } else {
+            expected_timestamp = GetVideoPtpTimestamp(connection_info_ptr, stream_info_ptr, rx_ptp_rate_num);
+        }
         if ((current_ptp_timestamp.seconds != expected_timestamp.seconds) || (current_ptp_timestamp.nanoseconds !=
                                                                               expected_timestamp.nanoseconds)) {
             TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream ID[%d], payload[%d]: PTP timestamp [seconds:nanoseconds "
@@ -544,7 +550,7 @@ static void TestRawRxCallback(const CdiRawRxCbData* cb_data_ptr)
         ((connection_info_ptr->current_stream_count) + 1) % test_settings_ptr->number_of_streams;
 
     // If we are validating a RAW connection, then everything we need to validate is done by this function.
-    TestRxProcessCoreCallbackData(&cb_data_ptr->core_cb_data, stream_index);
+    TestRxProcessCoreCallbackData(&cb_data_ptr->core_cb_data, stream_index, cb_data_ptr->sgl.total_data_size);
 
     // Perform any cleanup operation on this data including writing the data to the destination FIFO and incrementing
     // the payload count.
@@ -1013,8 +1019,14 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
             // Attempt to convert the generic configuration structure to a baseline profile configuration structure.
             CdiReturnStatus rc = CdiAvmParseBaselineConfiguration(cb_data_ptr->config_ptr, &baseline_config);
             if (kCdiStatusOk == rc) {
+                TestLogAVMChanges(stream_settings_ptr->stream_id, cb_data_ptr->sgl.total_data_size, cb_data_ptr->config_ptr,
+                                  &baseline_config, &stream_info_ptr->last_baseline_config);
+                // Get the unit size of the sample data. This is used by GetAudioPtpTimestamp() when validating
+                // origination timestamps.
+                CdiAvmGetBaselineUnitSize(&baseline_config, &stream_settings_ptr->unit_size);
+
                 CdiBaselineAvmPayloadType expected_payload_type = stream_settings_ptr->avm_data_type;
-                if (expected_payload_type != baseline_config.payload_type) {
+                if (!stream_settings_ptr->avm_auto_rx && expected_payload_type != baseline_config.payload_type) {
                     TEST_LOG_CONNECTION(kLogError, "Connection[%s] Stream ID[%d]: Rx expected payload type[%d] but got [%d].",
                                         test_settings_ptr->connection_name_str, stream_id,
                                         expected_payload_type, baseline_config.payload_type);
@@ -1026,7 +1038,10 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
             }
         }
 
-        if (connection_info_ptr->pass_status) {
+        LogTimestamps(stream_settings_ptr, stream_info_ptr,
+                      cb_data_ptr->core_cb_data.core_extra_data.origination_ptp_timestamp);
+
+        if (!stream_settings_ptr->avm_auto_rx && connection_info_ptr->pass_status) {
             CdiAvmBaselineConfig* baseline_config_ptr = (NULL == cb_data_ptr->config_ptr) ? NULL : &baseline_config;
             VerifyAvmConfiguration(cb_data_ptr, baseline_config_ptr, stream_index);
         }
@@ -1044,7 +1059,7 @@ static void TestAvmRxCallback(const CdiAvmRxCbData* cb_data_ptr)
 
     // If the pass status is still 'true' then process the callback data.
     if (connection_info_ptr->pass_status) {
-        TestRxProcessCoreCallbackData(&cb_data_ptr->core_cb_data, stream_index);
+        TestRxProcessCoreCallbackData(&cb_data_ptr->core_cb_data, stream_index, cb_data_ptr->sgl.total_data_size);
     }
 
     if (-1 != stream_index) {

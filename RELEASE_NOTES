@@ -4,12 +4,25 @@ This file is part of the AWS CDI-SDK, licensed under the BSD 2-Clause "Simplifie
 License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version x.x.x - ??/??/????
+---------------------------------------------------------------------------
 
 What's New
 ------------
 
-* TBD
+* Added new command line tool called "ndi_test". Used to test NDI inputs and outputs with CDI.
+  * See details in USER_GUIDE_NDI_TEST_APP.md. Source code is at src/ndi_test
+  * Requires NDI-SDK to be installed.
+  * Building on Linux: The make command line option "NDI_SDK=<ndi_sdk_path>" must be specified. Use "make help"
+    to see all make command line options.
+  * Building on Windows: Must select the "Debug_DLL_NDI" or "Release_DLL_NDI" Visual Studio solution configuration.
+  * After build completes, use "ndi_test --help" to see command line options.
+* Added new command line options to the cdi_test application:
+  * "-arx" or "--avm_autorx". For AVM receiver, auto-detect incoming AVM data and output to log.
+  *  "lt" or "--log_timestamps". Log origination_ptp_timestamp values.
+* For Windows, updated the Visual Studio projects solutions. There were some issues with dependencies across
+  configurations and removed some old preprocessor definitions.
 
 Bug Fixes
 ------------
@@ -20,8 +33,11 @@ Bug Fixes
   variant. See changes in in src/common/src/logger.c.
 * For the windows variant when using the CdiOsSocketReadFrom() API if the socket is not connected, ensure that there
   are no packet bytes returned to the caller. See changes in src/common/src/os_windows.c
+* In cdi_test application, revised logic that generates timestamps used for origination_ptp_timestamp.
 
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 3.0.2 - 02/02/2024
+---------------------------------------------------------------------------
 
 What's New
 ------------
@@ -36,7 +52,9 @@ Bug Fixes
 * Made a pool thread-safe that was being used to hold packets as part of establishing a connection. This prevents race
   conditions when multiple connections are trying to be established at the same time.
 
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 3.0.1 - 05/30/2023
+---------------------------------------------------------------------------
 
 What's New
 ------------
@@ -48,8 +66,9 @@ Bug Fixes
 * Fixed build and run-time problems with Windows variant. For the newer version of libfabric, must use v1.15.2 until
   further notice.
 
-
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 3.0.0 - 01/20/2023
+---------------------------------------------------------------------------
 
 What's New
 ------------
@@ -125,6 +144,7 @@ Bug Fixes
 * Fixed some problems in adapter Tx's GetCompletions in adapter_efa_tx.c.
 * Fixed GitHub Issue #67. See https://github.com/aws/aws-cdi-sdk/issues/67
 
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 2.3.2 - 11/29/21
 ---------------------------------------------------------------------------
 

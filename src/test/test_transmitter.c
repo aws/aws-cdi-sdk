@@ -32,6 +32,7 @@
 
 #include "cdi_test.h"
 #include "riff.h"
+#include "test_common.h"
 #include "test_control.h"
 #include "test_dynamic.h"
 #include "utilities_api.h"
@@ -280,17 +281,6 @@ static CdiReturnStatus TestTxSendPayload(TestConnectionInfo* connection_info_ptr
     // Set up data that is common to both connection protocol types.
     CdiCoreTxPayloadConfig core_config_data = { 0 };
 
-    // To provide validation that the CDI SDK is passing the RTP timestamp value correctly through its pipeline, we
-    // are using the current payload count as the RTP origination_timestamp. The Receiver will validate that the value
-    // it receives matches the expected payload count.
-    core_config_data.core_extra_data.origination_ptp_timestamp =
-            GetPtpTimestamp(connection_info_ptr, stream_settings_ptr, stream_info_ptr, ptp_rate_count);
-#ifdef DEBUG_RX_BUFFER
-    CDI_LOG_THREAD(kLogInfo, "[%d] TxTimestamp[%d.%d]", stream_index,
-                   core_config_data.core_extra_data.origination_ptp_timestamp.seconds,
-                   core_config_data.core_extra_data.origination_ptp_timestamp.nanoseconds);
-#endif
-
     // Encode the Tx payload counter and the respective connection into the payload_user_data field. The receive side
     // will expect this and report it.
     core_config_data.core_extra_data.payload_user_data = (uint64_t)( (connection_info_ptr->my_index & 0xFF)
@@ -309,6 +299,8 @@ static CdiReturnStatus TestTxSendPayload(TestConnectionInfo* connection_info_ptr
 
         // If we are sending a RAW payload, then we are done... send it.
         if (kProtocolTypeRaw == test_settings_ptr->connection_protocol) {
+            core_config_data.core_extra_data.origination_ptp_timestamp =
+                    GetVideoPtpTimestamp(connection_info_ptr, stream_info_ptr, ptp_rate_count);
             // Send the RAW Payload.
             rs = CdiRawTxPayload(connection_info_ptr->connection_handle, &core_config_data, sgl_ptr,
                                  test_settings_ptr->tx_timeout);
@@ -316,9 +308,6 @@ static CdiReturnStatus TestTxSendPayload(TestConnectionInfo* connection_info_ptr
         } else {
             // Create a structure to use.
             CdiAvmTxPayloadConfig payload_cfg_data;
-
-            // Setup core config data.
-            payload_cfg_data.core_config_data = core_config_data;
 
             // Complete the AVM extra data field.
             payload_cfg_data.avm_extra_data.stream_identifier = stream_settings_ptr->stream_id;
@@ -335,10 +324,48 @@ static CdiReturnStatus TestTxSendPayload(TestConnectionInfo* connection_info_ptr
                 stream_info_ptr->config_payload_skip_count++;
             }
 
-            // Size of the unit this stream's payload is transferring (pixels, audio samples, etc.,).
-            payload_cfg_data.core_config_data.unit_size = stream_settings_ptr->unit_size;
+            // Compute the AVM configuration structure and payload unit size if this is an AVM connection type.
+            CdiAvmBaselineConfig baseline_config = {0};
+            switch (stream_settings_ptr->avm_data_type) {
+                case kCdiAvmNotBaseline:
+                    // This should never happen but nothing can be done if it does.
+                    break;
+                case kCdiAvmVideo:
+                    baseline_config.payload_type = kCdiAvmVideo;
+                    baseline_config.video_config = stream_settings_ptr->video_params;
+                    break;
+                case kCdiAvmAudio:
+                    baseline_config.payload_type = kCdiAvmAudio;
+                    baseline_config.audio_config = stream_settings_ptr->audio_params;
+                    break;
+                case kCdiAvmAncillary:
+                    baseline_config.payload_type = kCdiAvmAncillary;
+                    baseline_config.ancillary_data_config = stream_settings_ptr->ancillary_data_params;
+                    break;
+                // No default so compiler complains about missing cases.
+            }
+            CdiAvmMakeBaselineConfiguration(&baseline_config, &stream_settings_ptr->avm_config,
+                                            &stream_settings_ptr->unit_size);
 
+            TestLogAVMChanges(stream_settings_ptr->stream_id, sgl_ptr->total_data_size, &stream_settings_ptr->avm_config,
+                              &baseline_config, &stream_info_ptr->last_baseline_config);
+
+            // Size of the unit this stream's payload is transferring (pixels, audio samples, etc.,).
+            core_config_data.unit_size = stream_settings_ptr->unit_size;
+
+            // Determine if we are sending AVM config data.
             CdiAvmConfig* avm_config_ptr = send_config ? &stream_settings_ptr->avm_config : NULL;
+
+            if (kCdiAvmAudio == stream_settings_ptr->avm_data_type) {
+                core_config_data.core_extra_data.origination_ptp_timestamp =
+                        GetAudioPtpTimestamp(stream_settings_ptr, stream_info_ptr, sgl_ptr->total_data_size);
+            } else {
+                core_config_data.core_extra_data.origination_ptp_timestamp =
+                        GetVideoPtpTimestamp(connection_info_ptr, stream_info_ptr, ptp_rate_count);
+            }
+
+            // Copy core config data to payload config data.
+            payload_cfg_data.core_config_data = core_config_data;
 
             if (test_settings_ptr->multiple_endpoints) {
                 rs = CdiAvmEndpointTxPayload(connection_info_ptr->tx_stream_endpoint_handle_array[stream_index],
@@ -347,6 +374,10 @@ static CdiReturnStatus TestTxSendPayload(TestConnectionInfo* connection_info_ptr
                 rs = CdiAvmTxPayload(connection_info_ptr->connection_handle, &payload_cfg_data, avm_config_ptr,
                                      sgl_ptr, test_settings_ptr->tx_timeout);
             }
+        }
+        if (kCdiStatusOk == rs) {
+            LogTimestamps(stream_settings_ptr, stream_info_ptr,
+                          core_config_data.core_extra_data.origination_ptp_timestamp);
         }
     }
     // Convert any errors into a CdiReturnStatus enum.
@@ -562,10 +593,8 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
         if (!got_error) {
             // Set the next start time, using PTP from stream index 0. NOTE: Using PTP time for rate so there is no
             // drift between when we send a payload and the PTP timestamp that is sent with the payload.
-            StreamSettings* stream_settings_ptr = &test_settings_ptr->stream_settings[0];
             TestConnectionStreamInfo* stream_info_ptr = &connection_info_ptr->stream_info[0];
-            CdiPtpTimestamp next_timestamp = GetPtpTimestamp(connection_info_ptr, stream_settings_ptr, stream_info_ptr,
-                                                             ptp_rate_count);
+            CdiPtpTimestamp next_timestamp = GetVideoPtpTimestamp(connection_info_ptr, stream_info_ptr, ptp_rate_count);
             uint64_t next_ptp_start_time = CdiUtilityPtpTimestampToMicroseconds(&next_timestamp);
             uint64_t current_ptp_time = CdiCoreGetTaiTimeMicroseconds(); // Function used to get PTP time.
             if (current_ptp_time > next_ptp_start_time) {
@@ -602,9 +631,6 @@ static bool TestTxSendAllPayloads(TestConnectionInfo* connection_info_ptr)
                 time_to_sleep = rate_period_microseconds;
                 ptp_rate_count--;
             }
-#ifdef DEBUG_RX_BUFFER
-            CDI_LOG_THREAD(kLogInfo, "Sleeping [%"PRIu64"]", time_to_sleep);
-#endif
             CdiOsSleepMicroseconds(time_to_sleep);
         }
 
@@ -694,50 +720,6 @@ static bool TestTxSendTestData(TestConnectionInfo* connection_info_ptr)
         if (tx_static_payload_pattern_ptr) {
             CdiOsMemFree(tx_static_payload_pattern_ptr);
             tx_static_payload_pattern_ptr = NULL;
-        }
-
-        // Compute the AVM configuration structure and payload unit size if this is an AVM connection type.
-        if (kProtocolTypeAvm == test_settings_ptr->connection_protocol) {
-            switch (stream_settings_ptr->avm_data_type) {
-                case kCdiAvmNotBaseline:
-                    // This should never happen but nothing can be done if it does.
-                    break;
-                case kCdiAvmVideo:
-                    {
-                        // Load video config data directly from the test settings provided by command line input.
-                        CdiAvmBaselineConfig baseline_config = {
-                            .payload_type = kCdiAvmVideo,
-                            .video_config = stream_settings_ptr->video_params
-                        };
-                        CdiAvmMakeBaselineConfiguration(&baseline_config, &stream_settings_ptr->avm_config,
-                                                        &stream_settings_ptr->unit_size);
-                    }
-                    break;
-                case kCdiAvmAudio:
-                    {
-                        // Load audio config data directly from the test settings provided by command line input.
-                        CdiAvmBaselineConfig baseline_config = {
-                            .payload_type = kCdiAvmAudio,
-                            .audio_config = stream_settings_ptr->audio_params
-                        };
-                        CdiAvmMakeBaselineConfiguration(&baseline_config, &stream_settings_ptr->avm_config,
-                                                        &stream_settings_ptr->unit_size);
-                    }
-                    break;
-                case kCdiAvmAncillary:
-                    {
-                        // Make generic config data structure for ancillary data; no specific configuration
-                        // parameters are allowed for this type.
-                        CdiAvmBaselineConfig baseline_config = {
-                            .payload_type = kCdiAvmAncillary,
-                            .ancillary_data_config = stream_settings_ptr->ancillary_data_params
-                        };
-                        CdiAvmMakeBaselineConfiguration(&baseline_config, &stream_settings_ptr->avm_config,
-                                                        &stream_settings_ptr->unit_size);
-                    }
-                    break;
-                // No default so compiler complains about missing cases.
-            }
         }
     }
 

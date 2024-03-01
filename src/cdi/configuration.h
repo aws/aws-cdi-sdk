@@ -64,9 +64,6 @@
 /// @brief Enable the define below to set the libfabric log level. Default is no logging.
 //#define LIBFABRIC_LOG_LEVEL         (0) // 0=FI_LOG_WARN, 3=FI_LOG_DEBUG
 
-/// @brief Log messages to aid in debugging Rx Buffer feature.
-//#define DEBUG_RX_BUFFER
-
 //*********************************************************************************************************************
 //******************************************* MAX SIZES FOR STATIC DATA/ARRAYS ****************************************
 //*********************************************************************************************************************
