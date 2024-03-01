@@ -11,6 +11,8 @@
 */
 
 #include "test_common.h"
+#include "cdi_baseline_profile_01_00_api.h"
+#include "cdi_baseline_profile_02_00_api.h"
 
 #include <assert.h>
 #include <stdlib.h> // For strtol().
@@ -340,5 +342,18 @@ void TestCommandLineParserDestroy(CommandLineHandle handle)
             CdiOsMemFree(state_ptr->file_buffer_str);
         }
         CdiOsMemFree(state_ptr);
+    }
+}
+
+void TestLogAVMChanges(uint16_t stream_identifier, int payload_size, CdiAvmConfig* config_ptr,
+                       const CdiAvmBaselineConfig* baseline_config_ptr, CdiAvmBaselineConfig* last_baseline_config_ptr)
+{
+    config_ptr->data[config_ptr->data_size] = 0; // Ensure string is NULL terminated.
+
+    if (0 != memcmp(last_baseline_config_ptr, baseline_config_ptr, sizeof(*last_baseline_config_ptr))) {
+        CDI_LOG_THREAD(kLogInfo, "CDI StreamID[%d] AVM Type[%s] Payload Size[%d] AVM Data[%s]", stream_identifier,
+                       CdiAvmKeyEnumToString(kKeyAvmPayloadType, baseline_config_ptr->payload_type, NULL),
+                       payload_size, config_ptr->data);
+        memcpy(last_baseline_config_ptr, baseline_config_ptr, sizeof(*last_baseline_config_ptr));
     }
 }

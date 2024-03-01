@@ -34,6 +34,8 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
 
 * Install in a clean folder. A PowerShell script is used to install the AWS CDI SDK and required components. See steps in [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
 
+**Note**: When adding CDI-SDK libraries to your application's build process, ensure you don't link directly with the libfabric libraries. You should only be linking to cdi_sdk.lib. The CDI-SDK dynamically loads the libfabric libraries.
+
 ---
 # Create an EFA enabled instance
 

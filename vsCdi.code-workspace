@@ -1,0 +1,36 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../libfabric"
+		},
+		{
+			"path": "../libfabric_new"
+		},
+		{
+			"path": "../../NDI-SDK"
+		}
+	],
+	"settings": {
+		"editor.rulers": [120],
+		"workbench.colorCustomizations": {
+			"editorRuler.foreground": "#daa106",
+			"window.activeBorder": "#808080"
+		},
+		"bookmarks.navigateThroughAllFiles": true,
+		"explorer.sortOrder": "filesFirst",
+		"files.trimTrailingWhitespace": true,
+		"files.associations": {
+			"internal_log.h": "c",
+			"array": "cpp",
+			"deque": "cpp",
+			"string": "cpp",
+			"vector": "cpp",
+			"string_view": "cpp",
+			"list": "cpp",
+			"iterator": "cpp"
+		}
+	}
+}

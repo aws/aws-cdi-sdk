@@ -53,6 +53,7 @@ top.tests := $(top.sdk)/tests
 top.test_common := $(top.src)/test_common
 top.test_minimal := $(top.src)/test_minimal
 top.test_unit := $(top.src)/test_unit
+top.test_ndi := $(top.src)/ndi_test
 
 ### Obtain a list of the real build goals, if any, to determine whether some dependencies apply or not.
 real_build_goals := $(strip $(filter-out clean% docs% headers help,$(if $(MAKECMDGOALS),$(MAKECMDGOALS),none)))
@@ -141,6 +142,7 @@ src_dir.test := $(top.src)/test
 src_dir.test_common := $(top.test_common)/src
 src_dir.test_minimal := $(top.test_minimal)
 src_dir.test_unit := $(top.test_unit)
+src_dir.test_ndi := $(top.test_ndi)
 src_dir.tools := $(top.src)/tools
 ifeq ($(require_aws_sdk),yes)
 src_extensions := c cpp
@@ -188,6 +190,15 @@ include_dir.test := $(src_dir.test)
 include_dir.test_common := $(top.test_common)/include
 include_dirs.test := $(foreach dir,sdk test common test_common,$(include_dir.$(dir)))
 
+include_dir.test_unit := $(src_dir.test_unit)
+include_dirs.test_unit := $(foreach dir,sdk test_unit common test_common,$(include_dir.$(dir)))
+
+include_dir.test_minimal := $(src_dir.test_minimal)
+include_dirs.test_minimal := $(foreach dir,sdk test_minimal common test_common,$(include_dir.$(dir)))
+
+include_dir.test_ndi := $(src_dir.test_ndi)
+include_dirs.test_ndi := $(foreach dir,sdk test_ndi common test_common,$(include_dir.$(dir)))
+
 # generate lists for building cdi_test program
 srcs.test := $(wildcard $(src_dir.test)/*.c) $(wildcard $(src_dir.test_common)/*.c)
 objs.test := $(addprefix $(build_dir.obj)/,$(patsubst %.c,%.o,$(notdir $(srcs.test))))
@@ -210,7 +221,7 @@ test_unit_program := $(build_dir.bin)/cdi_test_unit
 # generate lists for building cdi_test_min_tx programs
 srcs.test_min_tx := $(src_dir.test_minimal)/test_minimal_transmitter.c $(wildcard $(src_dir.test_common)/*.c)
 objs.test_min_tx := $(addprefix $(build_dir.obj)/,$(patsubst %.c,%.o,$(notdir $(srcs.test_min_tx))))
-headers.test_min_tx := $(foreach dir,$(include_dirs.test_min_tx),$(wildcard $(dir)/*.h))
+headers.test_min_tx := $(foreach dir,$(include_dirs.test_minimal),$(wildcard $(dir)/*.h))
 depends.test_min_tx := $(patsubst %.o,%.d,$(objs.test_min_tx))
 
 # the end goal of building cdi_test_min_tx program
@@ -219,11 +230,20 @@ test_min_tx_program := $(build_dir.bin)/cdi_test_min_tx
 # generate lists for building cdi_test_min_rx program
 srcs.test_min_rx := $(src_dir.test_minimal)/test_minimal_receiver.c $(wildcard $(src_dir.test_common)/*.c)
 objs.test_min_rx := $(addprefix $(build_dir.obj)/,$(patsubst %.c,%.o,$(notdir $(srcs.test_min_rx))))
-headers.test_min_rx := $(foreach dir,$(include_dirs.test_min_rx),$(wildcard $(dir)/*.h))
+headers.test_min_rx := $(foreach dir,$(include_dirs.test_minimal),$(wildcard $(dir)/*.h))
 depends.test_min_rx := $(patsubst %.o,%.d,$(objs.test_min_rx))
 
 # the end goal of building cdi_test_min_rx program
 test_min_rx_program := $(build_dir.bin)/cdi_test_min_rx
+
+# generate lists for building ndi_test program
+srcs.test_ndi := $(wildcard $(src_dir.test_ndi)/*.c) $(wildcard $(src_dir.test_common)/*.c)
+objs.test_ndi := $(addprefix $(build_dir.obj)/,$(patsubst %.c,%.o,$(notdir $(srcs.test_ndi))))
+headers.test_ndi := $(foreach dir,$(include_dirs.test_ndi),$(wildcard $(dir)/*.h))
+depends.test_ndi := $(patsubst %.o,%.d,$(objs.test_ndi))
+
+# the end goal of building ndi_test program
+test_ndi_program := $(build_dir.bin)/ndi_test
 
 # generate lists for building the dump_riff program
 srcs.dump_riff := $(src_dir.test)/riff.c $(wildcard $(src_dir.tools)/*.c) $(wildcard $(src_dir.test_common)/*.c)
@@ -235,7 +255,7 @@ depends.dump_riff := $(patsubst %.o,%.d,$(objs.dump_riff))
 dump_riff_program := $(build_dir.bin)/dump_riff
 
 # all of the header files, used only for "headers" target
-headers.all := $(foreach dir,cdi test test_common test_min_tx test_min_rx test_unit,$(headers.$(dir)))
+headers.all := $(foreach dir,cdi test test_common test_min_tx test_min_rx test_unit test_ndi,$(headers.$(dir)))
 
 # augment compiler flags
 COMMON_COMPILER_FLAG_ADDITIONS := \
@@ -263,6 +283,7 @@ CXXFLAGS += $(COMMON_COMPILER_FLAG_ADDITIONS) --std=c++11
 # named lib.
 CDI_LDFLAGS = $(LDFLAGS) -L$(build_dir.lib) -lcdisdk $(EXTRA_LD_LIBS) -lm $(aws_sdk_library_flags)
 CDI_TEST_LDFLAGS = -lncurses -ltinfo -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/../lib64:\$$ORIGIN/../lib -Wl,-rpath-link,$(build_dir.lib)
+CDI_TEST_NDI_LDFLAGS = $(CDI_TEST_LDFLAGS) -lndi
 
 # docs go into the build directory but are not specific to release/debug
 build_dir.doc := $(top.build)/documentation
@@ -324,20 +345,34 @@ ifeq ($(require_aws_sdk),yes)
     aws_sdk_library_flags += -laws-cpp-sdk-cdi -laws-cpp-sdk-core -laws-cpp-sdk-monitoring -lstdc++
 endif
 
+ifneq ($(NDI_SDK),)
+    NDI_SDK_ABS := $(abspath $(NDI_SDK))
+    ifeq (0,$(shell if [ -d $(NDI_SDK_ABS)/lib/x86_64-linux-gnu ]; then echo 1; else echo 0; fi))
+        $(error NDI_SDK does not point to the root of the NDI SDK. Cannot find: $(NDI_SDK_ABS)/lib/x86_64-linux-gnu)
+    endif
+    require_ndi_sdk := yes
+else
+    require_ndi_sdk := no
+endif
+
 .PHONY : help
 help ::
 	@echo "Build targets:"
 	@echo "    all [default]  - Includes libraries, test program, docs."
 	@echo "    lib            - Builds only the libraries."
 	@echo "    test           - Builds test programs (cdi_test, cdi_test_min_tx, cdi_test_min_rx, cdi_test_unit)."
+	@echo "                   - Note: Also builds ndi_test if NDI_SDK is provided (see below)."
 	@echo "    docs           - Generates all HTML documentation from embedded Doxygen comments."
 	@echo "    docs_api       - Generates only API HTML documentation from embedded Doxygen comments."
 	@echo "    clean          - Removes all build artifacts (debug and release)."
 	@echo "    cleanall       - clean and removes libfabric artifacts."
 	@echo "    headers        - Test compiles header files for correctness."
 	@echo ""
-	@echo "Required parameters:"
-	@echo "    AWS_SDK=<path> - Path to AWS SDK; specifying this enables publishing CloudWatch metrics."
+	@echo "Required parameters if AWS CloudWatch metrics is enabled (default). To disable, use NO_MONITORING=y"
+	@echo "    AWS_SDK=<path> - Path to AWS SDK."
+	@echo ""
+	@echo "Required parameter to build ndi_test application:"
+	@echo "    NDI_SDK=<path> - Path to NDI SDK."
 	@echo ""
 	@echo "Options:"
 	@echo "    DEBUG=y        - Builds debug instead of release."
@@ -350,7 +385,7 @@ help ::
 #
 # NOTE: the vpath function does not support ambiguity of files with the same name in different directories. Therefore
 # all .c files used in this project MUST have unique names.
-vpath %.c $(foreach proj,cdi common test test_common test_minimal test_unit tools,$(src_dir.$(proj)))
+vpath %.c $(foreach proj,cdi common test test_common test_minimal test_unit tools test_ndi,$(src_dir.$(proj)))
 ifeq ($(require_aws_sdk),yes)
 vpath %.cpp $(src_dir.cdi)
 endif
@@ -508,9 +543,14 @@ $(build_dir.obj)/%.o : %.cpp | $(build_dir.obj)
 	$(Q)$(CXX) $(CXXFLAGS) -c -o $@ $<
 endif
 
+ifeq ($(require_ndi_sdk),yes)
+    EXTRA_TEST_TARGETS += $(test_ndi_program)
+	CFLAGS += -I$(NDI_SDK)/include
+endif
+
 # rules for building the test programs
 .PHONY : test
-test : $(test_program) $(test_min_tx_program) $(test_min_rx_program) $(test_unit_program)
+test : $(test_program) $(test_min_tx_program) $(test_min_rx_program) $(test_unit_program) $(EXTRA_TEST_TARGETS)
 $(test_program) : $(objs.test) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
 	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test) $(CDI_LDFLAGS) $(CDI_TEST_LDFLAGS)
@@ -526,6 +566,11 @@ $(test_min_rx_program) : $(objs.test_min_rx) $(libsdk) | $(build_dir.bin)
 $(test_unit_program) : $(objs.test_unit) $(libsdk) | $(build_dir.bin)
 	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
 	$(Q)$(CC) $(CFLAGS) -o $@ $(objs.test_unit) $(CDI_LDFLAGS) $(CDI_TEST_LDFLAGS)
+
+$(test_ndi_program) : $(objs.test_ndi) $(libsdk) | $(build_dir.bin)
+	@echo "Linking $(notdir $@) with shared library in $(libsdk)"
+	cp $(NDI_SDK)/lib/x86_64-linux-gnu/* $(build_dir)/lib
+	$(Q) $(CC) $(CFLAGS) -o $@ $(objs.test_ndi) $(CDI_LDFLAGS) $(CDI_TEST_NDI_LDFLAGS)
 
 # rules for building the tool programs
 .PHONY : tools
@@ -586,7 +631,7 @@ $(depends.cdi) : $(libfabric_config_h) $(libfabric_new_config_h) $(aws_h)
 
 # include dependency rules from generated files; this is conditional so .d files are only created if needed.
 ifneq ($(real_build_goals),)
--include $(foreach proj,cdi test test_min_tx test_min_rx test_unit dump_riff,$(depends.$(proj)))
+-include $(foreach proj,cdi test test_min_tx test_min_rx test_unit dump_riff test_ndi,$(depends.$(proj)))
 endif
 
 # Users can add their own rules to this makefile by creating a makefile in this directory called

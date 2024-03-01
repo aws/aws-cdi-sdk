@@ -326,7 +326,9 @@ static OptDef my_options[] =
         "of --avm_video, --avm_audio, or --avm_anc options also be used."},
     { "rx",   "rx",           1, "<protocol>",       NULL,
         "Choose receiver mode (default RAW) for this connection. AVM mode requires one of\n"
-        "avm_video, --avm_audio, or --avm_anc options also be used."},
+        "avm_video, --avm_audio,--avm_anc or --avm_autorx options also be used."},
+    { "arx",  "avm_autorx",   0, NULL,               NULL,
+        "For receiver, auto-detect incoming AVM data and output to log."},
     { "vid",  "avm_video",   18, "<video args>",    NULL, /* Can use 18 or 19 arguments */
         "Set video parameters for AVM stream. The <protocol> argument of --tx or --rx must be\n"
         "AVM. Except for version, all parameters are required and must be specified in this order:\n"
@@ -437,6 +439,7 @@ static OptDef my_options[] =
         "separating the arguments with spaces and enclosing in double quotes.\n"
         "For example: \"PROBE PAYLOAD_CONFIG\".\n"
         "GENERIC is always on by default and should not be included in the command-line."},
+    { "lt",   "log_timestamps", 0, NULL,  NULL, "Log origination_ptp_timestamp values."},
     { "nl",   "num_loops",    1, "<number of loops>",NULL,
         "Global option. Set the number of times the test application will run through all\n"
         "transactions on all connections. This is useful for step-debugging. A value of 0\n"
@@ -695,63 +698,6 @@ static void SetConnectionRatePeriods(TestSettings* test_settings_ptr)
     // Frame rate in microseconds used for pacing payloads.
     test_settings_ptr->rate_period_microseconds = ((1000000 * test_settings_ptr->rate_denominator) /
                                                   test_settings_ptr->rate_numerator);
-
-    // Frame rate period in nanoseconds used for fallback audio rtp time period if actual sample time cannot be
-    // calculated.
-    test_settings_ptr->rate_period_nanoseconds = (((uint64_t)CDI_NANOSECONDS_PER_SECOND * test_settings_ptr->rate_denominator) /
-                                                 test_settings_ptr->rate_numerator);
-
-    // How many 90kHz video samples can fit into the frame time.
-    test_settings_ptr->video_anc_ptp_periods_per_payload = (PCR_VIDEO_SAMPLE_RATE * test_settings_ptr->rate_denominator)
-                                                           / test_settings_ptr->rate_numerator;
-}
-
-
-/**
- * @brief Converts the CdiAvmAudioSampleRate enum into a period value in nanoseconds.
- *
- * @param sample_rate       Enum value of sample rate.
- * @param ret_period_as_ptr Period of sample rate in attoseconds.
- * @param ret_rate_val_ptr  The integer hertz value of the audio sample rate.
- *
- * @return If successful return true or false if sample_rate is 'Unspecified' so no conversion is possible.
- */
-static bool AudioSamplePeriodAttoseconds(CdiAvmAudioSampleRate sample_rate, uint64_t* ret_period_as_ptr,
-                                         uint32_t* ret_rate_val_ptr)
-{
-    // Periods range from 10.42us at 96kHz to 31.25us at 32kHz so setting the period value stored to maximize precision.
-    // Since rtp timestamps not being sampled against a system clock to keep time in sync accross sources, it is
-    // important to have a high precision on the period.
-    uint64_t sample_period_as = 0;
-    bool return_val = true;
-    uint32_t rate_val = 1;
-
-    // The sample_period_as equals attoseconds per second + rounding factor divided by frequency. The rounding factor
-    // is 1/2 the sample frequency.
-    switch (sample_rate) {
-        case kCdiAvmAudioSampleRate48kHz:
-            sample_period_as = (ATTOSECONDS_PER_SECOND + 24000) / 48000;
-            rate_val = 48000;
-            break;
-        case kCdiAvmAudioSampleRate96kHz:
-            sample_period_as = (ATTOSECONDS_PER_SECOND + 48000) / 96000;
-            rate_val = 96000;
-            break;
-    }
-
-    if (ret_period_as_ptr) {
-        *ret_period_as_ptr = sample_period_as;
-    } else {
-        return_val = false;
-    }
-
-    if (ret_rate_val_ptr) {
-        *ret_rate_val_ptr = rate_val;
-    } else {
-        return_val = false;
-    }
-
-    return return_val;
 }
 
 /**
@@ -1012,7 +958,7 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
         StreamSettings* stream_settings_ptr = &test_settings_ptr->stream_settings[stream_index];
         // Check that if we are in AVM mode, the user has selected (at least) one data type.
         if (kProtocolTypeAvm == test_settings_ptr->connection_protocol) {
-            if (CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->avm_data_type) {
+            if (!stream_settings_ptr->avm_auto_rx && CDI_INVALID_ENUM_VALUE == (int)stream_settings_ptr->avm_data_type) {
                 TestConsoleLog(kLogError, "Connection[%s]: The connection protocol was set as [%s], so you must use "
                                           "--avm_video, --avm_audio, or --avm_anc to set the data type.",
                                           connection_name_str, CdiUtilityKeyEnumToString(kKeyConnectionProtocolType,
@@ -1089,6 +1035,25 @@ static bool VerifyTestSettings(TestSettings* const test_settings_ptr) {
                     "Connection[%s]: For --new_conns (-XS) connections, the --dest_port (-dpt) argument is required "
                     "and cannot be 0.", connection_name_str);
                 arg_error = true;
+            }
+        }
+        if (stream_settings_ptr->avm_auto_rx) {
+            if (test_settings_ptr->tx) {
+                TestConsoleLog(kLogError, "Connection[%s]: The --avm_autorx (-arx) option can only be use with --rx.",
+                                connection_name_str);
+                arg_error = true;
+            }
+            if (kProtocolTypeAvm != test_settings_ptr->connection_protocol) {
+                TestConsoleLog(kLogError, "Connection[%s]: The connection protocol was set as [%s], but must use --AVM "
+                                          "for the --avm_autorx (-arx) option.",
+                                          connection_name_str, CdiUtilityKeyEnumToString(kKeyConnectionProtocolType,
+                                                         test_settings_ptr->connection_protocol));
+                arg_error = true;
+            }
+            if (CDI_INVALID_ENUM_VALUE != (int)stream_settings_ptr->avm_data_type) {
+                TestConsoleLog(kLogError, "Connection[%s]: When using the --avm_autorx (-arx) cannot use [%s].",
+                                connection_name_str,
+                                CdiAvmKeyEnumToString(kKeyAvmPayloadType, stream_settings_ptr->avm_data_type, NULL));
             }
         }
     }
@@ -1288,6 +1253,9 @@ static bool ParseGlobalOptions(int argc, const char** argv_ptr, OptArg* opt_ptr)
                 if (!GetLogComponents(opt_ptr->args_array[0], global_test_settings_ptr->log_component)) {
                     arg_error = true;
                 }
+                break;
+            case kTestOptionLogTimestamps:
+                GetGlobalTestSettings()->log_timestamps = true;
                 break;
             case kTestOptionNumLoops:
                 if (!IsBase10Number(opt_ptr->args_array[0], (int*)(&global_test_settings_ptr->num_loops))) {
@@ -1784,6 +1752,9 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                     SetConnectionRatePeriods(&test_settings_ptr[connection_index]);
                 }
                 break;
+            case kTestOptionAVMAutoRx:
+                stream_settings_ptr->avm_auto_rx = true;
+            break;
             case kTestOptionAVMVideo:
             {
                 // Collect video parameters into video_params data structure.
@@ -2008,16 +1979,6 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
                         TestConsoleLog(kLogError, "Invalid --avm_audio (-aud) argument [%s] for 'sample rate kHz'.",
                                        opt.args_array[i]);
                         arg_error = true;
-                    } else {
-                        // Translate the audio sample rate into numerical values to allow for calculating PTP timestamps
-                        // from audio payload size.
-                        if (!AudioSamplePeriodAttoseconds(stream_settings_ptr->audio_params.sample_rate_khz,
-                                                          &stream_settings_ptr->audio_sample_period_attoseconds,
-                                                          &stream_settings_ptr->rtp_sample_rate)) {
-                            // If the sample rate is unspecified then fall back to incrementing one frame time per
-                            // payload for rtp time.
-                            stream_settings_ptr->do_not_use_audio_rtp_time = true;
-                        }
                     }
                 }
 
@@ -2196,6 +2157,7 @@ ProgramExecutionStatus GetArgs(int argc, const char** argv_ptr, TestSettings* te
             case kTestOptionLogComponent:
             case kTestOptionConnectionTimeout:
             case kTestOptionLogLevel:
+            case kTestOptionLogTimestamps:
             case kTestOptionNumLoops:
 #ifndef CDI_NO_MONITORING
             case kTestOptionStatsConfigCloudWatch:

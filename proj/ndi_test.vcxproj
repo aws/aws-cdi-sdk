@@ -32,7 +32,7 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
-    <ProjectGuid>{5DE0BAAC-0EB0-425B-8E33-34E370AF832D}</ProjectGuid>
+    <ProjectGuid>{5DE0BAAC-0EB0-425B-8E33-34E370AF8330}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
@@ -52,12 +52,12 @@
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL_NDI|x64'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL_NDI|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL_NDI|x64'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL_NDI|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
@@ -86,10 +86,10 @@
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL_NDI|x64'" Label="PropertySheets">
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL_NDI|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL_NDI|x64'" Label="PropertySheets">
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL_NDI|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -108,10 +108,10 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'">
     <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL_NDI|x64'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL_NDI|x64'">
     <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL_NDI|x64'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL_NDI|x64'">
     <IntDir>$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -122,8 +122,8 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\test;..\src\common\include;..\src\test_common\include;..\src\cdi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\common\include;..\src\test_common\include;..\src\cdi;C:\Program Files\NDI\NDI 5 SDK\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -134,17 +134,20 @@
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Console</SubSystem>
       <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Debug\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ShowProgress>LinkVerbose</ShowProgress>
+      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"
+xcopy /y /d "C:\Program Files\NDI\NDI 5 SDK\Bin\x64\*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_Unit|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\test;..\src\common\include;..\src\test_common\include;..\src\cdi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\common\include;..\src\test_common\include;..\src\cdi;C:\Program Files\NDI\NDI 5 SDK\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -155,17 +158,20 @@
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Console</SubSystem>
       <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Debug\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ShowProgress>LinkVerbose</ShowProgress>
+      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"
+xcopy /y /d "C:\Program Files\NDI\NDI 5 SDK\Bin\x64\*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\test;..\src\common\include;..\src\test_common\include;..\src\cdi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\common\include;..\src\test_common\include;..\src\cdi;C:\Program Files\NDI\NDI 5 SDK\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -176,38 +182,20 @@
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;Processing.NDI.Lib.x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ShowProgress>LinkVerbose</ShowProgress>
+      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;C:\Program Files\NDI\NDI 5 SDK\Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"</Command>
-    </PostBuildEvent>
-  </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL_NDI|x64'">
-    <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\test;..\src\common\include;..\src\test_common\include;..\src\cdi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
-      <MultiProcessorCompilation>true</MultiProcessorCompilation>
-    </ClCompile>
-    <Lib>
-      <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib%(AdditionalDependencies)</AdditionalDependencies>
-    </Lib>
-    <Lib>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Lib>
-    <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
-    </Link>
-    <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"
+xcopy /y /d "C:\Program Files\NDI\NDI 5 SDK\Bin\x64\*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug_DLL_NDI|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\test;..\src\common\include;..\src\test_common\include;..\src\cdi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\common\include;..\src\test_common\include;..\src\cdi;C:\Program Files\NDI\NDI 5 SDK\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CDI_NO_MONITORING;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -218,17 +206,44 @@
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Debug\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>$(OutDir)..\Debug_DLL\cdi_sdk.lib;Processing.NDI.Lib.x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ShowProgress>LinkVerbose</ShowProgress>
+      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;C:\Program Files\NDI\NDI 5 SDK\Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Debug\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "$(OutDir)..\Debug_DLL\*.dll" "$(OutDir)"
+xcopy /y /d "C:\Program Files\NDI\NDI 5 SDK\Bin\x64\*.dll" "$(OutDir)"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL_NDI|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\include;..\src\common\include;..\src\test_common\include;..\src\cdi;C:\Program Files\NDI\NDI 5 SDK\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>DEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CDI_NO_MONITORING;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Lib>
+      <AdditionalDependencies>aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib%(AdditionalDependencies)</AdditionalDependencies>
+    </Lib>
+    <Lib>
+      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Lib>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>$(OutDir)..\Release_DLL\cdi_sdk.lib;Processing.NDI.Lib.x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ShowProgress>LinkVerbose</ShowProgress>
+      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Debug;C:\Program Files\NDI\NDI 5 SDK\Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+    <PostBuildEvent>
+      <Command>xcopy /y /d "$(OutDir)..\Release_DLL\*.dll" "$(OutDir)"
+xcopy /y /d "C:\Program Files\NDI\NDI 5 SDK\Bin\x64\*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\test;..\src\common\include;..\src\test_common\include;..\src\cdi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\common\include;..\src\test_common\include;..\src\cdi;C:\Program Files\NDI\NDI 5 SDK\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -239,17 +254,20 @@
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Console</SubSystem>
       <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Release\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ShowProgress>LinkVerbose</ShowProgress>
+      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Release\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "$(OutDir)..\Release\*.dll" "$(OutDir)"
+xcopy /y /d "C:\Program Files\NDI\NDI 5 SDK\Bin\x64\*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release_DLL|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>..\include;..\src\test;..\src\common\include;..\src\test_common\include;..\src\cdi;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;CLOUDWATCH_METRICS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\include;..\src\common\include;..\src\test_common\include;..\src\cdi;C:\Program Files\NDI\NDI 5 SDK\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>NDEBUG;_POSIX_C_SOURCE=200112L;USE_WINDOWS_DLL_SEMATICS;USE_IMPORT_EXPORT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/volatile:ms %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
@@ -260,17 +278,29 @@
       <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <Link>
-      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>$(OutDir)cdi_sdk.lib;$(OutDir)..\Release\pdcurses.lib;aws-cpp-sdk-core.lib;aws-cpp-sdk-monitoring.lib;aws-cpp-sdk-cdi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <ShowProgress>LinkVerbose</ShowProgress>
+      <AdditionalLibraryDirectories>C:\Program Files %28x86%29\aws-cpp-sdk-all\bin;$(OutDir)..\Release;C:\Program Files\NDI\NDI 5 SDK\Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /y /d "$(OutDir)..\Release\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /y /d "$(OutDir)..\Release\*.dll" "$(OutDir)"
+xcopy /y /d "C:\Program Files\NDI\NDI 5 SDK\Bin\x64\*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\ndi_test\cdi_to_ndi.c" />
+    <ClCompile Include="..\src\ndi_test\ndi_test.c" />
+    <ClCompile Include="..\src\ndi_test\ndi_to_cdi.c" />
+    <ClCompile Include="..\src\ndi_test\ndi_wrapper.c" />
+    <ClCompile Include="..\src\test_common\src\test_common.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\cdi_avm_api.h" />
     <ClInclude Include="..\include\cdi_baseline_profile_api.h" />
     <ClInclude Include="..\include\cdi_core_api.h" />
-    <ClInclude Include="..\include\cdi_raw_api.h" />
+    <ClInclude Include="..\src\ndi_test\ndi_test.h" />
+    <ClInclude Include="..\src\ndi_test\ndi_wrapper.h" />
     <ClInclude Include="..\src\test_common\include\test_common.h" />
   </ItemGroup>
   <ItemGroup>
@@ -280,10 +310,6 @@
     <ProjectReference Include="cdi_sdk.vcxproj">
       <Project>{41b2b832-0419-4aa6-98cf-5312e8608fa0}</Project>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\src\test_common\src\test_common.c" />
-    <ClCompile Include="..\src\test_minimal\test_minimal_receiver.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

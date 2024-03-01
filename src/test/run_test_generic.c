@@ -519,12 +519,6 @@ bool RunTestGeneric(TestSettings* test_settings_ptr, int max_test_settings_entri
                 // file is not being used for payload data.
                 connection_info_array[i].stream_info[j].next_payload_size =
                                         connection_info_array[i].test_settings_ptr->stream_settings[j].payload_size;
-
-                // Default this setting to the video sample rate of 90kHz if it isn't set by test_args.
-                if (0 == connection_info_array[i].test_settings_ptr->stream_settings[j].rtp_sample_rate) {
-                    connection_info_array[i].test_settings_ptr->stream_settings[j].rtp_sample_rate =
-                                                                                              PCR_VIDEO_SAMPLE_RATE;
-                }
             }
         }
 

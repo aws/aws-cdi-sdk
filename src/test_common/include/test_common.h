@@ -16,6 +16,9 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
+#include "cdi_avm_api.h"
+#include "cdi_avm_payloads_api.h"
+#include "cdi_baseline_profile_api.h"
 #include "cdi_logger_api.h"
 #include "cdi_log_enums.h"
 
@@ -34,8 +37,8 @@ typedef struct CommandLineState* CommandLineHandle;
 /// @brief Default value for protocol type.
 #define DEFAULT_PROTOCOL_TYPE               (kProtocolTypeRaw)
 
-/// @brief Default number of transactions.
-#define DEFAULT_NUM_TRANSACTIONS            (1000)
+/// @brief Default number of transactions. 0= Run forever.
+#define DEFAULT_NUM_TRANSACTIONS            (0)
 
 /// @brief Default payload size.
 #define DEFAULT_PAYLOAD_SIZE                (5184000)
@@ -88,5 +91,17 @@ void TestCommandLineParserDestroy(CommandLineHandle handle);
  * @param ...  The remaining parameters contain a variable length list of arguments.
  */
 void SimpleConsoleLog(CdiLogLevel log_level, const char* format_str, ...);
+
+/**
+ * @brief
+ *
+ * @param stream_identifier
+ * @param payload_size
+ * @param config_ptr
+ * @param baseline_config_ptr
+ * @param last_baseline_config_ptr
+ */
+void TestLogAVMChanges(uint16_t stream_identifier, int payload_size, CdiAvmConfig* config_ptr,
+                       const CdiAvmBaselineConfig* baseline_config_ptr, CdiAvmBaselineConfig* last_baseline_config_ptr);
 
 #endif // TEST_COMMON_H__

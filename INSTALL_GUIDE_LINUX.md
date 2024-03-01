@@ -35,6 +35,8 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Linux
 * Must [install](#install-efa-driver) the latest EFA driver and **REBOOT** the system.
 * Must download and install a second version of **libfabric**, which requires **rdma-core**. See steps in the libfabric section of [Install the AWS CDI SDK](#install-the-aws-cdi-sdk).
 
+**Note**: When adding CDI-SDK libraries to your application's build process, ensure you don't link directly with the libfabric libraries. You should only be linking to libcdisdk.so.x. The CDI-SDK dynamically loads the libfabric libraries.
+
 ---
 
 # Create an EFA enabled instance
@@ -77,6 +79,15 @@ Installation of dependent packages is required before building the AWS CDI SDK:
   sudo dnf update -y
   sudo dnf install epel-release -y
   sudo dnf config-manager --set-enabled powertools
+  sudo dnf -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel unzip git
+  ```
+
+- Rocky Linux 9:
+
+  ```bash
+  sudo dnf update -y
+  sudo dnf install epel-release -y
+  sudo dnf config-manager --set-enabled crb
   sudo dnf -y install gcc-c++ make cmake3 curl-devel openssl-devel autoconf automake libtool doxygen ncurses-devel unzip git
   ```
 
