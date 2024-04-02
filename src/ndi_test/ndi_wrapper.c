@@ -192,11 +192,13 @@ static bool CdiToNdiAudioConversion(const uint8_t* cdi_audio_ptr, int cdi_audio_
 {
     // Validate CDI audio contains the correct number of 24-bit audio samples.
     assert(cdi_audio_size <= num_channels * num_samples_per_channel * CDI_BYTES_PER_AUDIO_SAMPLE);
+    (void)cdi_audio_size; // suppress release build errors
 
     int ndi_audio_size = num_channels * num_samples_per_channel * sizeof(float);
     // Validate that the NDI buffer is large enough to hold the NDI float audio samples.
     int ndi_audio_buffer_size = *ndi_size_ptr;
     assert(ndi_audio_size <= ndi_audio_buffer_size);
+    (void)ndi_audio_buffer_size; // suppress release build errors
 
     // Validate that pointers are non-NULL.
     assert(cdi_audio_ptr && ndi_audio_ptr);

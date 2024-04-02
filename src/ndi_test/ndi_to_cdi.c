@@ -149,22 +149,24 @@ static CdiReturnStatus SendAvmPayload(FrameData* frame_data_ptr, CdiSgList* sgl_
 static CdiPtpTimestamp GetPtpTimestamp(TestConnectionInfo* con_info_ptr, const FrameData* frame_data_ptr)
 {
     CdiPtpTimestamp timestamp;
-    uint64_t duration_ns;
+    uint64_t duration_ns = 0;
 
-    if (frame_data_ptr->frame_type == kNdiVideo || frame_data_ptr->frame_type == kNdiMetaData) {
-        // Video and metadata uses the total number of frames processed to determine the timestamp.
+    if (frame_data_ptr->frame_type == kNdiVideo) {
+        // Video uses the total number of frames processed to determine the timestamp.
         duration_ns = (con_info_ptr->total_video_frames * (uint64_t)CDI_NANOSECONDS_PER_SECOND *
                       frame_data_ptr->data.video_frame.frame_rate_D) / frame_data_ptr->data.video_frame.frame_rate_N;
-        if (frame_data_ptr->frame_type == kNdiVideo) {
-            // For video, increment the video frame counter used above to calculate timestamps.
-            con_info_ptr->total_video_frames++;
-        }
+        // Increment the video frame counter used above to calculate timestamps.
+        con_info_ptr->total_video_frames++;
+        con_info_ptr->total_video_duration_ns = duration_ns;
     } else if (frame_data_ptr->frame_type == kNdiAudio) {
         // Audio uses the total number of audio samples processed to determine the timestamp.
         duration_ns = con_info_ptr->total_audio_samples * CDI_NANOSECONDS_PER_SECOND /
                       frame_data_ptr->data.audio_frame.sample_rate;
         // Now, add the number of audio samples in this frame to the running total used above to calculate timestamps.
         con_info_ptr->total_audio_samples += frame_data_ptr->data.audio_frame.no_samples;
+    } else if (frame_data_ptr->frame_type == kNdiMetaData) {
+        // Use current total video frame duration for metadata.
+        duration_ns = con_info_ptr->total_video_duration_ns;
     }
 
     // Add the existing start time nanoseconds to the duration so the logic below calculates the correct seconds and
@@ -335,7 +337,7 @@ CdiReturnStatus NdiReceiverToCdiTransmitter(TestConnectionInfo* con_info_ptr)
             }
             LogTimestamps(con_info_ptr, frame_data_ptr, &cdi_timestamp);
             TestLogAVMChanges(stream_identifier, sgl.total_data_size, &avm_config, &baseline_config,
-                              &con_info_ptr->last_baseline_config[baseline_config.payload_type]);
+                              &con_info_ptr->last_baseline_config[baseline_config.payload_type-1]); // Index is 1 based.
 
             // Setup payload start time.
             con_info_ptr->payload_start_time = CdiOsGetMicroseconds();

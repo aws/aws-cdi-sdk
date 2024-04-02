@@ -480,7 +480,7 @@ $(libfabric_api) : $(libfabric_config_h) $(objs.libfabric_api) $(libfabric) | $(
 	$(Q)$(CC) -shared -o $@ -Wl,-z,defs,-soname=$(basename $(notdir $@)) \
 		$(objs.libfabric_api) -L$(build_dir.lib) \
 		-ldl -lrt $(EXTRA_CC_LIBS) -lm $(EXTRA_LD_LIBS) -lpthread -lc \
-		$(ASAN_LIBS)
+		$(ASAN_LIBS) -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/lib
 	$(Q)ln -fs $@ $(basename $@)
 	$(Q)ln -fs $@ $(basename $(basename $@))
 
@@ -491,7 +491,7 @@ $(libfabric_api_new) : $(libfabric_new_config_h) $(objs.libfabric_api_new) $(lib
 	$(Q)$(CC) -shared -o $@ -Wl,-z,defs,-soname=$(basename $(notdir $@)) \
 		$(objs.libfabric_api_new) -L$(build_dir.lib) \
 		-ldl -lrt $(EXTRA_CC_LIBS) -lm $(EXTRA_LD_LIBS) -lpthread -lc \
-		$(ASAN_LIBS)
+		$(ASAN_LIBS) -Wl,-rpath,\$$ORIGIN:\$$ORIGIN/lib
 	$(Q)ln -fs $@ $(basename $@)
 	$(Q)ln -fs $@ $(basename $(basename $@))
 
