@@ -114,6 +114,7 @@ struct TestConnectionInfo {
     CdiPtpTimestamp connection_start_time;
     uint64_t total_audio_samples; ///< Total number of audio samples processed.
     uint32_t total_video_frames; ///< Total number of video frames processed.
+    uint64_t total_video_duration_ns; ///< Total video duration in nanoseconds.
 
     double cdi_video_period_fraction_ns; ///< Video CDI period fractional portion in nS.
     double cdi_audio_period_fraction_ns; ///< Audio CDI period fractional portion in uS.
