@@ -5,7 +5,7 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
-CDI (Cloud Digital Interface) SDK Version x.x.x - ??/??/????
+CDI (Cloud Digital Interface) SDK Version 3.1.0 - 05/23/2024
 ---------------------------------------------------------------------------
 
 What's New
@@ -34,6 +34,7 @@ Bug Fixes
 * For the windows variant when using the CdiOsSocketReadFrom() API if the socket is not connected, ensure that there
   are no packet bytes returned to the caller. See changes in src/common/src/os_windows.c
 * In cdi_test application, revised logic that generates timestamps used for origination_ptp_timestamp.
+* For the windows variant, addressed GitHub Issue #132.
 
 ---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 3.0.2 - 02/02/2024
