@@ -114,7 +114,7 @@ try {
     cd "$root\libfabric_new"
     MSBuild.exe "libfabric_new.vcxproj" /p:Configuration=Debug-Efa-v142 /p:Platform=x64 /p:SolutionDir="$root\libfabric_new" /p:OutDir="$proj\x64\Debug-Efa-v142\"
     cd "$root\libfabric"
-    MSBuild.exe "libfabric.vcxproj" /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$root\libfabric\" /p:OutDir="$roj\x64\Debug\"
+    MSBuild.exe "libfabric.vcxproj" /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$root\libfabric\" /p:OutDir="$proj\x64\Debug\"
     cd "$proj"
     MSBuild.exe "cdi_proj.sln" /t:libfabric /p:Configuration=Debug /p:Platform=x64
     MSBuild.exe "cdi_proj.sln" /t:efawin /p:Configuration=Debug /p:Platform=x64
