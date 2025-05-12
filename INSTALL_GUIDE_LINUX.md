@@ -117,7 +117,7 @@ Installation of dependent packages is required before building the AWS CDI SDK:
 
     ```bash
     git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric libfabric
-    git clone --single-branch --branch v1.15.2 https://github.com/ofiwg/libfabric libfabric_new
+    git clone --single-branch --branch v1.15.x https://github.com/ofiwg/libfabric libfabric_new
     ```
 
     **Note**: libfabric_new also requires the development version of rdma-core v27 or later, which is installed as part of the EFA Driver installation described above using ```efa_installer.sh```.

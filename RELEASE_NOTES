@@ -5,6 +5,29 @@ License details at: https://github.com/aws/aws-cdi-sdk/blob/mainline/LICENSE
 -------------------------------------------------------------------------------------------
 
 ---------------------------------------------------------------------------
+CDI (Cloud Digital Interface) SDK Version 3.1.1 - xx/xx/2025
+---------------------------------------------------------------------------
+
+What's New
+------------
+
+* Added support for new Windows EFA driver 1.1.0. Supports newer versions of the EFA hardware. Previously only
+  the EFA0 device was supported.
+* Using libfabric 1.15.x instead of 1.15.2 for both Linux and Windows. 1.15.x has been patched to support the
+  new Windows EFA driver.
+* libfabric 1.9.x-cdi has been patched to support the new Windows EFA driver.
+* Updated Windows install guide to include additional EFA validation steps.
+* Changes to Windows install.ps1 script:
+ * Builds fi_info.exe and fi_pingpong.exe.
+ * Fails on MSBuild errors when building the Visual Studio solutions and projects.
+* Updated Windows ndi_test Visual Studio project to use NDI-SDK 6.
+
+Bug Fixes
+------------
+
+* None
+
+---------------------------------------------------------------------------
 CDI (Cloud Digital Interface) SDK Version 3.1.0 - 05/23/2024
 ---------------------------------------------------------------------------
 
