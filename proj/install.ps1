@@ -55,9 +55,24 @@ Write-Host "done"
 
 Write-Host "Downloading libfabric, libfabric_new, PDCurses repositories..."
 Push-Location "$root"
+Delete-Folder-If-Exists "libfabric"
 git clone --single-branch --branch v1.9.x-cdi https://github.com/aws/libfabric libfabric
-git clone --single-branch --branch v1.15.2 https://github.com/ofiwg/libfabric libfabric_new
+if ($LASTEXITCODE -ne 0) {
+	Pop-Location
+	throw "git clone failed with exit code $LASTEXITCODE"
+}
+Delete-Folder-If-Exists "libfabric_new"
+git clone --single-branch --branch v1.15.x https://github.com/ofiwg/libfabric libfabric_new
+if ($LASTEXITCODE -ne 0) {
+	Pop-Location
+	throw "git clone failed with exit code $LASTEXITCODE"
+}
+Delete-Folder-If-Exists "PDCurses"
 git clone --single-branch --branch 3.9 https://github.com/wmcbrine/PDCurses PDCurses
+if ($LASTEXITCODE -ne 0) {
+	Pop-Location
+	throw "git clone failed with exit code $LASTEXITCODE"
+}
 Pop-Location
 Write-Host "done"
 
@@ -74,7 +89,7 @@ Write-Host "Invoking EFADriver installer"
 Push-Location "EFADriver"; & ".\install.ps1"; Pop-Location
 Write-Host "done"
 
-$efaWinVersion="1.0.0"
+$efaWinVersion="1.1.0"
 $efaWin="efawin-$efaWinVersion"
 Write-Host "Downloading efawin version ${efaWinVersion} files..."
 Invoke-WebRequest -Uri "https://github.com/aws/efawin/archive/refs/tags/v${efaWinVersion}.zip" -OutFile "$proj\efawin.zip"
@@ -95,6 +110,14 @@ Rename-File "$root\libfabric_new\libfabric.vcxproj" "libfabric_new.vcxproj"
 Rename-File "$root\libfabric_new\libfabric.vcxproj.filters" "libfabric_new.vcxproj.filters"
 Write-Host "done"
 
+Write-Host "Replacing libfabric.vcxproj with libfabric_new.vcxproj in libfabric_new\info.vcxproj"
+(Get-Content -Path "$root\libfabric_new\info.vcxproj" -Raw) -replace "libfabric.vcxproj", "libfabric_new.vcxproj" | Set-Content -Path "$root\libfabric_new\info.vcxproj"
+Write-Host "done"
+
+Write-Host "Replacing libfabric.vcxproj with libfabric_new.vcxproj in libfabric_new\pingpong.vcxproj"
+(Get-Content -Path "$root\libfabric_new\pingpong.vcxproj" -Raw) -replace "libfabric.vcxproj", "libfabric_new.vcxproj" | Set-Content -Path "$root\libfabric_new\pingpong.vcxproj"
+Write-Host "done"
+
 Write-Host "Running libfabric_new\.appveyor.ps1 installer script..."
 Push-Location "$root\libfabric_new"
 try {
@@ -112,21 +135,38 @@ try {
 	# Can't simply launch MSBuild with the cdi_proj.sln file. It doesn't work due to different configurations in libfabric_new.
 	# Must build everything separately. Need to duplicate folders used by the cdi_proj.sln file, since the projects will depend on them.
     cd "$root\libfabric_new"
-    MSBuild.exe "libfabric_new.vcxproj" /p:Configuration=Debug-Efa-v142 /p:Platform=x64 /p:SolutionDir="$root\libfabric_new" /p:OutDir="$proj\x64\Debug-Efa-v142\"
+    MSBuild.exe "libfabric_new.vcxproj" /p:Configuration=Debug-Efa-v142 /p:Platform=x64 /p:SolutionDir="$root\libfabric_new\" /p:OutDir="$proj\x64\Debug-Efa-v142\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
+    MSBuild.exe "info.vcxproj" /p:Configuration=Debug-v142 /p:Platform=x64 /p:SolutionDir="$root\libfabric_new\" /p:ProjectConfig=Debug-v142 /p:OutDir="$proj\x64\Debug\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
+    MSBuild.exe "pingpong.vcxproj" /p:Configuration=Debug-v142 /p:Platform=x64 /p:SolutionDir="$root\libfabric_new\" /p:ProjectConfig=Debug-v142 /p:OutDir="$proj\x64\Debug\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     cd "$root\libfabric"
     MSBuild.exe "libfabric.vcxproj" /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$root\libfabric\" /p:OutDir="$proj\x64\Debug\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     cd "$proj"
     MSBuild.exe "cdi_proj.sln" /t:libfabric /p:Configuration=Debug /p:Platform=x64
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "cdi_proj.sln" /t:efawin /p:Configuration=Debug /p:Platform=x64
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "cdi_proj.sln" /t:pdcurses /p:Configuration=Debug /p:Platform=x64
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "cdi_proj.sln" /t:cdi_libfabric_api /p:Configuration=Debug /p:Platform=x64
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "cdi_libfabric_new_api.vcxproj"  /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$proj\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "cdi_sdk.vcxproj" /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$proj\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "cdi_test.vcxproj" /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$proj\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "cdi_test_min_rx.vcxproj" /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$proj\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "cdi_test_min_tx.vcxproj" /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$proj\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "cdi_test_unit.vcxproj" /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$proj\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
     MSBuild.exe "dump_riff.vcxproj" /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="$proj\"
+    if ($LASTEXITCODE -ne 0) { throw "MSBuild failed with exit code $LASTEXITCODE" }
 } catch {
     Write-Host "An error occurred."
 	Write-Host $_

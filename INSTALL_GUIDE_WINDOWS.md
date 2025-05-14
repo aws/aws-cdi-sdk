@@ -13,6 +13,7 @@ Installation instructions for the AWS Cloud Digital Interface (CDI) SDK on Windo
   - [Create IAM user required by AWS CloudWatch](#create-iam-user-required-by-aws-cloudwatch)
   - [Add tools to the System Environment Variable Path](#add-tools-to-the-system-environment-variable-path)
 - [Install and build the AWS CDI SDK](#install-and-build-the-aws-cdi-sdk)
+- [Validate the EFA environment](#validate-the-efa-environment)
 - [Manually building CDI libraries and test applications](#manually-building-cdi-libraries-and-test-applications)
   - [Building the AWS CDI SDK with Microsoft Visual Studio IDE](#building-the-aws-cdi-sdk-with-microsoft-visual-studio-ide)
   - [(Optional) Disable the display of performance metrics to your Amazon CloudWatch account](#optional-disable-the-display-of-performance-metrics-to-your-amazon-cloudwatch-account)
@@ -87,11 +88,11 @@ If Windows activation fails, see [these instructions](https://aws.amazon.com/pre
 
     **Note**: After installing Doxygen, the PowerShell window needs to be closed and reopened before the ```doxygen``` command will be recognized.
 
-1. Install Microsoft Visual Studio 2019 and native desktop (C/C++) components with Chocolatey from Powershell:
+1. Install Microsoft Visual Studio 2022 and native desktop (C/C++) components with Chocolatey from Powershell:
 
     ```powershell
-    choco install visualstudio2019community -y
-    choco install visualstudio2019-workload-nativedesktop -y
+    choco install visualstudio2022community -y
+    choco install visualstudio2022-workload-nativedesktop -y
     ```
 
     **Note**: These commands can take some time to complete and will not provide an indication of progress.
@@ -107,7 +108,15 @@ If Windows activation fails, see [these instructions](https://aws.amazon.com/pre
     - Select OK, and then exit the **Server Manager**.
     - Reboot for changes to take effect.
 
-1. Verify that CMake version 3.2 or higher is installed. If CMake is not installed, [download and install version 3.18.5](https://cmake.org/download/).
+1. After installation has completed, a few additional tools must be installed in order to build the Windows driver interface files and libfabric versions. Use the following procedure:
+
+    - From the Windows start menu, search for and select **Visual Studio Installer**.
+    - From the Visual Studio Installer window, choose **Modify**.
+    - In the Installation details pane, scroll down and select the checkboxes for **Windows 11 SDK (10.0.26100.0)** and **MSVC v142 - VS 2019 C++...**.
+    - Choose **Modify**, and wait for the installation to complete.
+    - After installation has completed, close the Visual Studio Installer window.
+
+2. Verify that CMake version 3.2 or higher is installed. If CMake is not installed, [download and install version 3.18.5](https://cmake.org/download/).
 
 
 ## Create IAM user required by AWS CloudWatch
@@ -154,7 +163,7 @@ AWS CloudWatch is required to build the AWS CDI SDK, and is provided in [AWS SDK
     1. In the resulting pop-up window, select **Environment Variables**.
     1. In the **System Variables** section, select the **Path** variable and click **Edit**, then click **New**.
     1. Add the following path into the new text area: ```C:\Program Files\CMake\bin```
-    1. Click **New** again and add the following path into the text area: ```C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin```
+    1. Click **New** again and add the following path into the text area: ```C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin```
     1. Click **New** again and add the following path into the text area: ```C:\Program Files\doxygen\bin```
     1. select **OK**.
 
@@ -206,6 +215,52 @@ The **proj** directory contains the Visual Studio project solution for Windows d
 
 ---
 
+# Validate the EFA environment
+
+This section helps you to verify that the EFA interface is operational. **Note:** This assumes that you followed the install steps from the previous section using the **install.ps1** script to build the **fi_info.exe** and **fi_pingpong.exe** applications.
+
+Run the following commands to verify that the EFA interface is operational, replacing <install_dir> with your actual path:
+
+```bash
+cd <install_dir>\aws-cdi-sdk\proj\x64\Debug
+.\fi_info.exe -p efa -t FI_EP_RDM
+```
+
+This command should return information about the Libfabric EFA interface. The following example shows typical command output:
+
+```bash
+provider: efa
+    fabric: efa
+    domain: EFA-rdm
+    version: 115.20
+    type: FI_EP_RDM
+    protocol: FI_PROTO_EFA
+```
+
+If successful, proceed with the next step to run a test to transmit data between two processes using the EFA interface.
+
+In a shell, use this command to start a server:
+```bash
+cd <install_dir>\aws-cdi-sdk\proj\x64\Debug
+.\fi_pingpong.exe -p efa
+```
+
+In another shell, use this command to start a client:
+```bash
+cd <install_dir>\aws-cdi-sdk\proj\x64\Debug
+.\fi_pingpong.exe -p efa 127.0.0.1
+```
+
+The commands should display transmit statistics in each shell. The following example shows typical command output:
+
+```bash
+bytes   #sent   #ack     total       time     MB/sec    usec/xfer   Mxfers/sec
+64      10      =10      1.2k        0.00s      1.28      50.00       0.02
+256     10      =10      5k          0.00s       inf       0.00        inf
+1k      10      =10      20k         0.00s     20.48      50.00       0.02
+4k      10      =10      80k         0.00s       inf       0.00        inf
+```
+
 # Manually building CDI libraries and test applications
 
 The AWS CDI SDK solution, *cdi_proj.sln*, contains three test applications: *cdi_test*, *cdi_test_min_rx*, and *cdi_test_min_tx*. Each project can be built using either Debug or Release configurations.
@@ -214,13 +269,11 @@ The AWS CDI SDK solution, *cdi_proj.sln*, contains three test applications: *cdi
 
 This procedure builds the entire AWS CDI SDK solution in a Debug configuration.
 
-**Note**: It is recommended to use Microsoft Visual Studio 2019, but Visual Studio 2022 can be used if the optional component **MSVC v142 - VS 2019 C++ x64/x86 build tools** is installed. Please refer to Microsoft's documentation on how to install it.
-
 1. Use Microsoft Visual Studio to open the *cdi_proj.sln* solution file found at ```<install directory path>/aws-cdi-sdk/proj/cdi_proj.sln```.
-1. Choose a configuration. For this example, choose **Debug**. **Note**: To use a DLL configuration, the equivalent **Debug** or **Release** configuration must be built first.
-1. When switching between debug and release configurations, clean the solution by selecting: **Build** > **Clean Solution**.
-1. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications. **Note**: The test applications are only configured to use static libraries, so must use **Debug** or **Release** configurations when building them.
-1. Choose the application to run. By default, the *cdi_test* application runs. To select another application, right-click on the target application and choose **Set as Startup Project** for the application you want to run.
+2. Choose a configuration. For this example, choose **Debug**. **Note**: To use a DLL configuration, the equivalent **Debug** or **Release** configuration must be built first.
+3. When switching between debug and release configurations, clean the solution by selecting: **Build** > **Clean Solution**.
+4. Build the solution by selecting: **Build** > **Build Solution**. This builds all libraries and applications. **Note**: The test applications are only configured to use static libraries, so must use **Debug** or **Release** configurations when building them.
+5. Choose the application to run. By default, the *cdi_test* application runs. To select another application, right-click on the target application and choose **Set as Startup Project** for the application you want to run.
 
 ## (Optional) Disable the display of performance metrics to your Amazon CloudWatch account
 

@@ -50,7 +50,7 @@ For the Linux variant, only Amazon Linux 2 has been tested.
 
 Follow the steps to install and build the CDI-SDK using the [INSTALL_GUIDE_WINDOWS](INSTALL_GUIDE_WINDOWS.md), except as noted below:
 
-Download and install the NDI-SDK to the default folder ```C:\Program Files\NDI\NDI 5 SDK```. If it is installed in another location, then the Visual Studio project ```ndi_test``` must be modified. Settings for ```C/C++->General->Additional Include Directories```, ```Linker->General->Additional Library Directories``` and ```Build Events->Post-Build Event``` require changes.
+Download and install the NDI-SDK 6.x to the default folder ```C:\Program Files\NDI\NDI 6 SDK```. If it is installed in another location, then the Visual Studio project ```ndi_test``` must be modified. Settings for ```C/C++->General->Additional Include Directories```, ```Linker->General->Additional Library Directories``` and ```Build Events->Post-Build Event``` require changes.
 
 To build, select either the ```Debug_DLL_NDI``` or ```Release_DLL_NDI``` Visual Studio solution configuration. Note that these configurations contain the preprocessor definition ```CDI_NO_MONITORING```. This removes several dependencies and disables performance metric collection by the AWS CDI SDK.
 
